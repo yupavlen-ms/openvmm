@@ -1,0 +1,33 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mesh_ttrpc"
+edition = "2021"
+
+[dependencies]
+mesh = { workspace = true, features = ["prost"] }
+pal_async.workspace = true
+test_with_tracing.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+parking_lot.workspace = true
+prost.workspace = true
+prost-types.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+unicycle.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+env_logger.workspace = true
+unix_socket.workspace = true
+
+[build-dependencies]
+mesh_build.workspace = true
+
+prost-build.workspace = true
+
+[lints]
+workspace = true

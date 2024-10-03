@@ -1,0 +1,23 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mesh_worker"
+edition = "2021"
+
+[dependencies]
+inspect = { workspace = true, features = ["std", "defer"] }
+mesh.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+linkme.workspace = true
+tracing.workspace = true
+unicycle.workspace = true
+
+[dev-dependencies]
+pal_async.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

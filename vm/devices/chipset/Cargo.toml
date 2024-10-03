@@ -1,0 +1,36 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "chipset"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+chipset_device_resources.workspace = true
+chipset_resources.workspace = true
+power_resources.workspace = true
+vm_resource.workspace = true
+
+input_core.workspace = true
+vmcore.workspace = true
+x86defs.workspace = true
+
+inspect.workspace = true
+inspect_counters.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+async-trait.workspace = true
+bitfield-struct.workspace = true
+futures.workspace = true
+local_clock = { workspace = true, features = ["inspect"] }
+thiserror.workspace = true
+time.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+pal_async.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

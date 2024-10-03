@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "hvlite_pcat_locator"
+edition = "2021"
+
+[dependencies]
+mesh.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+object = { workspace = true, features = ["pe", "read_core", "std"] }
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,41 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "openvmm_hcl_resources"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+mesh_worker.workspace = true
+vm_resource.workspace = true
+vmcore.workspace = true
+vmsocket.workspace = true
+
+serial_core.workspace = true
+vmbus_serial_guest.workspace = true
+
+disk_striped.workspace = true
+
+scsidisk.workspace = true
+
+storvsp.workspace = true
+uidevices = { workspace = true, optional = true }
+
+chipset.workspace = true
+hyperv_ic.workspace = true
+missing_dev.workspace = true
+serial_16550.workspace = true
+serial_pl011.workspace = true
+tpm = { workspace = true, optional = true, features = ["tpm"] }
+
+# VPCI devices
+nvme = { workspace = true, optional = true }
+
+# Workers
+debug_worker = { workspace = true, optional = true }
+vnc_worker = { workspace = true, optional = true }
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

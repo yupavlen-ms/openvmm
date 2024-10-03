@@ -1,0 +1,18 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "chipset_device_resources"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+inspect.workspace = true
+
+async-trait.workspace = true
+
+[lints]
+workspace = true

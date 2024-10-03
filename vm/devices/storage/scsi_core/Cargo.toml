@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "scsi_core"
+edition = "2021"
+
+[dependencies]
+scsi_buffers.workspace = true
+scsi_defs.workspace = true
+vm_resource.workspace = true
+vmcore.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+
+stackfuture.workspace = true
+
+[lints]
+workspace = true

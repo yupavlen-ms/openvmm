@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virtio_resources"
+edition = "2021"
+
+[dependencies]
+net_backend_resources.workspace = true
+vm_resource.workspace = true
+
+mesh.workspace = true
+
+[lints]
+workspace = true

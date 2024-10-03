@@ -1,0 +1,13 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "tracing_helpers"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber = { workspace = true, features = ["json"] }
+
+[lints]
+workspace = true

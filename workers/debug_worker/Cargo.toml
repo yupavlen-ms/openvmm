@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "debug_worker"
+edition = "2021"
+
+[dependencies]
+debug_worker_defs.workspace = true
+vmm_core_defs.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+mesh_worker.workspace = true
+pal_async.workspace = true
+vmsocket.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+gdbstub.workspace = true
+socket2.workspace = true
+tracing.workspace = true
+tracelimit.workspace = true
+
+
+[lints]
+workspace = true

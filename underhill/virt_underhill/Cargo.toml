@@ -1,0 +1,56 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virt_underhill"
+edition = "2021"
+
+[features]
+gdb = []
+
+[target.'cfg(target_os = "linux")'.dependencies]
+aarch64emu.workspace = true
+aarch64defs.workspace = true
+hcl.workspace = true
+shared_pool_alloc.workspace = true
+virt.workspace = true
+virt_support_aarch64emu.workspace = true
+virt_support_apic.workspace = true
+virt_support_x86emu.workspace = true
+pci_core.workspace = true
+hv1_emulator.workspace = true
+hv1_hypercall.workspace = true
+hvdef.workspace = true
+vtl_array.workspace = true
+memory_range.workspace = true
+vm_topology.workspace = true
+guestmem.workspace = true
+sidecar_client.workspace = true
+vmcore.workspace = true
+x86defs.workspace = true
+x86emu.workspace = true
+
+inspect_counters.workspace = true
+inspect = { workspace = true, features = ["std"] }
+mesh.workspace = true
+pal_async.workspace = true
+pal_uring.workspace = true
+pal.workspace = true
+tracelimit.workspace = true
+
+anyhow.workspace = true
+bitfield-struct.workspace = true
+bitvec = { workspace = true, features = ["std", "atomic"] }
+cfg-if.workspace = true
+fs-err.workspace = true
+libc.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+safe_x86_intrinsics.workspace = true
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

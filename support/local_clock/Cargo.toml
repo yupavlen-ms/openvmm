@@ -1,0 +1,20 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "local_clock"
+edition = "2021"
+
+[features]
+default = ["time_exts", "inspect"]
+
+time_exts = ["dep:time"]
+inspect = ["dep:inspect"]
+
+[dependencies]
+inspect = { workspace = true, optional = true }
+
+parking_lot.workspace = true
+time = { workspace = true, optional = true }
+
+[lints]
+workspace = true

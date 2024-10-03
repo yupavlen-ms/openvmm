@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "disk_vhdmp"
+edition = "2021"
+
+[target.'cfg(windows)'.dependencies]
+disk_backend.workspace = true
+disk_file.workspace = true
+scsi_buffers.workspace = true
+vm_resource.workspace = true
+
+guid = { workspace = true, features = ["inspect"] }
+inspect.workspace = true
+mesh.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+stackfuture.workspace = true
+winapi = { workspace = true, features = [ "handleapi", "winbase", "winnt" ] }
+
+[target.'cfg(windows)'.dev-dependencies]
+disk_vhd1.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,21 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "floppy_pcat_stub"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+vmcore.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+
+arrayvec = { workspace = true, features = ["std"] }
+bitfield-struct.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,70 @@
+{
+    "version": "V1",
+    "fixed": {
+        "scsi_sub_channels": 31
+    },
+    "dynamic": {
+        "storage_controllers": [
+            {
+                "instance_id": "9e14fd10-19cb-4da5-b667-e8e38a436cb8",
+                "protocol": "IDE",
+                "luns": [
+                    {
+                        "channel": 0,
+                        "location": 0,
+                        "device_type": "nvme",
+                        "device_path": "3217a48a-c820-4727-8c4c-3e2086aba839",
+                        "sub_device_path": "1",
+                        "device_id": "d32872fd-e6a6-474c-a1a6-dd0d5248857e",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some model number",
+                        "fua": false,
+                        "write_cache": true
+                    }
+                ]
+            },
+            {
+                "instance_id": "ca56751f-e643-4bef-bf54-f73678e8b7b5",
+                "protocol": "SCSI",
+                "luns": [
+                    {
+                        "location": 0,
+                        "device_type": "nvme",
+                        "device_path": "3217a48a-c820-4727-8c4c-3e2086aba839",
+                        "sub_device_path": "2",
+                        "device_id": "8c3c18a5-fd30-4700-bea3-d1a643ea77d0",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some model number",
+                        "fua": false,
+                        "write_cache": true
+                    },
+                    {
+                        "location": 1,
+                        "device_type": "nvme",
+                        "device_path": "3217a48a-c820-4727-8c4c-3e2086aba839",
+                        "sub_device_path": "3",
+                        "device_id": "231dccec-d821-469c-afb7-622711249aaa",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some model number",
+                        "fua": false,
+                        "write_cache": true
+                    }
+                ]
+            }
+        ],
+        "nic_devices": [
+            {
+                "instance_id": "9e14fd10-19cb-4da5-b667-e8e38a436cb8"
+            }
+        ]
+    }
+}

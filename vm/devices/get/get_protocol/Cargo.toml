@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "get_protocol"
+edition = "2021"
+
+[dependencies]
+guid.workspace = true
+open_enum.workspace = true
+serde_helpers.workspace = true
+
+bitfield-struct.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+static_assertions.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

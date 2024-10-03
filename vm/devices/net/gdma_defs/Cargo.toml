@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "gdma_defs"
+edition = "2021"
+
+[dependencies]
+guestmem.workspace = true
+
+inspect.workspace = true
+open_enum.workspace = true
+
+bitfield-struct.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

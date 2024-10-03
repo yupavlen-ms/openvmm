@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "chipset_resources"
+edition = "2021"
+
+[dependencies]
+vm_resource.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+
+arbitrary = { workspace = true, optional = true }
+
+[lints]
+workspace = true

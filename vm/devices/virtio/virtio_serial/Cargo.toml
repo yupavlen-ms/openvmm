@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virtio_serial"
+edition = "2021"
+
+[dependencies]
+virtio.workspace = true
+guestmem.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

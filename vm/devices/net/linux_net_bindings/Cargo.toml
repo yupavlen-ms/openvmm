@@ -1,0 +1,11 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "linux_net_bindings"
+edition = "2021"
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true, features = ["ioctl"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,26 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+//! The entry point for the underhill environment.
+
+#![forbid(unsafe_code)]
+#![cfg(target_os = "linux")]
+
+// Use mimalloc instead of the system malloc for performance.
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+// OpenVMM-HCL only needs libcrypto from openssl, not libssl.
+#[cfg(target_os = "linux")]
+openssl_crypto_only::openssl_crypto_only!();
+
+/// Entry point into the underhill multi-binary, dispatching between various
+/// entrypoints based on argv0.
+pub fn underhill_main() -> anyhow::Result<()> {
+    let argv0 = std::path::PathBuf::from(std::env::args_os().next().unwrap());
+    match argv0.file_name().unwrap().to_str().unwrap() {
+        "underhill-init" => underhill_init::main(),
+        "underhill-crash" => underhill_crash::main(),
+        "underhill-dump" => underhill_dump::main(),
+        _ => underhill_core::main(),
+    }
+}

@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "sev_guest_device"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+bitfield-struct.workspace = true
+nix = { workspace = true, features = ["ioctl"] }
+static_assertions.workspace = true
+thiserror.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

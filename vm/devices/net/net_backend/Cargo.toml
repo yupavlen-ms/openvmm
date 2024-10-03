@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "net_backend"
+edition = "2021"
+
+[dependencies]
+net_backend_resources.workspace = true
+guestmem.workspace = true
+vm_resource.workspace = true
+memory_range = { workspace = true, features = ["inspect"] }
+vm_topology = { workspace = true, features = ["inspect"] }
+
+inspect.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

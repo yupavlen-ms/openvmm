@@ -1,0 +1,47 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "fuzz_chipset"
+publish = false
+edition = "2021"
+
+[dependencies]
+xtask_fuzz.workspace = true
+
+chipset.workspace = true
+chipset_device_fuzz.workspace = true
+chipset_resources = { workspace = true, features = ["arbitrary"] }
+vmcore.workspace = true
+
+local_clock.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+
+arbitrary.workspace = true
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libfuzzer-sys.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[package.metadata.xtask.fuzz.onefuzz-allowlist]
+fuzz_chipset_battery = ["fuzz_battery.rs", "../src/battery.rs"]
+fuzz_chipset_cmos_rtc = ["fuzz_cmos_rtc.rs", "../src/cmos_rtc.rs"]
+
+[[bin]]
+name = "fuzz_chipset_battery"
+path = "fuzz_battery.rs"
+test = false
+doc = false
+doctest = false
+
+[[bin]]
+name = "fuzz_chipset_cmos_rtc"
+path = "fuzz_cmos_rtc.rs"
+test = false
+doc = false
+doctest = false
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pipette_client"
+edition = "2021"
+
+[dependencies]
+pipette_protocol.workspace = true
+
+pal_async.workspace = true
+mesh.workspace = true
+mesh_remote.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+tracing.workspace = true
+typed-path.workspace = true
+xshell-macros.workspace = true
+
+[lints]
+workspace = true

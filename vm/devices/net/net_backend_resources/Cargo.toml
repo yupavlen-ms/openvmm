@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "net_backend_resources"
+edition = "2021"
+
+[dependencies]
+vm_resource.workspace = true
+
+guid = { workspace = true, features = ["mesh"] }
+inspect.workspace = true
+mesh.workspace = true
+
+thiserror.workspace = true
+
+[lints]
+workspace = true

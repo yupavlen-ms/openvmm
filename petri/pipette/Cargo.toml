@@ -1,0 +1,28 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pipette"
+edition = "2021"
+
+[dependencies]
+pipette_protocol.workspace = true
+
+mesh.workspace = true
+mesh_remote.workspace = true
+pal_async.workspace = true
+vmsocket.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+unicycle.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-service.workspace = true
+windows-sys = { workspace = true, features = ["Wdk_System_SystemServices", "Win32_Security", "Win32_System_Shutdown", "Win32_System_Threading"] }
+
+[lints]
+workspace = true

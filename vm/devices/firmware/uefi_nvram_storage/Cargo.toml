@@ -1,0 +1,27 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "uefi_nvram_storage"
+edition = "2021"
+
+[features]
+default = []
+
+inspect = ["dep:inspect", "uefi_specs/inspect"]
+
+[dependencies]
+guid.workspace = true
+inspect = { workspace = true, optional = true }
+ucs2.workspace = true
+uefi_specs.workspace = true
+
+async-trait.workspace = true
+thiserror.workspace = true
+wchar.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+pal_async.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,176 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+syntax = "proto3";
+
+package underhill.settings;
+
+// Settings used for the 'Base' namespace
+message Vtl2SettingsBase {
+    enum Version {
+        UNKNOWN = 0;
+        V1 = 1;
+    }
+
+    Version version = 1;
+    Vtl2SettingsFixed fixed = 2;
+    Vtl2SettingsDynamic dynamic = 3;
+
+    // Reserve field numbers that would make this start with an ASCII whitespace
+    // character or JSON object opening brace '{', which would conflict with
+    // JSON detection.
+    reserved 9, 10, 12, 13, 32, 123;
+}
+
+message Vtl2SettingsFixed {
+    optional uint32 scsi_sub_channels = 1;
+    optional uint32 io_ring_size = 2;
+    // Specify the maximum number of bounce buffer pages allowed per cpu
+    optional uint32 max_bounce_buffer_pages = 3;
+}
+
+message Vtl2SettingsDynamic {
+    repeated StorageController storage_controllers = 1;
+    repeated NicDeviceLegacy nic_devices = 2;
+}
+
+message NicDeviceLegacy {
+    // The unique instance ID (vmbus ID) of an accelerated VTL2 networking device.
+    string instance_id = 1; // GUID
+    // An optional unique instance ID of a paired/teamed networking device exposed directly to VTL0.
+    optional string subordinate_instance_id = 2; // GUID
+    optional uint32 max_sub_channels = 3;
+}
+
+message StorageController {
+    string instance_id = 1; // GUID
+
+    enum StorageProtocol {
+        UNKNOWN = 0;
+        SCSI = 1;
+        IDE = 2;
+        NVME = 3;
+        // For legacy compat.
+        option allow_alias = true;
+        scsi = 1;
+        ide = 2;
+    }
+
+    StorageProtocol protocol = 2;
+    repeated Lun luns = 3;
+    optional uint32 io_queue_depth = 4;
+}
+
+message Lun {
+    optional uint32 channel = 1;
+    uint32 location = 2;
+    string device_id = 3; // GUID
+    string vendor_id = 4;
+    string product_id = 5;
+    string product_revision_level = 6;
+    string serial_number = 7;
+    string model_number = 8;
+
+    // Override the disk's SCSI rotation rate.
+    optional uint32 medium_rotation_rate = 9;
+    // Override the disk's physical sector size.
+    optional uint32 physical_sector_size = 10;
+    // Override whether the disk reports FUA support.
+    optional bool fua = 11;
+    // Override whether the disk reports that it has a cache.
+    optional bool write_cache = 12;
+    // Override whether the disk supports ODX (copy offload).
+    optional bool odx = 13;
+    // Override unmap/trim support. If true, disable unmap. If false, enable
+    // unmap. If missing, use the backend disk's settings.
+    optional bool disable_thin_provisioning = 14;
+    // Override the disk's maximum write same length.
+    optional uint64 max_transfer_length = 15;
+
+    PhysicalDevices physical_devices = 16;
+    bool is_dvd = 17;
+
+    uint32 chunk_size_in_kb = 18;
+    // Specify small size vm, for example independently attach a 75GB NVMe controller, but show as a 5GB SCSI disk inside VM
+    optional uint64 scsi_disk_size_in_bytes = 19;
+    // GUID for NTFS format
+    optional string ntfs_guid = 20; // GUID
+
+    uint32 total_logic_size_in_kb = 1001 [deprecated = true]; // unused
+    optional PhysicalDevice.DeviceType device_type = 1002 [deprecated = true]; // compat
+    optional string device_path = 1003 [deprecated = true]; // compat
+    optional uint32 sub_device_path = 1004 [deprecated = true]; // compat
+}
+
+message PhysicalDevices {
+    BackingType type = 1;
+
+    enum BackingType {
+        UNKNOWN = 0;
+        SINGLE = 1;
+        STRIPED = 2;
+
+        // Old JSON parsers used lowercase for the enum values.
+        option allow_alias = true;
+        single = 1;
+        striping = 2;
+    }
+
+    // For standard disks.
+    PhysicalDevice device = 2;
+    // For striped disks.
+    repeated PhysicalDevice devices = 3;
+}
+
+message PhysicalDevice {
+    enum DeviceType {
+        UNKNOWN = 0;
+        NVME = 1;
+        VSCSI = 2;
+
+        // For legacy compat.
+        option allow_alias = true;
+        NVMe = 1;
+        nvme = 1;
+        VScsi = 2;
+        vscsi = 2;
+    }
+
+    DeviceType device_type = 1;
+    string device_path = 2;
+    uint32 sub_device_path = 3;
+}
+
+// Settings used for the 'NetworkDevice' namespace
+message Vtl2SettingsNetworkDevice {
+
+    repeated NicDevice nic_devices = 1;
+
+    // Reserve field numbers that would make this start with an ASCII whitespace
+    // character or JSON object opening brace '{', which would conflict with
+    // JSON detection.
+    reserved 9, 10, 12, 13, 32, 123;
+}
+
+message NicDevice {
+    // The unique instance ID (vmbus ID) of an accelerated VTL2 networking device.
+    string instance_id = 1; // GUID
+    optional uint32 max_sub_channels = 2;
+}
+
+// Settings used for the 'NetworkAcceleration' namespace
+message Vtl2SettingsNetworkAcceleration {
+
+    repeated NicAcceleration nic_acceleration = 1;
+
+    // Reserve field numbers that would make this start with an ASCII whitespace
+    // character or JSON object opening brace '{', which would conflict with
+    // JSON detection.
+    reserved 9, 10, 12, 13, 32, 123;
+}
+
+message NicAcceleration {
+    // The unique instance ID (vmbus ID) of an accelerated VTL2 networking device.
+    string instance_id = 1; // GUID
+    // An unique instance ID of a paired/teamed networking device exposed directly to VTL0.
+    string subordinate_instance_id = 2; // GUID
+}

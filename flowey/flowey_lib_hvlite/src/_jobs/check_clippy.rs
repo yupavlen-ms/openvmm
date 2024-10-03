@@ -1,0 +1,255 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+//! Ensure hvlite repo is `clippy` clean.
+
+use crate::download_lxutil::LxutilArch;
+use crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch;
+use crate::run_cargo_build::common::CommonArch;
+use crate::run_cargo_build::common::CommonPlatform;
+use crate::run_cargo_build::common::CommonProfile;
+use crate::run_cargo_build::common::CommonTriple;
+use flowey::node::prelude::*;
+use flowey_lib_common::run_cargo_build::CargoBuildProfile;
+use flowey_lib_common::run_cargo_clippy::CargoPackage;
+
+flowey_request! {
+    pub struct Request {
+        pub target: target_lexicon::Triple,
+        pub profile: CommonProfile,
+        pub done: WriteVar<SideEffect>,
+        pub also_check_misc_nostd_crates: bool,
+    }
+}
+
+new_simple_flow_node!(struct Node);
+
+impl SimpleFlowNode for Node {
+    type Request = Request;
+
+    fn imports(ctx: &mut ImportCtx<'_>) {
+        ctx.import::<crate::build_xtask::Node>();
+        ctx.import::<crate::git_checkout_openvmm_repo::Node>();
+        ctx.import::<crate::init_openvmm_magicpath_openhcl_sysroot::Node>();
+        ctx.import::<crate::init_openvmm_magicpath_lxutil::Node>();
+        ctx.import::<crate::install_openvmm_rust_build_essential::Node>();
+        ctx.import::<flowey_lib_common::install_rust::Node>();
+        ctx.import::<flowey_lib_common::install_apt_pkg::Node>();
+        ctx.import::<flowey_lib_common::run_cargo_clippy::Node>();
+    }
+
+    fn process_request(request: Self::Request, ctx: &mut NodeCtx<'_>) -> anyhow::Result<()> {
+        let Request {
+            target,
+            profile,
+            done,
+            also_check_misc_nostd_crates,
+        } = request;
+
+        let flowey_platform = ctx.platform();
+        let flowey_arch = ctx.arch();
+
+        let (boot_target, uefi_target, sysroot_arch, lxutil_arch) = match target.architecture {
+            target_lexicon::Architecture::X86_64 => (
+                "x86_64-unknown-none",
+                "x86_64-unknown-uefi",
+                OpenvmmSysrootArch::X64,
+                LxutilArch::X86_64,
+            ),
+            target_lexicon::Architecture::Aarch64(_) => (
+                "aarch64-unknown-linux-musl",
+                "aarch64-unknown-uefi",
+                OpenvmmSysrootArch::Aarch64,
+                LxutilArch::Aarch64,
+            ),
+            arch => unreachable!("unsupported arch {arch}"),
+        };
+
+        let mut pre_build_deps = Vec::new();
+
+        // FIXME: this will go away once we have a dedicated cargo .config.toml
+        // for the openhcl _bin_. until we have that, we are building _every_
+        // musl target using the openhcl toolchain...
+
+        if matches!(target.environment, target_lexicon::Environment::Musl) {
+            pre_build_deps.push(
+                ctx.reqv(|v| crate::init_openvmm_magicpath_openhcl_sysroot::Request {
+                    arch: sysroot_arch,
+                    path: v,
+                })
+                .into_side_effect(),
+            );
+        }
+
+        // required due to build-scripts in the openvmm repo
+        pre_build_deps.push(ctx.reqv(|v| crate::init_openvmm_magicpath_lxutil::Request {
+            arch: lxutil_arch,
+            done: v,
+        }));
+
+        ctx.req(flowey_lib_common::install_rust::Request::InstallTargetTriple(target.clone()));
+        if also_check_misc_nostd_crates {
+            ctx.req(
+                flowey_lib_common::install_rust::Request::InstallTargetTriple(
+                    target_lexicon::triple!(uefi_target),
+                ),
+            );
+            ctx.req(
+                flowey_lib_common::install_rust::Request::InstallTargetTriple(
+                    target_lexicon::triple!(boot_target),
+                ),
+            );
+        }
+
+        if matches!(flowey_platform, FlowPlatform::Linux)
+            && matches!(
+                target.architecture,
+                target_lexicon::Architecture::Aarch64(_)
+            )
+        {
+            pre_build_deps.push(ctx.reqv(|v| {
+                flowey_lib_common::install_apt_pkg::Request::Install {
+                    package_names: vec!["libssl-dev".into(), "gcc-aarch64-linux-gnu".into()],
+                    done: v,
+                }
+            }));
+        }
+
+        pre_build_deps.push(ctx.reqv(crate::install_openvmm_rust_build_essential::Request));
+
+        let xtask = ctx.reqv(|v| crate::build_xtask::Request {
+            target: CommonTriple::Common {
+                arch: match flowey_arch {
+                    FlowArch::X86_64 => CommonArch::X86_64,
+                    FlowArch::Aarch64 => CommonArch::Aarch64,
+                },
+                platform: match flowey_platform {
+                    FlowPlatform::Windows => CommonPlatform::WindowsMsvc,
+                    FlowPlatform::Linux => CommonPlatform::LinuxGnu,
+                },
+            },
+            xtask: v,
+        });
+
+        let profile = match profile {
+            CommonProfile::Release => CargoBuildProfile::Release,
+            CommonProfile::Debug => CargoBuildProfile::Debug,
+        };
+
+        let openvmm_repo_path = ctx.reqv(crate::git_checkout_openvmm_repo::req::GetRepoDir);
+
+        let exclude = ctx.emit_rust_stepv("determine clippy exclusions", |ctx| {
+            let xtask = xtask.claim(ctx);
+            let repo_path = openvmm_repo_path.clone().claim(ctx);
+            move |rt| {
+                let xtask = rt.read(xtask);
+                let repo_path = rt.read(repo_path);
+
+                let mut exclude = vec!["guest_test_uefi".into()];
+
+                // packages containing libfuzzer-sys do not currently build for Aarch64
+                if matches!(
+                    target.architecture,
+                    target_lexicon::Architecture::Aarch64(_)
+                ) {
+                    let xtask_bin = match xtask {
+                        crate::build_xtask::XtaskOutput::LinuxBin { bin, dbg: _ } => bin,
+                        crate::build_xtask::XtaskOutput::WindowsBin { exe, pdb: _ } => exe,
+                    };
+
+                    let sh = xshell::Shell::new()?;
+                    sh.change_dir(repo_path);
+                    let output = xshell::cmd!(sh, "{xtask_bin} fuzz list --crates").output()?;
+                    let output = String::from_utf8(output.stdout)?;
+
+                    let fuzz_crates = output.trim().split('\n').map(|s| s.to_owned());
+                    exclude.extend(fuzz_crates);
+
+                    exclude.push("chipset_device_fuzz".into());
+                    exclude.push("xtask_fuzz".into());
+                }
+
+                // sparse_mmap and packages requiring openssl-sys won't cross compile for macos
+                // there is no openvmm artifact for macos yet, so skip petri and vmm_tests
+                if matches!(
+                    target.operating_system,
+                    target_lexicon::OperatingSystem::Darwin
+                ) {
+                    exclude.extend(
+                        [
+                            "openssl_kdf",
+                            "vmgs_lib",
+                            "vmm_tests",
+                            "petri_artifact_resolver_openvmm_known_paths",
+                            "vmm_test_petri_support",
+                            "petri",
+                        ]
+                        .map(|x| x.into()),
+                    );
+                }
+
+                Ok(Some(exclude))
+            }
+        });
+
+        let extra_env = if matches!(
+            target.operating_system,
+            target_lexicon::OperatingSystem::Darwin
+        ) {
+            Some(vec![("SPARSE_MMAP_NO_BUILD".into(), "1".into())])
+        } else {
+            None
+        };
+
+        let mut reqs = vec![ctx.reqv(|v| flowey_lib_common::run_cargo_clippy::Request {
+            in_folder: openvmm_repo_path.clone(),
+            package: CargoPackage::Workspace,
+            profile: profile.clone(),
+            features: Some(vec!["ci".into()]),
+            target,
+            extra_env,
+            exclude,
+            keep_going: true,
+            tests: true,
+            all_targets: true,
+            pre_build_deps: pre_build_deps.clone(),
+            done: v,
+        })];
+
+        if also_check_misc_nostd_crates {
+            reqs.push(ctx.reqv(|v| flowey_lib_common::run_cargo_clippy::Request {
+                in_folder: openvmm_repo_path.clone(),
+                package: CargoPackage::Crate("openhcl_boot".into()),
+                profile: profile.clone(),
+                features: None,
+                target: target_lexicon::triple!(boot_target),
+                extra_env: Some(vec![("MINIMAL_RT_BUILD".into(), "1".into())]),
+                exclude: ReadVar::from_static(None),
+                keep_going: true,
+                tests: false,
+                all_targets: false,
+                pre_build_deps: pre_build_deps.clone(),
+                done: v,
+            }));
+
+            // don't pass --all-targets, since that pulls in a std dependency
+            reqs.push(ctx.reqv(|v| flowey_lib_common::run_cargo_clippy::Request {
+                in_folder: openvmm_repo_path.clone(),
+                package: CargoPackage::Crate("guest_test_uefi".into()),
+                profile: profile.clone(),
+                features: None,
+                target: target_lexicon::triple!(uefi_target),
+                extra_env: None,
+                exclude: ReadVar::from_static(None),
+                keep_going: true,
+                tests: false,
+                all_targets: false,
+                pre_build_deps: pre_build_deps.clone(),
+                done: v,
+            }));
+        }
+
+        ctx.emit_side_effect_step(reqs, [done]);
+
+        Ok(())
+    }
+}

@@ -1,0 +1,4 @@
+LIBRARY api-ms-win-security-base-private-l1-1-1
+
+EXPORTS
+    CreateAppContainerToken

@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "memory_range"
+edition = "2021"
+
+[features]
+inspect = ["dep:inspect", "std"]
+mesh = ["dep:mesh_protobuf", "std"]
+std = ["dep:thiserror"]
+
+[dependencies]
+inspect = { workspace = true, optional = true }
+mesh_protobuf = { workspace = true, optional = true }
+
+thiserror = { workspace = true, optional = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,35 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "whp"
+edition = "2021"
+
+[features]
+unstable_whp = []
+
+[target.'cfg(windows)'.dependencies]
+zerocopy.workspace = true
+
+[target.'cfg(windows)'.dependencies.winapi]
+workspace = true
+features = [
+    "handleapi",
+    "libloaderapi",
+    "memoryapi",
+    "std",
+    "synchapi",
+    "winerror",
+]
+
+[target.'cfg(windows)'.dev-dependencies]
+criterion = { workspace = true, features = ["rayon", "cargo_bench_support"] }
+
+[build-dependencies]
+win_import_lib.workspace = true
+
+[[bench]]
+name = "primitives"
+harness = false
+
+[lints]
+workspace = true

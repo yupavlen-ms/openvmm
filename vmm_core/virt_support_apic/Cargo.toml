@@ -1,0 +1,24 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virt_support_apic"
+edition = "2021"
+
+[dependencies]
+hvdef.workspace = true
+vm_topology.workspace = true
+vmcore.workspace = true
+virt.workspace = true
+x86defs.workspace = true
+
+inspect.workspace = true
+inspect_counters.workspace = true
+tracelimit.workspace = true
+
+bitfield-struct.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

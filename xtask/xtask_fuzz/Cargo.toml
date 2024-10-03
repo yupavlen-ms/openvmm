@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "xtask_fuzz"
+edition = "2021"
+
+[dependencies]
+tracing-subscriber.workspace = true
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libfuzzer-sys.workspace = true
+
+[lints]
+workspace = true

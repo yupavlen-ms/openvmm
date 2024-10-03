@@ -1,0 +1,62 @@
+{
+    "V1": {
+        "SecureBootEnabled": true,
+        "SecureBootTemplateId": "MicrosoftWindows",
+        "EnableTpm": true,
+        "BiosGuid": "ffdbb77b-5760-4bc4-887c-cea7d5acc551",
+        "SerialNumber": "5127-1352-1990-7401-7849-5815-41",
+        "BaseBoardSerialNumber": "5127-1352-1990-7401-7849-5815-41",
+        "ChassisSerialNumber": "5127-1352-1990-7401-7849-5815-41",
+        "ChassisAssetTag": "5127-1352-1990-7401-7849-5815-41"
+    },
+    "V2": {
+        "Static": {
+            "LegacyMemoryMap": false,
+            "PauseAfterBootFailure": false,
+            "PxeIpV6": false,
+            "MeasureAdditionalPcrs": true,
+            "DisableFrontpage": false,
+            "DisableSha384Pcr": false,
+            "MediaPresentEnabledByDefault": false,
+            "MemoryProtectionMode": 0,
+            "VpciBootEnabled": false,
+            "VpciInstanceFilter": null,
+            "Smbios": {
+                "SystemManufacturer": "",
+                "SystemProductName": "",
+                "SystemVersion": "",
+                "SystemSKUNumber": "",
+                "SystemFamily": "",
+                "BiosLockString": "12345678901234567890123456789012",
+                "MemoryDeviceSerialNumber": ""
+            },
+            "VmbusRedirectionEnabled": true,
+            "Vtl2Settings": "eyJ2ZXJzaW9uIjoiVjEiLCJmaXhlZCI6eyJ3aXRoX3ZtYnVzIjp0cnVlLCJ3aXRoX3ZtYnVzX3JlbGF5Ijp0cnVlfSwiZHluYW1pYyI6eyJzdG9yYWdlX2NvbnRyb2xsZXJzIjpbeyJpbnN0YW5jZV9pZCI6IjllMTRmZDEwLTE5Y2ItNGRhNS1iNjY3LWU4ZTM4YTQzNmNiOCIsInByb3RvY29sIjoiSURFIiwibHVucyI6W3siY2hhbm5lbCI6MCwibG9jYXRpb24iOjAsImRldmljZV9pZCI6ImQzMjg3MmZkLWU2YTYtNDc0Yy1hMWE2LWRkMGQ1MjQ4ODU3ZSIsInZlbmRvcl9pZCI6Ik5WTWUiLCJwcm9kdWN0X2lkIjoiTlZNZSBEaXNrICAiLCJwcm9kdWN0X3JldmlzaW9uX2xldmVsIjoiMS4wIiwic2VyaWFsX251bWJlciI6InNvbWUgc2VyaWFsIG51bWJlciIsIm1vZGVsX251bWJlciI6InNvbWUgbW9kZWwgbnVtYmVyIiwiZnVhIjpmYWxzZSwid3JpdGVfY2FjaGUiOnRydWUsInBoeXNpY2FsX2RldmljZXMiOnsidHlwZSI6InNpbmdsZSIsImRldmljZSI6eyJkZXZpY2VfdHlwZSI6Im52bWUiLCJkZXZpY2VfcGF0aCI6IjMyMTdhNDhhLWM4MjAtNDcyNy04YzRjLTNlMjA4NmFiYTgzOSIsInN1Yl9kZXZpY2VfcGF0aCI6MX19fV19LHsiaW5zdGFuY2VfaWQiOiJjYTU2NzUxZi1lNjQzLTRiZWYtYmY1NC1mNzM2NzhlOGI3YjUiLCJwcm90b2NvbCI6IlNDU0kiLCJsdW5zIjpbeyJsb2NhdGlvbiI6MCwiZGV2aWNlX2lkIjoiOGMzYzE4YTUtZmQzMC00NzAwLWJlYTMtZDFhNjQzZWE3N2QwIiwidmVuZG9yX2lkIjoiTlZNZSIsInByb2R1Y3RfaWQiOiJOVk1lIERpc2sgICIsInByb2R1Y3RfcmV2aXNpb25fbGV2ZWwiOiIxLjAiLCJzZXJpYWxfbnVtYmVyIjoic29tZSBzZXJpYWwgbnVtYmVyIiwibW9kZWxfbnVtYmVyIjoic29tZSBtb2RlbCBudW1iZXIiLCJmdWEiOmZhbHNlLCJ3cml0ZV9jYWNoZSI6dHJ1ZSwicGh5c2ljYWxfZGV2aWNlcyI6eyJ0eXBlIjoic2luZ2xlIiwiZGV2aWNlIjp7ImRldmljZV90eXBlIjoibnZtZSIsImRldmljZV9wYXRoIjoiMzIxN2E0OGEtYzgyMC00NzI3LThjNGMtM2UyMDg2YWJhODM5Iiwic3ViX2RldmljZV9wYXRoIjoyfX19LHsibG9jYXRpb24iOjAsImRldmljZV9pZCI6IjIzMWRjY2VjLWQ4MjEtNDY5Yy1hZmI3LTYyMjcxMTI0OWFhYSIsInZlbmRvcl9pZCI6Ik5WTWUiLCJwcm9kdWN0X2lkIjoiTlZNZSBEaXNrICAiLCJwcm9kdWN0X3JldmlzaW9uX2xldmVsIjoiMS4wIiwic2VyaWFsX251bWJlciI6InNvbWUgc2VyaWFsIG51bWJlciIsIm1vZGVsX251bWJlciI6InNvbWUgbW9kZWwgbnVtYmVyIiwiZnVhIjpmYWxzZSwid3JpdGVfY2FjaGUiOnRydWUsInBoeXNpY2FsX2RldmljZXMiOnsidHlwZSI6InNpbmdsZSIsImRldmljZSI6eyJkZXZpY2VfdHlwZSI6Im52bWUiLCJkZXZpY2VfcGF0aCI6IjMyMTdhNDhhLWM4MjAtNDcyNy04YzRjLTNlMjA4NmFiYTgzOSIsInN1Yl9kZXZpY2VfcGF0aCI6M319fV19LHsiaW5zdGFuY2VfaWQiOiJjYTU2NzUxZi1lNjQzLTRiZWYtYmY1NC1mNzM2NzhlOGI3YjUiLCJwcm90b2NvbCI6IlNDU0kiLCJsdW5zIjpbeyJsb2NhdGlvbiI6MCwiY2h1bmtfc2l6ZV9pbl9rYiI6MTI4LCJ0b3RhbF9sb2dpY19zaXplX2luX2tiIjo2NDMyMDAsImRldmljZV9pZCI6IjlBMTcxNEU4LTQ0OTAtNEQ5Ny1CNEQ4LUU4MDg4OEE3OTkyRSIsInZlbmRvcl9pZCI6IlNDU0kiLCJwcm9kdWN0X2lkIjoiU0NTSSBEaXNrIiwicHJvZHVjdF9yZXZpc2lvbl9sZXZlbCI6IjEuMCIsInNlcmlhbF9udW1iZXIiOiJzb21lIHNlcmlhbCBudW1iZXIiLCJtb2RlbF9udW1iZXIiOiJzb21lIG1vZHVsZSBudW1iZXIiLCJmdWEiOmZhbHNlLCJ3cml0ZV9jYWNoZSI6dHJ1ZSwicGh5c2ljYWxfZGV2aWNlcyI6eyJ0eXBlIjoic3RyaXBpbmciLCJkZXZpY2VzIjpbeyJkZXZpY2VfdHlwZSI6Ik5WTWUiLCJkZXZpY2VfcGF0aCI6IjFCODYzMzE1LUIwMTktNEY3Qi1BRTRCLUQxQTRFNjBGQzczRSIsInN1Yl9kZXZpY2VfcGF0aCI6MX0seyJkZXZpY2VfdHlwZSI6Ik5WTWUiLCJkZXZpY2VfcGF0aCI6IjBDNkYzNzc1LUU4MTAtNEJEMi05NzVBLUZGRTE0MTNCQkE4OSIsInN1Yl9kZXZpY2VfcGF0aCI6MX0seyJkZXZpY2VfdHlwZSI6Ik5WTWUiLCJkZXZpY2VfcGF0aCI6IkY3QjdFQ0M1LTgyQjktNEZDQi1CQTYxLTlEMkFERDQ5MEZENCIsInN1Yl9kZXZpY2VfcGF0aCI6MX0seyJkZXZpY2VfdHlwZSI6Ik5WTWUiLCJkZXZpY2VfcGF0aCI6IjVFRDM0MUVFLUQ3NkMtNDgzRC1BQjkwLTNGQTg0RkQ4NTU1QiIsInN1Yl9kZXZpY2VfcGF0aCI6MX0seyJkZXZpY2VfdHlwZSI6Ik5WTWUiLCJkZXZpY2VfcGF0aCI6Ijk2RkQ1NURDLTk5MjItNDYxOC1BQzM1LUEyOTYzOUExOTg4NyIsInN1Yl9kZXZpY2VfcGF0aCI6MX0seyJkZXZpY2VfdHlwZSI6Ik5WTWUiLCJkZXZpY2VfcGF0aCI6IjI4MEZFNjIyLUQyRDYtNDMzQi1BN0UxLTlERTg3ODY0MDMyNCIsInN1Yl9kZXZpY2VfcGF0aCI6MX1dfX1dfV0sIm5pY19kZXZpY2VzIjpbeyJpbnN0YW5jZV9pZCI6IjllMTRmZDEwLTE5Y2ItNGRhNS1iNjY3LWU4ZTM4YTQzNmNiOCJ9XX19",
+            "WatchdogEnabled": true,
+            "NumLockEnabled": false,
+            "NoPersistentSecrets": false,
+            "FirmwareModeIsPcat": false
+        },
+        "Dynamic": {
+            "NvdimmCount": 0,
+            "GenerationIdLow": 9815980333326143000,
+            "GenerationIdHigh": 12244943675700015000,
+            "EnablePsp": false,
+            "Smbios": {
+                "ProcessorManufacturer": "SW50ZWwgICAgICAgICAgICAA",
+                "ProcessorVersion": "SW50ZWwoUikgWGVvbihSKSBDUFUgRTUtMjY1MCAwIEAgMi4wMEdIICAgICAgICAA",
+                "ProcessorID": 0,
+                "ExternalClock": 100,
+                "MaxSpeed": 4000,
+                "CurrentSpeed": 2000,
+                "ProcessorCharacteristics": 4,
+                "ProcessorFamily2": 179,
+                "ProcessorType": 3,
+                "Voltage": 128,
+                "Status": 65,
+                "ProcessorUpgrade": 6
+            },
+            "IsServicingScenario": false
+        }
+    }
+}

@@ -1,0 +1,33 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mana_driver"
+edition = "2021"
+
+[dependencies]
+gdma_defs.workspace = true
+net_backend.workspace = true
+net_backend_resources.workspace = true
+
+chipset_device.workspace = true
+user_driver.workspace = true
+vmcore.workspace = true
+
+inspect = { workspace = true, features = ["defer"] }
+mesh.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+getrandom.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+gdma.workspace = true
+pci_core.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

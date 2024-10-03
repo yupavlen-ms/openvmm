@@ -1,0 +1,11 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "guest_test_uefi"
+edition = "2021"
+
+[dependencies]
+uefi = { workspace = true, features = ["alloc", "global_allocator"] }
+
+[lints]
+workspace = true

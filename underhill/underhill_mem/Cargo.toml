@@ -1,0 +1,31 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_mem"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+guestmem.workspace = true
+hcl.workspace = true
+hvdef.workspace = true
+memory_range.workspace = true
+underhill_threadpool.workspace = true
+virt_underhill.workspace = true
+vm_topology.workspace = true
+x86defs.workspace = true
+
+inspect.workspace = true
+pal_async.workspace = true
+sparse_mmap.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

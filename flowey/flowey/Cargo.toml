@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "flowey"
+edition = "2021"
+
+[dependencies]
+flowey_core.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+log.workspace = true
+serde = { workspace = true, features = ["derive"] }
+
+[lints]
+workspace = true

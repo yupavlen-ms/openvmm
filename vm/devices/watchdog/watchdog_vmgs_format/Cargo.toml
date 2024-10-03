@@ -1,0 +1,13 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "watchdog_vmgs_format"
+edition = "2021"
+
+[dependencies]
+vmcore.workspace = true
+
+thiserror.workspace = true
+
+[lints]
+workspace = true

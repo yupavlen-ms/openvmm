@@ -1,0 +1,58 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmm_core"
+edition = "2021"
+
+[features]
+gdb = ["iced-x86", "virt_support_x86emu"]
+
+[dependencies]
+virt.workspace = true
+virt_support_x86emu = { workspace = true, optional = true }
+state_unit.workspace = true
+vmm_core_defs.workspace = true
+
+aarch64defs.workspace = true
+acpi_spec = { workspace = true, features = ["std"] }
+acpi.workspace = true
+hcl_compat_uefi_nvram_storage.workspace = true
+hvdef.workspace = true
+memory_range = { workspace = true, features = ["inspect"] }
+vm_topology = { workspace = true, features = ["inspect"] }
+guestmem.workspace = true
+vmcore.workspace = true
+chipset.workspace = true
+input_core.workspace = true
+pci_core.workspace = true
+pci_resources.workspace = true
+power_resources.workspace = true
+vmbus_channel.workspace = true
+vmbus_server.workspace = true
+vm_resource.workspace = true
+vmotherboard.workspace = true
+vpci.workspace = true
+x86defs.workspace = true
+
+# support/
+cache_topology.workspace = true
+inspect.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+iced-x86 = { optional = true, workspace = true, features = ["std", "fast_fmt"] }
+parking_lot.workspace = true
+slab.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

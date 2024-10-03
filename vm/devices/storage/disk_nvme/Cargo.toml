@@ -1,0 +1,23 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "disk_nvme"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+disk_backend.workspace = true
+nvme_common.workspace = true
+nvme_driver.workspace = true
+nvme_spec.workspace = true
+scsi_buffers.workspace = true
+
+inspect.workspace = true
+pal.workspace = true
+
+async-trait.workspace = true
+stackfuture.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+
+[lints]
+workspace = true

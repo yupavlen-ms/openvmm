@@ -1,0 +1,45 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "fuzz_mesh_ttrpc"
+publish = false
+edition = "2021"
+
+[dependencies]
+mesh.workspace = true
+mesh_ttrpc.workspace = true
+unix_socket.workspace = true
+pal_async.workspace = true
+xtask_fuzz.workspace = true
+
+futures.workspace = true
+prost.workspace = true
+tempfile.workspace = true
+
+[build-dependencies]
+mesh_build.workspace = true
+prost-build.workspace = true
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libfuzzer-sys.workspace = true
+
+[package.metadata.xtask.unused-deps]
+# libfuzzer-sys required for the xtask_fuzz macro
+# prost required for the generated proto
+ignored = ["libfuzzer-sys", "prost"]
+
+[package.metadata]
+cargo-fuzz = true
+
+[package.metadata.xtask.fuzz.onefuzz-allowlist]
+fuzz_mesh_ttrpc_server = ["**/*.rs", "../../**/*.rs"]
+
+[[bin]]
+name = "fuzz_mesh_ttrpc_server"
+path = "fuzz_mesh_ttrpc_server.rs"
+test = false
+doc = false
+doctest = false
+
+[lints]
+workspace = true

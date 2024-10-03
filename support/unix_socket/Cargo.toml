@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "unix_socket"
+edition = "2021"
+
+[features]
+mesh = ["dep:mesh_protobuf"]
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+getrandom.workspace = true
+socket2.workspace = true
+mesh_protobuf = { workspace = true, optional = true }
+windows-sys = { workspace = true, features = ["Win32_Networking_WinSock"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,32 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "loader"
+edition = "2021"
+
+[dependencies]
+aarch64defs.workspace = true
+igvm.workspace = true
+loader_defs.workspace = true
+memory_range.workspace = true
+page_table.workspace = true
+hvdef.workspace = true
+vm_topology.workspace = true
+x86defs.workspace = true
+
+guid.workspace = true
+
+anyhow.workspace = true
+bitfield-struct.workspace = true
+crc32fast.workspace = true
+object = { workspace = true, features = ["elf", "std", "read_core"] }
+open_enum.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy = { workspace = true, features = ["alloc"] }
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

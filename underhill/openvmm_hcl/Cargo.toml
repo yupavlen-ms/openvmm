@@ -1,0 +1,25 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "openvmm_hcl"
+edition = "2021"
+
+[features]
+default = ["tpm"]
+
+# see the `underhill_entry` crate for more info on these features
+gdb = ["underhill_entry/gdb", "openvmm_hcl_resources/debug_worker"]
+tpm = ["openvmm_hcl_resources/tpm"]
+
+# Enable vmbus UI devices.
+uidevices = ["openvmm_hcl_resources/uidevices", "openvmm_hcl_resources/vnc_worker"]
+
+# Enable NVMe emulation.
+nvme = ["openvmm_hcl_resources/nvme", "underhill_entry/vpci"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+underhill_entry.workspace = true
+openvmm_hcl_resources.workspace = true
+
+[lints]
+workspace = true

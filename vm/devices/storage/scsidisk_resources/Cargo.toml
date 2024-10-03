@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "scsidisk_resources"
+edition = "2021"
+
+[dependencies]
+inspect.workspace = true
+storage_string.workspace = true
+vm_resource.workspace = true
+mesh.workspace = true
+
+[lints]
+workspace = true

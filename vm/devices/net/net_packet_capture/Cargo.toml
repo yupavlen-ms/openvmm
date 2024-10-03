@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "net_packet_capture"
+edition = "2021"
+
+[dependencies]
+guestmem.workspace = true
+net_backend.workspace = true
+mesh.workspace = true
+inspect.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+parking_lot.workspace = true
+pcap-file.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

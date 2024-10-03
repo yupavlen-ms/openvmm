@@ -1,0 +1,45 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "disk_blockdevice"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+disk_backend.workspace = true
+nvme_common.workspace = true
+nvme_spec.workspace = true
+scsi_buffers.workspace = true
+
+hvdef.workspace = true
+mesh.workspace = true
+guestmem.workspace = true
+vm_resource.workspace = true
+inspect = { workspace = true, features = ["filepath"] }
+open_enum.workspace = true
+pal.workspace = true
+pal_async.workspace = true
+pal_uring.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+event-listener.workspace = true
+fs-err.workspace = true
+futures.workspace = true
+once_cell.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+blocking.workspace = true
+bitfield-struct.workspace = true
+stackfuture.workspace = true
+
+libc.workspace = true
+io-uring.workspace = true
+nix = { workspace = true, features = ["ioctl"] }
+uevent.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

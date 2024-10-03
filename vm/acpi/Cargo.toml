@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "acpi"
+edition = "2021"
+
+[dependencies]
+acpi_spec.workspace = true
+memory_range.workspace = true
+x86defs.workspace = true
+
+zerocopy.workspace = true
+
+[lints]
+workspace = true

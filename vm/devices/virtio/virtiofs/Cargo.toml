@@ -1,0 +1,34 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virtiofs"
+edition = "2021"
+
+[dependencies]
+virtio.workspace = true
+virtio_resources.workspace = true
+
+vm_resource.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+
+fuse.workspace = true
+lx.workspace = true
+lxutil.workspace = true
+pal.workspace = true
+pal_async.workspace = true
+task_control.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+event-listener.workspace = true
+futures.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+ntapi.workspace = true
+
+[lints]
+workspace = true

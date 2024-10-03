@@ -1,0 +1,34 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "fuzz_x86emu"
+publish = false
+edition = "2021"
+
+[dependencies]
+xtask_fuzz.workspace = true
+
+x86emu = { workspace = true, features = ["arbitrary"] }
+x86defs = { workspace = true, features = ["arbitrary"] }
+
+arbitrary = { workspace = true, features = ["derive"] }
+futures.workspace = true
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libfuzzer-sys.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[package.metadata.xtask.fuzz.onefuzz-allowlist]
+fuzz_x86emu = ["**/*.rs", "../src/**/*.rs"]
+
+[[bin]]
+name = "fuzz_x86emu"
+path = "fuzz_x86emu.rs"
+test = false
+doc = false
+doctest = false
+
+[lints]
+workspace = true

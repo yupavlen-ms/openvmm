@@ -1,0 +1,69 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "petri"
+edition = "2021"
+
+[dependencies]
+pipette_client.workspace = true
+
+petri_artifacts_common.workspace = true
+petri_artifacts_core.workspace = true
+petri_artifacts_vmm_test.workspace = true
+chipset_resources.workspace = true
+diag_client.workspace = true
+hvlite_defs.workspace = true
+hvlite_helpers.workspace = true
+hvlite_pcat_locator.workspace = true
+hyperv_ic_resources.workspace = true
+hyperv_secure_boot_templates.workspace = true
+vmbus_serial_resources.workspace = true
+underhill_confidentiality.workspace = true
+vtl2_settings_proto.workspace = true
+disk_backend_resources.workspace = true
+framebuffer.workspace = true
+get_resources.workspace = true
+ide_resources.workspace = true
+nvme_resources.workspace = true
+scsidisk_resources.workspace = true
+serial_core.workspace = true
+serial_16550_resources.workspace = true
+serial_socket.workspace = true
+storvsp_resources.workspace = true
+tpm_resources.workspace = true
+uidevices_resources.workspace = true
+video_core.workspace = true
+vmbfs_resources.workspace = true
+vmcore.workspace = true
+vm_manifest_builder.workspace = true
+vm_resource.workspace = true
+vmm_core_defs.workspace = true
+vmotherboard.workspace = true
+
+guid.workspace = true
+inspect = { workspace = true, features = ["initiate"] }
+mesh_process.workspace = true
+mesh_worker.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+pal.workspace = true
+tempfile_helpers.workspace = true
+unix_socket.workspace = true
+sparse_mmap.workspace = true
+
+anyhow.workspace = true
+fatfs = { workspace = true, features = ["std", "alloc"] }
+fs-err.workspace = true
+fscommon.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+gptman.workspace = true
+image = { workspace = true, features = ["png"] }
+mbrman.workspace = true
+prost.workspace = true
+tempfile.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,40 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_attestation"
+edition = "2021"
+
+[features]
+# Enable locally compiling and statically linking a copy of OpenSSL.
+# The build process requires a C compiler, perl, and make.
+openssl-vendored = ["openssl/vendored"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+get_protocol.workspace = true
+guest_emulation_transport.workspace = true
+vmgs = { workspace = true, features = ["encryption_ossl"] }
+
+open_enum.workspace = true
+guid.workspace = true
+mesh.workspace = true
+openssl_kdf.workspace = true
+sev_guest_device.workspace = true
+tdx_guest_device.workspace = true
+tee_call.workspace = true
+pal_async.workspace = true
+tracing.workspace = true
+
+base64.workspace = true
+base64-serde.workspace = true
+getrandom.workspace = true
+hex.workspace = true
+openssl.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+static_assertions.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["macros"] }
+zerocopy.workspace = true
+
+[lints]
+workspace = true

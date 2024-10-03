@@ -1,0 +1,12 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "win_import_lib"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+cc.workspace = true
+
+[lints]
+workspace = true

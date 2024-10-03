@@ -1,0 +1,41 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "fuzz_ide"
+publish = false
+edition = "2021"
+
+[dependencies]
+ide.workspace = true
+
+chipset_arc_mutex_device.workspace = true
+chipset_device_fuzz.workspace = true
+chipset_device.workspace = true
+disk_ramdisk.workspace = true
+pci_core.workspace = true
+scsidisk.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+
+xtask_fuzz.workspace = true
+
+arbitrary.workspace = true
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libfuzzer-sys.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[package.metadata.xtask.fuzz.onefuzz-allowlist]
+fuzz_ide = ["**/*.rs", "../src/**/*.rs"]
+
+[[bin]]
+name = "fuzz_ide"
+path = "fuzz_ide.rs"
+test = false
+doc = false
+doctest = false
+
+[lints]
+workspace = true

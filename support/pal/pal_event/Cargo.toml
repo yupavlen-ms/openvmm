@@ -1,0 +1,23 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pal_event"
+edition = "2021"
+
+[features]
+mesh = ["dep:mesh_protobuf"]
+
+[dependencies]
+mesh_protobuf = { workspace = true, optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Threading", "Win32_Foundation", "Win32_Security"] }
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(all(unix, not(target_os = "linux")))'.dependencies]
+getrandom.workspace = true
+
+[lints]
+workspace = true

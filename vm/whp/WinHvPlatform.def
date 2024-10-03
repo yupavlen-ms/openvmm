@@ -1,0 +1,19 @@
+LIBRARY WinHvPlatform
+
+EXPORTS
+    WHvGetCapability
+    WHvCreatePartition
+    WHvDeletePartition
+    WHvSetupPartition
+    WHvGetPartitionProperty
+    WHvSetPartitionProperty
+    WHvRequestInterrupt
+    WHvCreateVirtualProcessor
+    WHvDeleteVirtualProcessor
+    WHvCancelRunVirtualProcessor
+    WHvGetVirtualProcessorRegisters
+    WHvSetVirtualProcessorRegisters
+    WHvRunVirtualProcessor
+    WHvTranslateGva
+    WHvMapGpaRange
+    WHvUnmapGpaRange

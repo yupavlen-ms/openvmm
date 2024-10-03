@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virtio_pmem"
+edition = "2021"
+
+[dependencies]
+virtio.workspace = true
+virtio_resources.workspace = true
+
+guestmem.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+pal_async.workspace = true
+sparse_mmap.workspace = true
+task_control.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+event-listener.workspace = true
+fs-err.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

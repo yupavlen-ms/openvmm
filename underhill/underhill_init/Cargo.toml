@@ -1,0 +1,23 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_init"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+kmsg_defs.workspace = true
+
+underhill_confidentiality = { workspace = true, features = ["std"] }
+
+anyhow.workspace = true
+fs-err.workspace = true
+libc.workspace = true
+log = { workspace = true, features = ["std"] }
+nix = { workspace = true, features = ["ioctl"] }
+walkdir.workspace = true
+
+[build-dependencies]
+vergen = { workspace = true, features = ["git", "gitcl"] }
+
+[lints]
+workspace = true

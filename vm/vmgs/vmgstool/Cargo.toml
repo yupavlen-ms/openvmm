@@ -1,0 +1,39 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmgstool"
+edition = "2021"
+
+[features]
+default = []
+
+# Use native windows crypto APIs
+encryption_win = ["vmgs/encryption_win"]
+# Use OpenSSL crypto APIs
+encryption_ossl = ["vmgs/encryption_ossl"]
+
+[dependencies]
+uefi_nvram_storage.workspace = true
+guid.workspace = true
+hcl_compat_uefi_nvram_storage.workspace = true
+pal_async.workspace = true
+uefi_nvram_specvars.workspace = true
+uefi_specs.workspace = true
+vmgs.workspace = true
+vmgs_format.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+clap = { workspace = true, features = ["derive"] }
+hex.workspace = true
+fs-err.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+ucs2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+# File containing policy for file ownership
+
+# Reviewers for all files in the repository
+* @microsoft/hvlite
+
+# Any CI changes require special approval
+/ci/ @microsoft/hvlite-ci-config-reviewers
+/.github/ @microsoft/hvlite-ci-config-reviewers
+
+# VTL2 settings is an API consumed by various partner teams. VTL2 Settings
+# approvers evaluate for consistency and to help ensure no breaking changes
+/vm/devices/get/underhill_config/* @microsoft/hvlite-vtl2-settings-approvers
+
+# Cargo dependencies
+/Cargo.lock @microsoft/hvlite-dependency-reviewers

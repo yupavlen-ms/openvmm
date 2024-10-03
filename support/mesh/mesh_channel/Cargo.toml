@@ -1,0 +1,25 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mesh_channel"
+edition = "2021"
+
+[dependencies]
+mesh_node.workspace = true
+mesh_protobuf.workspace = true
+
+futures-core.workspace = true
+futures-io.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+futures.workspace = true
+futures-concurrency.workspace = true
+pal_async.workspace = true
+pal_event.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

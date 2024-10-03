@@ -1,0 +1,50 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "guest_emulation_transport"
+edition = "2021"
+
+[features]
+test_utilities = [ "guest_emulation_device" ]
+
+[target.'cfg(unix)'.dependencies]
+get_protocol.workspace = true
+guest_emulation_device = { workspace = true, optional = true }
+guestmem.workspace = true
+hvdef.workspace = true
+shared_pool_alloc.workspace = true
+underhill_config.workspace = true
+vmbus_async.workspace = true
+vmbus_ring.workspace = true
+vm_resource.workspace = true
+vpci.workspace = true
+
+chipset_resources.workspace = true
+
+guid = { workspace = true, features = ["inspect"] }
+inspect.workspace = true
+inspect_counters.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+test_with_tracing.workspace = true
+tracing_helpers.workspace = true
+
+futures.workspace = true
+futures-concurrency.workspace = true
+getrandom.workspace = true
+parking_lot.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+unicycle.workspace = true
+zerocopy.workspace = true
+zerocopy_helpers.workspace = true
+
+vmbus_user_channel.workspace = true
+
+[dev-dependencies]
+guest_emulation_device.workspace = true
+power_resources.workspace = true
+
+[lints]
+workspace = true

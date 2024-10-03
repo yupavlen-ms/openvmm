@@ -1,0 +1,93 @@
+- uses: Azure/login@v2
+  with:
+    # These secrets describe the HvLite-GitHub service principal and associated Azure subscription,
+    # which, along with the GITHUB_TOKEN, are used to authenticate GitHub Actions to Azure with OpenID Connect.
+    # The service principal has federated identity credentials configured describing which branches and
+    # scenarios can be authenticated.
+    client-id: {{OPENVMM_CLIENT_ID}}
+    tenant-id: {{OPENVMM_TENANT_ID}}
+    subscription-id: {{OPENVMM_SUBSCRIPTION_ID}}
+
+- name: Installing Azure CLI (Windows)
+  run: |
+    $ProgressPreference = 'SilentlyContinue'
+    Invoke-WebRequest -Uri https://aka.ms/installazurecliwindowsx64 -OutFile .\AzureCLI.msi
+    Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'
+    Remove-Item .\AzureCLI.msi
+  if: runner.os == 'Windows'
+  shell: pwsh
+
+- name: Installing Azure CLI (Linux)
+  run: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
+  if: runner.os == 'Linux'
+  shell: bash
+
+- name: Pull Azure Key Vault secrets
+  run: |
+    VPackAccessToken=$(az keyvault secret show --name "VPackAccessToken" --vault-name "HvLite-PATs" --query value --output tsv)
+    echo "::add-mask::$VPackAccessToken"
+    echo "VPackAccessToken=$VPackAccessToken" >> $GITHUB_ENV
+    MsAzurePull=$(az keyvault secret show --name "MsAzurePull" --vault-name "HvLite-PATs" --query value --output tsv)
+    echo "::add-mask::$MsAzurePull"
+    echo "MsAzurePull=$MsAzurePull" >> $GITHUB_ENV
+  shell: bash
+
+- run: |
+    set -x
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    rustup show
+  if: runner.os == 'Linux'
+  name: rustup (Linux)
+  shell: bash
+
+- run: |
+    set -x
+    curl -sSfLo rustup-init.exe https://win.rustup.rs/x86_64 --output rustup-init
+    ./rustup-init.exe -y
+    echo "$USERPROFILE\\.cargo\\bin" >> $GITHUB_PATH
+  if: runner.os == 'Windows'
+  name: rustup (Windows)
+  shell: bash
+
+- uses: actions/checkout@v4
+  with:
+    path: flowey_bootstrap
+
+# Authentication token used to download the crates are automatically checked into the index.
+# The token expires after 7 days, so this line pulls in a new token without updating the lock file.
+- name: Update Index
+  run: |
+    rustc -vV
+    cargo update --dry-run
+  working-directory: flowey_bootstrap
+  shell: bash
+
+# - CARGO_INCREMENTAL=0 - no need to waste time on incremental artifacts in CI
+# - RUSTC_BOOTSTRAP=1 + RUSTFLAGS="-Z threads=8" - use of the unstable parallel
+#   frontend to go f a s t
+- name: Build flowey
+  run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p {{FLOWEY_CRATE}} --target {{FLOWEY_TARGET}} --profile flowey-ci
+  working-directory: flowey_bootstrap
+  shell: bash
+
+- name: Stage flowey artifact
+  run: |
+    mkdir ./flowey_bootstrap_temp
+    mv ./{{FLOWEY_PIPELINE_PATH}}.yaml ./flowey_bootstrap_temp/pipeline.yaml
+    mv ./{{FLOWEY_PIPELINE_PATH}}.json ./flowey_bootstrap_temp/pipeline.json
+    mv target/{{FLOWEY_TARGET}}/flowey-ci/{{FLOWEY_CRATE}}{{FLOWEY_BIN_EXTENSION}} ./flowey_bootstrap_temp/flowey{{FLOWEY_BIN_EXTENSION}}
+  working-directory: flowey_bootstrap
+  shell: bash
+
+- name: Copy flowey artifact
+  run: |
+    OutDirNormal=$(echo "{{FLOWEY_OUTDIR}}" | sed -e 's|\\|\/|g' -e 's|^\([A-Za-z]\)\:/\(.*\)|/\L\1\E/\2|')
+    mkdir -p $OutDirNormal
+    cp -r ./flowey_bootstrap_temp/* $OutDirNormal
+  working-directory: flowey_bootstrap
+  shell: bash
+
+- name: Cleanup staged flowey artifact
+  run: rm -rf ./flowey_bootstrap_temp
+  working-directory: flowey_bootstrap
+  shell: bash

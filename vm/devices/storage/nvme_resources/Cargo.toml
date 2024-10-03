@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "nvme_resources"
+edition = "2021"
+
+[dependencies]
+vm_resource.workspace = true
+
+mesh.workspace = true
+
+guid = { workspace = true, features = ["mesh"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "hyperv_secure_boot_templates"
+edition = "2021"
+
+[dependencies]
+firmware_uefi_custom_vars.workspace = true
+hyperv_uefi_custom_vars_json.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

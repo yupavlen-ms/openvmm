@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "chipset_device_fuzz"
+publish = false
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+chipset_arc_mutex_device.workspace = true
+
+closeable_mutex.workspace = true
+range_map_vec.workspace = true
+
+arbitrary = { workspace = true, features = ["derive"] }
+futures.workspace = true
+parking_lot.workspace = true
+zerocopy.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

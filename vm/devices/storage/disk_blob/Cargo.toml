@@ -1,0 +1,36 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "disk_blob"
+edition = "2021"
+
+[dependencies]
+disk_backend.workspace = true
+disk_backend_resources.workspace = true
+scsi_buffers.workspace = true
+vhd1_defs.workspace = true
+
+guestmem.workspace = true
+vm_resource.workspace = true
+
+inspect = { workspace = true, features = ["filepath"] }
+
+anyhow.workspace = true
+async-trait.workspace = true
+blocking.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper = { workspace = true, features = ["client", "http1", "http2"] }
+hyper-tls.workspace = true
+hyper-util = { workspace = true, features = ["client", "client-legacy", "http1", "http2"] }
+once_cell.workspace = true
+thiserror.workspace = true
+stackfuture.workspace = true
+zerocopy.workspace = true
+
+# tokio use is allowed in this crate only.
+# FUTURE: replace this with our own executor
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+[lints]
+workspace = true

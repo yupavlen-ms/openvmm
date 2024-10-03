@@ -1,0 +1,17 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+syntax = "proto3";
+
+package profile;
+
+import "google/protobuf/empty.proto";
+
+service AzureProfiler {
+    rpc Profile(ProfileRequest) returns (google.protobuf.Empty);
+}
+
+message ProfileRequest {
+    uint64 conn = 1;
+    uint64 duration = 2;
+    repeated string profiler_args = 3;
+}

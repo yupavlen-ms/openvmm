@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "aarch64defs"
+edition = "2021"
+
+[dependencies]
+open_enum.workspace = true
+
+bitfield-struct.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

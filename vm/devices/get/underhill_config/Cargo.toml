@@ -1,0 +1,20 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_config"
+edition = "2021"
+
+[dependencies]
+guid = { workspace = true, features = ["mesh", "inspect"] }
+inspect.workspace = true
+mesh.workspace = true
+vtl2_settings_proto.workspace = true
+
+prost.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+
+
+[lints]
+workspace = true

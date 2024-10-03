@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "cache_topology"
+edition = "2021"
+
+[dependencies]
+thiserror.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+fs-err.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Foundation", "Win32_System_SystemInformation"] }
+
+[lints]
+workspace = true

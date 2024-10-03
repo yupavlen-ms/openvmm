@@ -1,0 +1,20 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "hyperv_uefi_custom_vars_json"
+edition = "2021"
+
+[dependencies]
+firmware_uefi_custom_vars.workspace = true
+
+guid = { workspace = true, features = ["mesh"] }
+serde_helpers.workspace = true
+
+base64.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+thiserror.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

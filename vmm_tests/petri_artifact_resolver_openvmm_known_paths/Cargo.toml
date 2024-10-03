@@ -1,0 +1,18 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "petri_artifact_resolver_openvmm_known_paths"
+edition = "2021"
+
+[dependencies]
+petri_artifacts_vmm_test.workspace = true
+vmm_test_images.workspace = true
+
+petri_artifacts_common.workspace = true
+petri_artifacts_core.workspace = true
+
+anyhow.workspace = true
+tempfile.workspace = true
+
+[lints]
+workspace = true

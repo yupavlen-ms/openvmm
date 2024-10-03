@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "uefi_specs"
+edition = "2021"
+
+[features]
+default = []
+
+inspect = ["dep:inspect"]
+
+[dependencies]
+guid.workspace = true
+inspect = { workspace = true, optional = true }
+open_enum.workspace = true
+ucs2.workspace = true
+
+bitfield-struct.workspace = true
+static_assertions.workspace = true
+wchar.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

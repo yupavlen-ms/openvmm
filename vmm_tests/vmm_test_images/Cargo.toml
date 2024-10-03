@@ -1,0 +1,18 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmm_test_images"
+edition = "2021"
+
+[features]
+clap = ["dep:clap"]
+serde = ["dep:serde"]
+
+[dependencies]
+petri_artifacts_vmm_test.workspace = true
+
+clap = { workspace = true, features = ["derive"], optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+
+[lints]
+workspace = true

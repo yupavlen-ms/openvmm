@@ -1,0 +1,24 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "state_unit"
+edition = "2021"
+
+[dependencies]
+vmcore.workspace = true
+
+inspect = { workspace = true, features = ["defer"] }
+mesh.workspace = true
+pal_async.workspace = true
+test_with_tracing.workspace = true
+
+anyhow.workspace = true
+event-listener.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

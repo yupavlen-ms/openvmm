@@ -1,0 +1,36 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "fuzz_sparse_mmap"
+publish = false
+edition = "2021"
+
+[dependencies]
+sparse_mmap.workspace = true
+xtask_fuzz.workspace = true
+
+arbitrary = { workspace = true, features = ["derive"] }
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+libfuzzer-sys.workspace = true
+
+[package.metadata]
+cargo-fuzz = true
+
+[package.metadata.xtask.fuzz.onefuzz-allowlist]
+fuzz_sparse_mmap = ["**/*.rs", "../src/**/*.rs"]
+
+[package.metadata.xtask.fuzz.target-options]
+# Full coverage requires 2GB maps, so we need a 
+# memory limit > 2GB.
+fuzz_sparse_mmap = ["-rss_limit_mb=4096"]
+
+[[bin]]
+name = "fuzz_sparse_mmap"
+path = "fuzz_sparse_mmap.rs"
+test = false
+doc = false
+doctest = false
+
+[lints]
+workspace = true

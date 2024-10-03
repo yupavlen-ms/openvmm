@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vnc"
+edition = "2021"
+
+[dependencies]
+pal_async.workspace = true
+
+futures.workspace = true
+thiserror.workspace = true
+zerocopy.workspace = true
+socket2 = { workspace = true, features = [ "all" ] }
+
+[lints]
+workspace = true

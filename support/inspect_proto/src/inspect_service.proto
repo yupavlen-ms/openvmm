@@ -1,0 +1,31 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+syntax = "proto3";
+
+package inspect;
+
+// This import is a generated .proto file from Rust types.
+import "inspect.proto";
+
+service InspectService {
+    rpc Inspect(InspectRequest) returns (InspectResponse);
+    rpc Update(UpdateRequest) returns (UpdateResponse);
+}
+
+message InspectRequest {
+    string path = 1;
+    uint32 depth = 2;
+}
+
+message InspectResponse {
+    Node result = 1;
+}
+
+message UpdateRequest {
+    string path = 1;
+    string value = 2;
+}
+
+message UpdateResponse {
+    Value new_value = 1;
+}

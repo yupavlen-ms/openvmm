@@ -1,0 +1,18 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vnc_worker_defs"
+edition = "2021"
+
+[dependencies]
+framebuffer.workspace = true
+input_core.workspace = true
+
+mesh.workspace = true
+mesh_worker.workspace = true
+
+[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+vmsocket.workspace = true
+
+[lints]
+workspace = true

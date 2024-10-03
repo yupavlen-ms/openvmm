@@ -1,0 +1,20 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "serial_socket"
+edition = "2021"
+
+[dependencies]
+serial_core.workspace = true
+vm_resource.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+pal.workspace = true
+unix_socket = { workspace = true, features = ["mesh"] }
+pal_async.workspace = true
+futures.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

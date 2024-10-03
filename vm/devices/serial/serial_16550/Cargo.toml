@@ -1,0 +1,28 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "serial_16550"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+chipset_device_resources.workspace = true
+serial_core.workspace = true
+serial_16550_resources.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+inspect.workspace = true
+inspect_counters.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+
+async-trait.workspace = true
+bitfield-struct.workspace = true
+futures.workspace = true
+thiserror.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

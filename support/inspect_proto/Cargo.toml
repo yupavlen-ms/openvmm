@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "inspect_proto"
+edition = "2021"
+
+[dependencies]
+inspect = { workspace = true, features = ["initiate"] }
+mesh.workspace = true
+mesh_ttrpc.workspace = true
+
+prost.workspace = true
+
+[build-dependencies]
+inspect = { workspace = true, features = ["initiate"] }
+mesh_build.workspace = true
+mesh_protobuf.workspace = true
+
+prost-build.workspace = true
+
+[lints]
+workspace = true

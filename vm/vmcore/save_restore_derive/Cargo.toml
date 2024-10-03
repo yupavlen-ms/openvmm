@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "save_restore_derive"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+quote.workspace = true
+syn = { workspace = true, features = [ "extra-traits" ] }
+
+[lints]
+workspace = true

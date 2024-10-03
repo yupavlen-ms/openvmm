@@ -1,0 +1,11 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "petri_artifacts_common"
+edition = "2021"
+
+[dependencies]
+petri_artifacts_core.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "tee_call"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+sev_guest_device.workspace = true
+tdx_guest_device.workspace = true
+
+static_assertions.workspace = true
+thiserror.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

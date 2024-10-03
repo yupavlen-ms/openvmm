@@ -1,0 +1,160 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone='yes'?>
+<WindowsPerformanceRecorder Version="1.0" Author="EcoSystem Performance Platform" Team="EcoSystem Performance Platform" Company="Microsoft Corporation" Copyright="Microsoft Corporation">
+  <Profiles>
+    <!-- System Collectors -->
+    <SystemCollector Id="SystemCollector_WPROnOffInFile" Base="" Realtime="false">
+      <BufferSize Value="1024"/>
+      <Buffers Value="600"/>
+    </SystemCollector>
+
+    <!-- Event Collectors -->
+    <EventCollector Id="EventCollector_WPROnOffInFile" Base="" Name="WPR OnOff Event Collector" Private="false" ProcessPrivate="false" Secure="false" Realtime="false">
+      <BufferSize Value="1024"/>
+      <Buffers Value="20"/>
+    </EventCollector>
+
+    <!-- System Providers -->
+    <SystemProvider Id="SystemProvider_Base" Base="">
+      <Keywords>
+        <Keyword Value="CpuConfig"/>
+        <Keyword Value="Loader"/>
+        <Keyword Value="ProcessThread"/>
+      </Keywords>
+    </SystemProvider>
+
+    <SystemProvider Id="SystemProvider_OnOffLight" Base="SystemProvider_Base">
+      <Keywords Operation="Add">
+        <Keyword Value="CSwitch"/>
+        <Keyword Value="DiskIO"/>
+        <Keyword Value="HardFaults"/>
+        <Keyword Value="MemoryInfo"/>
+        <Keyword Value="MemoryInfoWS"/>
+        <Keyword Value="Power"/>
+        <Keyword Value="SampledProfile"/>
+        <Keyword Value="Interrupt"/>
+        <Keyword Value="DPC"/>
+        <Keyword Value="WDFDPC" />
+        <Keyword Value="WDFInterrupt" />
+      </Keywords>
+      <Stacks Operation="Add">
+        <Stack Value="CSwitch"/>
+        <Stack Value="ReadyThread"/>
+        <Stack Value="SampledProfile"/>
+        <Stack Value="ThreadDelete"/>
+      </Stacks>
+    </SystemProvider>
+
+    <!-- Event Providers -->
+    <EventProvider Id="EventProvider_PerfTrack" Name="PerfTrack" NonPagedMemory="true" Level="4" />
+
+    <EventProvider Id="EventProvider_PerfTrackStatus" Name="PerfTrackStatus" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_UTC" Name="UTC" NonPagedMemory="true" EventKey="true" Level="4"/>
+
+    <EventProvider Id="EventProvider_DWMWin32k" Base="" Name="e7ef96be-969f-414f-97d7-3ddb7b558ccc" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x2000"/>
+      </Keywords>
+    </EventProvider>
+
+    <EventProvider Id="EventProvider_KernelPnP" Name="Microsoft-Windows-Kernel-PnP" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x20"/>
+        <Keyword Value="0x1000"/>
+        <Keyword Value="0x2000"/>
+        <Keyword Value="0x4000"/>
+        <Keyword Value="0x8000"/>
+        <Keyword Value="0x10000"/>
+        <Keyword Value="0x20000"/>
+        <Keyword Value="0x40000"/>
+        <Keyword Value="0x80000"/>
+        <Keyword Value="0x100000"/>
+      </Keywords>
+    </EventProvider>
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Kernel-EventTracing" Name="b675ec37-bdb6-4648-bc92-f3fdc74d3ca2" Level="15" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x40"/>
+      </Keywords>
+    </EventProvider>
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Services" Name="Microsoft-Windows-Services" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Services-Svchost" Name="Microsoft-Windows-Services-Svchost" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Winlogon" Name="Microsoft-Windows-Winlogon" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-WindowsPhone-MobileUI" Name="Microsoft-WindowsPhone-MobileUI"/>
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Wininit" Name="Microsoft-Windows-Wininit" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Subsys-Csr" Name="Microsoft-Windows-Subsys-Csr" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Kernel-Power" Name="Microsoft-Windows-Kernel-Power" NonPagedMemory="true">
+      <Keywords>
+        <Keyword Value="0x0"/>
+      </Keywords>
+    </EventProvider> 
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Winsrv" Name="Microsoft-Windows-Winsrv" NonPagedMemory="true" />
+    <EventProvider Id="EventProvider_Microsoft-Windows-Kernel-General" Name="Microsoft-Windows-Kernel-General" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-Subsys-SMSS" Name="Microsoft-Windows-Subsys-SMSS" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-TaskScheduler" Name="Microsoft-Windows-TaskScheduler" NonPagedMemory="true" />
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-ProcessStateManager" Name="d49918cf-9489-4bf1-9d7b-014d864cf71f"/>
+
+    <EventProvider Id="EventProvider_Microsoft-Windows-BrokerInfrastructure" Name="e6835967-e0d2-41fb-bcec-58387404e25a">
+       <Keywords>
+         <Keyword Value="0x1"/>   
+       </Keywords>
+    </EventProvider>
+
+    <!-- Profiles -->
+    <Profile Id="ShutdownProfile.Light.File" Name="ShutdownProfile" Description="Shutdown" DetailLevel="Light" LoggingMode="File">
+      <Collectors Operation="Add">
+        <SystemCollectorId Value="SystemCollector_WPROnOffInFile">
+          <SystemProviderId Value="SystemProvider_OnOffLight" />
+        </SystemCollectorId>
+        <EventCollectorId Value="EventCollector_WPROnOffInFile">
+          <EventProviders Operation="Add">
+            <EventProviderId Value="EventProvider_DWMWin32k" />
+            <EventProviderId Value="EventProvider_KernelPnP" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Kernel-EventTracing" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Kernel-General" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Services" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Services-Svchost" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Subsys-SMSS" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-TaskScheduler" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Winlogon" />
+            <EventProviderId Value="EventProvider_PerfTrackStatus" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-ProcessStateManager" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-BrokerInfrastructure" />
+            <EventProviderId Value="EventProvider_Microsoft-WindowsPhone-MobileUI" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Kernel-Power" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Subsys-Csr" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Wininit" />
+            <EventProviderId Value="EventProvider_Microsoft-Windows-Winsrv" />
+            <EventProviderId Value="EventProvider_PerfTrack" />
+            <EventProviderId Value="EventProvider_UTC" />
+          </EventProviders>
+        </EventCollectorId>
+      </Collectors>
+    </Profile>
+
+  </Profiles>
+
+  <TraceMergeProperties>
+    <TraceMergeProperty Id="TraceMerge_Default" Name="TraceMerge_Default">
+      <DeletePreMergedTraceFiles Value="true"/>
+      <CustomEvents>
+        <CustomEvent Value="ImageId"/>
+        <CustomEvent Value="BuildInfo"/>
+        <CustomEvent Value="EventMetadata"/>
+        <CustomEvent Value="PerfTrackMetadata"/>
+      </CustomEvents>
+    </TraceMergeProperty>
+  </TraceMergeProperties>
+
+</WindowsPerformanceRecorder>

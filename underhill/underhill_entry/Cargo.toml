@@ -1,0 +1,29 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_entry"
+edition = "2021"
+
+[features]
+# Enable gdbstub support.
+gdb = ["underhill_core/gdb"]
+
+# Enable profiler support.
+profiler = ["underhill_core/profiler"]
+
+# Enable vpci support.
+vpci = ["underhill_core/vpci"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+underhill_core.workspace = true
+underhill_init.workspace = true
+underhill_crash.workspace = true
+underhill_dump.workspace = true
+
+openssl_crypto_only.workspace = true
+
+anyhow.workspace = true
+mimalloc.workspace = true
+
+[lints]
+workspace = true

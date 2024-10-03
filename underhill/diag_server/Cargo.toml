@@ -1,0 +1,42 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "diag_server"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+diag_proto.workspace = true
+
+azure_profiler_proto.workspace = true
+inspect_proto.workspace = true
+inspect = { workspace = true, features = ["defer"] }
+mesh = { workspace = true, features = ["socket2"] }
+mesh_ttrpc.workspace = true
+pal.workspace = true
+unix_socket.workspace = true
+pal_async.workspace = true
+vmsocket.workspace = true
+
+underhill_confidentiality = { workspace = true, features = ["std"] }
+
+anyhow.workspace = true
+fs-err.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+libc.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+net_packet_capture.workspace = true
+profiler_worker = { workspace = true, optional = true }
+socket2.workspace = true
+safe_x86_intrinsics.workspace = true
+hvdef = { workspace = true, features = ["std"] }
+
+[features]
+profiler = ["dep:profiler_worker"]
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,634 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[workspace]
+resolver = "2"
+default-members = ["hvlite/openvmm"]
+members = [
+  # openvmm
+  "hvlite/openvmm",
+  # repo tooling
+  "flowey/flowey_hvlite",
+  "xtask",
+  # underhill
+  "underhill/ohcldiag-dev",
+  "underhill/openhcl_boot",
+  "underhill/openvmm_hcl",
+  "underhill/sidecar",
+  "underhill/vmfirmwareigvm_dll",
+  # VMM tests
+  "vmm_tests/vmm_tests",
+  # hyper-v
+  # fuzzing
+  "support/inspect/fuzz",
+  "support/mesh/mesh_ttrpc/fuzz",
+  "support/sparse_mmap/fuzz",
+  "support/ucs2/fuzz",
+  "vm/devices/chipset/fuzz",
+  "vm/devices/firmware/firmware_uefi/fuzz",
+  "vm/devices/storage/ide/fuzz",
+  "vm/devices/storage/scsi_buffers/fuzz",
+  "vm/vmcore/guestmem/fuzz",
+  "vm/x86/x86emu/fuzz",
+  # in-guest test bins
+  "guest_test_uefi",
+  "petri/pipette",
+  # tools
+  "petri/make_imc_hive",
+  "vm/loader/igvmfilegen",
+  "vm/vmgs/vmgs_lib",
+  "vm/vmgs/vmgstool",
+]
+exclude = [
+  "xsync"
+]
+
+[workspace.dependencies]
+xtask_fuzz = { path = "xtask/xtask_fuzz" }
+
+flowey = { path = "flowey/flowey" }
+flowey_cli = { path = "flowey/flowey_cli" }
+flowey_core = { path = "flowey/flowey_core" }
+flowey_lib_common = { path = "flowey/flowey_lib_common" }
+flowey_lib_hvlite = { path = "flowey/flowey_lib_hvlite" }
+schema_ado_yaml = { path = "flowey/schema_ado_yaml" }
+
+hvlite_core = { path = "hvlite/hvlite_core" }
+hvlite_defs = { path = "hvlite/hvlite_defs" }
+hvlite_entry = { path = "hvlite/hvlite_entry" }
+hvlite_helpers = { path = "hvlite/hvlite_helpers" }
+hvlite_pcat_locator = { path = "hvlite/hvlite_pcat_locator" }
+openvmm_resources = { path = "hvlite/openvmm_resources" }
+hvlite_ttrpc_vmservice = { path = "hvlite/hvlite_ttrpc_vmservice" }
+membacking = { path = "hvlite/membacking" }
+
+petri_artifact_resolver_openvmm_known_paths = { path = "vmm_tests/petri_artifact_resolver_openvmm_known_paths" }
+petri_artifacts_vmm_test = { path = "vmm_tests/petri_artifacts_vmm_test" }
+vmm_test_images = { path = "vmm_tests/vmm_test_images" }
+vmm_test_macros = { path = "vmm_tests/vmm_test_macros" }
+vmm_test_petri_support = { path = "vmm_tests/vmm_test_petri_support" }
+
+petri = { path = "petri" }
+petri_artifacts_common = { path = "petri/petri_artifacts_common" }
+petri_artifacts_core = { path = "petri/petri_artifacts_core" }
+
+pipette_client = { path = "petri/pipette_client" }
+pipette_protocol = { path = "petri/pipette_protocol" }
+
+# support crates
+arc_cyclic_builder = { path = "support/arc_cyclic_builder" }
+cache_topology = { path = "support/cache_topology" }
+closeable_mutex = { path = "support/closeable_mutex" }
+ci_logger = { path = "support/ci_logger" }
+clap_dyn_complete = { path = "support/clap_dyn_complete" }
+safe_x86_intrinsics = { path = "support/safe_x86_intrinsics" }
+debug_ptr = { path = "support/debug_ptr" }
+fast_select = { path = "support/fast_select" }
+fdt = { path = "support/fdt" }
+guid = { path = "support/guid" }
+inspect = { path = "support/inspect", default-features = false, features = ["derive"] }
+inspect_counters = { path = "support/inspect_counters" }
+inspect_derive = { path = "support/inspect_derive" }
+inspect_proto = { path = "support/inspect_proto" }
+inspect_rlimit = { path = "support/inspect_rlimit" }
+inspect_task = { path = "support/inspect_task" }
+kmsg = { path = "support/kmsg" }
+local_clock = { path = "support/local_clock" }
+mesh = { path = "support/mesh" }
+mesh_build = { path = "support/mesh/mesh_build" }
+mesh_channel = { path = "support/mesh/mesh_channel" }
+mesh_derive = { path = "support/mesh/mesh_derive" }
+mesh_node = { path = "support/mesh/mesh_node" }
+mesh_process = { path = "support/mesh/mesh_process" }
+mesh_protobuf = { path = "support/mesh/mesh_protobuf" }
+mesh_remote = { path = "support/mesh/mesh_remote" }
+mesh_ttrpc = { path = "support/mesh/mesh_ttrpc" }
+mesh_worker = { path = "support/mesh/mesh_worker" }
+mesh_tracing = { path = "support/mesh_tracing" }
+open_enum = { path = "support/open_enum" }
+openssl_kdf = { path = "support/openssl_kdf" }
+openssl_crypto_only = { path = "support/openssl_crypto_only" }
+oversized_box = { path = "support/oversized_box" }
+pal = { path = "support/pal" }
+pal_async = { path = "support/pal/pal_async" }
+pal_async_test = { path = "support/pal/pal_async_test" }
+pal_event = { path = "support/pal/pal_event" }
+pal_uring = { path = "support/pal/pal_uring" }
+safeatomic = { path = "support/safeatomic" }
+serde_helpers = { path = "support/serde_helpers" }
+sev_guest_device = { path = "support/sev_guest_device" }
+sparse_mmap = { path = "support/sparse_mmap" }
+task_control = { path = "support/task_control" }
+tdx_guest_device = { path = "support/tdx_guest_device" }
+tee_call = { path = "support/tee_call" }
+tempfile_helpers = { path = "support/tempfile_helpers" }
+term = { path = "support/term" }
+test_with_tracing = { path = "support/test_with_tracing" }
+test_with_tracing_macro = { path = "support/test_with_tracing/test_with_tracing_macro" }
+tracelimit = { path = "support/tracelimit" }
+tracing_helpers = { path = "support/tracing_helpers" }
+ucs2 = { path = "support/ucs2" }
+uevent = { path = "support/uevent" }
+unix_socket = { path = "support/unix_socket" }
+vmsocket = { path = "support/vmsocket" }
+win_import_lib = { path = "support/win_import_lib" }
+win1_support = { path = "support/win1_support" }
+zerocopy_helpers = { path = "support/zerocopy_helpers" }
+
+azure_profiler_proto = { path = "underhill/azure_profiler_proto" }
+bootloader_fdt_parser = { path = "underhill/bootloader_fdt_parser" }
+build_info = { path = "underhill/build_info" }
+diag_client = { path = "underhill/diag_client" }
+diag_proto = { path = "underhill/diag_proto" }
+diag_server = { path = "underhill/diag_server" }
+hcl = { path = "underhill/hcl" }
+host_fdt_parser = { path = "underhill/host_fdt_parser" }
+kmsg_defs = { path = "underhill/kmsg_defs" }
+minimal_rt = { path = "underhill/minimal_rt" }
+minimal_rt_build = { path = "underhill/minimal_rt_build" }
+sidecar_client = { path = "underhill/sidecar_client" }
+sidecar_defs = { path = "underhill/sidecar_defs" }
+shared_pool_alloc = { path = "underhill/shared_pool_alloc" }
+underhill_attestation = { path = "underhill/underhill_attestation" }
+underhill_confidentiality = { path = "underhill/underhill_confidentiality" }
+underhill_core = { path = "underhill/underhill_core" }
+underhill_crash = { path = "underhill/underhill_crash" }
+underhill_dump = { path = "underhill/underhill_dump" }
+underhill_entry = { path = "underhill/underhill_entry" }
+underhill_init = { path = "underhill/underhill_init" }
+underhill_mem = { path = "underhill/underhill_mem" }
+openvmm_hcl_resources = { path = "underhill/openvmm_hcl_resources" }
+underhill_threadpool = { path = "underhill/underhill_threadpool" }
+virt_underhill = { path = "underhill/virt_underhill" }
+
+aarch64defs = { path = "vm/aarch64/aarch64defs" }
+aarch64emu = { path = "vm/aarch64/aarch64emu" }
+acpi = { path = "vm/acpi" }
+acpi_spec = { path = "vm/acpi_spec" }
+chipset_arc_mutex_device = { path = "vm/chipset_arc_mutex_device" }
+chipset_device = { path = "vm/chipset_device" }
+chipset_device_fuzz = { path = "vm/chipset_device_fuzz" }
+chipset_device_resources = { path = "vm/chipset_device_resources" }
+cvm_tracing = { path = "vm/cvm_tracing" }
+chipset = { path = "vm/devices/chipset" }
+chipset_legacy = { path = "vm/devices/chipset_legacy" }
+chipset_resources = { path = "vm/devices/chipset_resources" }
+firmware_pcat = { path = "vm/devices/firmware/firmware_pcat" }
+firmware_uefi = { path = "vm/devices/firmware/firmware_uefi" }
+firmware_uefi_custom_vars = { path = "vm/devices/firmware/firmware_uefi_custom_vars" }
+uefi_nvram_storage = { path = "vm/devices/firmware/uefi_nvram_storage" }
+uefi_specs = { path = "vm/devices/firmware/uefi_specs" }
+uefi_nvram_specvars = { path = "vm/devices/firmware/uefi_nvram_specvars" }
+hyperv_secure_boot_templates = { path = "vm/devices/firmware/hyperv_secure_boot_templates" }
+hyperv_uefi_custom_vars_json = { path = "vm/devices/firmware/hyperv_uefi_custom_vars_json" }
+framebuffer = { path = "vm/devices/framebuffer" }
+hcl_compat_uefi_nvram_storage = { path = "vm/devices/firmware/hcl_compat_uefi_nvram_storage" }
+generation_id = { path = "vm/devices/firmware/generation_id" }
+get_helpers = { path = "vm/devices/get/get_helpers" }
+get_protocol = { path = "vm/devices/get/get_protocol" }
+get_resources = { path = "vm/devices/get/get_resources" }
+guest_crash_device = { path = "vm/devices/get/guest_crash_device" }
+guest_emulation_device = { path = "vm/devices/get/guest_emulation_device" }
+guest_emulation_log = { path = "vm/devices/get/guest_emulation_log" }
+guest_emulation_transport = { path = "vm/devices/get/guest_emulation_transport" }
+vtl2_settings_proto = { path = "vm/devices/get/vtl2_settings_proto" }
+guest_watchdog = { path = "vm/devices/watchdog/guest_watchdog" }
+hyperv_ic = { path = "vm/devices/hyperv_ic" }
+hyperv_ic_protocol = { path = "vm/devices/hyperv_ic_protocol" }
+hyperv_ic_resources = { path = "vm/devices/hyperv_ic_resources" }
+hyperv_ic_guest = { path = "vm/devices/hyperv_ic_guest" }
+input_core = { path = "vm/devices/input_core" }
+underhill_config = { path = "vm/devices/get/underhill_config" }
+missing_dev = { path = "vm/devices/missing_dev" }
+missing_dev_resources = { path = "vm/devices/missing_dev_resources" }
+gdma = { path = "vm/devices/net/gdma" }
+gdma_defs = { path = "vm/devices/net/gdma_defs" }
+gdma_resources = { path = "vm/devices/net/gdma_resources" }
+linux_net_bindings = { path = "vm/devices/net/linux_net_bindings" }
+mana_driver = { path = "vm/devices/net/mana_driver" }
+vfio_sys = { path = "vm/devices/user_driver/vfio_sys" }
+net_backend = { path = "vm/devices/net/net_backend" }
+net_backend_resources = { path = "vm/devices/net/net_backend_resources" }
+net_consomme = { path = "vm/devices/net/net_consomme" }
+consomme = { path = "vm/devices/net/net_consomme/consomme" }
+net_dio = { path = "vm/devices/net/net_dio" }
+net_mana = { path = "vm/devices/net/net_mana" }
+net_tap = { path = "vm/devices/net/net_tap" }
+net_packet_capture = { path = "vm/devices/net/net_packet_capture" }
+netvsp = { path = "vm/devices/net/netvsp" }
+netvsp_resources = { path = "vm/devices/net/netvsp_resources" }
+nvme = { path = "vm/devices/storage/nvme" }
+nvme_common = { path = "vm/devices/storage/nvme_common" }
+nvme_driver = { path = "vm/devices/storage/disk_nvme/nvme_driver" }
+nvme_resources = { path = "vm/devices/storage/nvme_resources" }
+nvme_spec = { path = "vm/devices/storage/nvme_spec" }
+storage_string = { path = "vm/devices/storage/storage_string" }
+vmswitch = { path = "vm/devices/net/vmswitch" }
+pci_bus = { path = "vm/devices/pci/pci_bus" }
+pci_core = { path = "vm/devices/pci/pci_core" }
+pci_resources = { path = "vm/devices/pci/pci_resources" }
+vpci = { path = "vm/devices/pci/vpci" }
+disk_backend = { path = "vm/devices/storage/disk_backend" }
+disk_backend_resources = { path = "vm/devices/storage/disk_backend_resources" }
+disk_blob = { path = "vm/devices/storage/disk_blob" }
+disk_blockdevice = { path = "vm/devices/storage/disk_blockdevice" }
+disk_file = { path = "vm/devices/storage/disk_file" }
+disk_nvme = { path = "vm/devices/storage/disk_nvme" }
+disk_ramdisk = { path = "vm/devices/storage/disk_ramdisk" }
+disk_striped = { path = "vm/devices/storage/disk_striped" }
+disk_vhd1 = { path = "vm/devices/storage/disk_vhd1" }
+disk_vhdmp = { path = "vm/devices/storage/disk_vhdmp" }
+disk_prwrap = { path = "vm/devices/storage/disk_prwrap" }
+ide = { path = "vm/devices/storage/ide" }
+ide_resources = { path = "vm/devices/storage/ide_resources" }
+floppy = { path = "vm/devices/storage/floppy" }
+floppy_resources = { path = "vm/devices/storage/floppy_resources" }
+floppy_pcat_stub = { path = "vm/devices/storage/floppy_pcat_stub" }
+scsi_buffers = { path = "vm/devices/storage/scsi_buffers" }
+scsi_core = { path = "vm/devices/storage/scsi_core" }
+scsi_defs = { path = "vm/devices/storage/scsi_defs" }
+scsidisk = { path = "vm/devices/storage/scsidisk" }
+scsidisk_resources = { path = "vm/devices/storage/scsidisk_resources" }
+storvsp = { path = "vm/devices/storage/storvsp" }
+storvsp_resources = { path = "vm/devices/storage/storvsp_resources" }
+device_emulators = { path = "vm/devices/support/device_emulators" }
+fuse = { path = "vm/devices/support/fs/fuse" }
+lx = { path = "vm/devices/support/fs/lx" }
+lxutil = { path = "vm/devices/support/fs/lxutil" }
+plan9 = { path = "vm/devices/support/fs/plan9" }
+power_resources = { path = "vm/power_resources" }
+serial_16550 = { path = "vm/devices/serial/serial_16550" }
+serial_16550_resources = { path = "vm/devices/serial/serial_16550_resources" }
+serial_core = { path = "vm/devices/serial/serial_core" }
+serial_pl011 = { path = "vm/devices/serial/serial_pl011" }
+serial_pl011_resources = { path = "vm/devices/serial/serial_pl011_resources" }
+serial_socket = { path = "vm/devices/serial/serial_socket" }
+tpm = { path = "vm/devices/tpm" }
+tpm_resources = { path = "vm/devices/tpm_resources" }
+mcr_resources = { path = "vm/devices/mcr_resources" } # TODO MCR: move to closed-source
+uidevices = { path = "vm/devices/uidevices" }
+uidevices_resources = { path = "vm/devices/uidevices_resources" }
+user_driver = { path = "vm/devices/user_driver" }
+video_core = { path = "vm/devices/video_core" }
+vga = { path = "vm/devices/vga" }
+vga_proxy = { path = "vm/devices/vga_proxy" }
+virtio = { path = "vm/devices/virtio/virtio" }
+virtio_p9 = { path = "vm/devices/virtio/virtio_p9" }
+virtio_net = { path = "vm/devices/virtio/virtio_net" }
+virtio_pmem = { path = "vm/devices/virtio/virtio_pmem" }
+virtio_resources = { path = "vm/devices/virtio/virtio_resources" }
+virtio_serial = { path = "vm/devices/virtio/virtio_serial" }
+virtiofs = { path = "vm/devices/virtio/virtiofs" }
+vmbfs = { path = "vm/devices/vmbus/vmbfs" }
+vmbfs_resources = { path = "vm/devices/vmbus/vmbfs_resources" }
+vmbus_async = { path = "vm/devices/vmbus/vmbus_async" }
+vmbus_channel = { path = "vm/devices/vmbus/vmbus_channel" }
+vmbus_client = { path = "vm/devices/vmbus/vmbus_client" }
+vmbus_core = { path = "vm/devices/vmbus/vmbus_core" }
+vmbus_proxy = { path = "vm/devices/vmbus/vmbus_proxy" }
+vmbus_relay = { path = "vm/devices/vmbus/vmbus_relay" }
+vmbus_relay_intercept_device = { path = "vm/devices/vmbus/vmbus_relay_intercept_device" }
+vmbus_ring = { path = "vm/devices/vmbus/vmbus_ring" }
+vmbus_serial_guest = { path = "vm/devices/serial/vmbus_serial_guest" }
+vmbus_serial_host = { path = "vm/devices/serial/vmbus_serial_host" }
+vmbus_serial_protocol = { path = "vm/devices/serial/vmbus_serial_protocol" }
+vmbus_serial_resources = { path = "vm/devices/serial/vmbus_serial_resources" }
+vmbus_server = { path = "vm/devices/vmbus/vmbus_server" }
+vmbus_user_channel = { path = "vm/devices/vmbus/vmbus_user_channel" }
+hv1_emulator = { path = "vm/hv1/hv1_emulator" }
+hv1_hypercall = { path = "vm/hv1/hv1_hypercall" }
+hvdef = { path = "vm/hv1/hvdef" }
+vtl_array = { path = "vm/hv1/vtl_array" }
+vhd1_defs = { path = "vm/vhd1_defs" }
+kvm = { path = "vm/kvm" }
+loader = { path = "vm/loader" }
+igvmfilegen_config = { path = "vm/loader/igvmfilegen_config" }
+loader_defs = { path = "vm/loader/loader_defs" }
+page_table = { path = "vm/loader/page_table" }
+vbs_defs = { path = "vm/vbs_defs" }
+vmgs = { path = "vm/vmgs/vmgs" }
+vmgs_broker = { path = "vm/vmgs/vmgs_broker" }
+vmgs_format = { path = "vm/vmgs/vmgs_format" }
+vmgs_resources = { path = "vm/vmgs/vmgs_resources" }
+watchdog_core = { path = "vm/devices/watchdog/watchdog_core" }
+watchdog_vmgs_format = { path = "vm/devices/watchdog/watchdog_vmgs_format" }
+whp = { path = "vm/whp" }
+tdcall = { path = "vm/x86/tdcall" }
+x86defs = { path = "vm/x86/x86defs" }
+x86emu = { path = "vm/x86/x86emu" }
+
+# vmcore
+build_rs_guest_arch = { path = "vm/vmcore/build_rs_guest_arch" }
+guestmem = { path = "vm/vmcore/guestmem" }
+memory_range = { path = "vm/vmcore/memory_range" }
+save_restore_derive = { path = "vm/vmcore/save_restore_derive" }
+vm_resource = { path = "vm/vmcore/vm_resource" }
+vm_topology = { path = "vm/vmcore/vm_topology" }
+vmcore = { path = "vm/vmcore" }
+
+# vmm_core
+state_unit = { path = "vmm_core/state_unit" }
+virt = { path = "vmm_core/virt" }
+virt_kvm = { path = "vmm_core/virt_kvm" }
+virt_hvf = { path = "vmm_core/virt_hvf" }
+virt_mshv = { path = "vmm_core/virt_mshv" }
+virt_support_aarch64emu = { path = "vmm_core/virt_support_aarch64emu" }
+virt_support_apic = { path = "vmm_core/virt_support_apic" }
+virt_support_gic = { path = "vmm_core/virt_support_gic" }
+virt_support_x86emu = { path = "vmm_core/virt_support_x86emu" }
+virt_whp = { path = "vmm_core/virt_whp" }
+vm_manifest_builder = { path = "vmm_core/vm_manifest_builder" }
+vm_loader = { path = "vmm_core/vm_loader" }
+vmm_core = { path = "vmm_core" }
+vmm_core_defs = { path = "vmm_core/vmm_core_defs" }
+vmotherboard = { path = "vmm_core/vmotherboard" }
+
+# workers
+debug_worker = { path = "workers/debug_worker" }
+debug_worker_defs = { path = "workers/debug_worker_defs" }
+vnc_worker = { path = "workers/vnc_worker" }
+vnc_worker_defs = { path = "workers/vnc_worker_defs" }
+vnc = { path = "workers/vnc_worker/vnc" }
+profiler_worker = { path = "underhill/profiler_worker" }
+
+# crates.io
+anyhow = "1.0"
+arbitrary = "1.3"
+arrayvec = { version = "0.7", default-features = false }
+async-channel = "2.3"
+async-task = "4.4"
+async-trait = "0.1"
+awaitgroup = "0.7"
+base64 = "0.21.7"
+base64-serde = "0.7"
+bitfield-struct = "0.7"
+bitflags = "1.3"
+bitvec = { version = "1.1", default-features = false }
+blocking = "1.2"
+caps = "0.5"
+cargo_toml = "0.18"
+cc = "1.0"
+cfg-if = "1"
+clap = "4.2"
+crc32fast = { version = "1.3.2", default-features = false }
+criterion = { version = "0.5", default-features = false }
+crossterm = "0.27"
+ctrlc = "3.4.0"
+der = "0.7"
+diff = "0.1"
+dirs = "5.0"
+elfcore = "1.1.5"
+embed-resource = "2.4.2"
+env_logger = "0.10"
+event-listener = "5.3"
+fatfs = { version = "0.3.6", default-features = false }
+filepath = "0.1"
+fs-err = "2.9"
+fscommon = "0.1.1"
+futures = "0.3"
+futures-concurrency = "7.2.1"
+futures-executor = "0.3"
+futures-core = "0.3"
+futures-channel = "0.3"
+futures-io = "0.3"
+gdbstub = "0.6"
+getrandom = "0.2"
+glob = "0.3"
+gptman = "1.0"
+grep-regex = "0.1"
+grep-searcher = "0.1"
+heck = "0.4"
+hex = "0.4"
+http = "1"
+http-body-util = "0.1"
+hyper = "1.4"
+hyper-tls = "0.6"
+hyper-util = "0.1"
+home = "0.5.9"
+# iced has negative features, which aren't how features are supposed to work, but disable them here along with default features.
+iced-x86 = { version = "1.17", default-features = false, features = [
+  "no_vex",
+  "no_evex",
+  "no_xop",
+  "no_d3now",
+] }
+ignore = "0.4"
+igvm = "0.3.3"
+igvm_defs = { version = "0.3.3", default-features = false, features = [
+  "unstable",
+] }
+image = { version = "0.24", default-features = false }
+io-uring = "0.6"
+kvm-bindings = "0.7"
+# Use of these specific REPO will go away when changes are taken upstream.
+landlock = "0.3.1"
+libc = "0.2"
+libfuzzer-sys = "0.4"
+linkme = "0.3.9"
+log = "0.4"
+macaddr = "1.0"
+mbrman = "0.5"
+mimalloc = { version = "0.1.39", default-features = false }
+ms-tpm-20-ref = { version = "0.1", git = "https://github.com/microsoft/ms-tpm-20-ref-rs.git", branch = "main" }
+mshv-bindings = { git = "https://github.com/rust-vmm/mshv", branch = "main" }
+mshv-ioctls = { git = "https://github.com/rust-vmm/mshv", branch = "main" }
+nix = { version = "0.26", default-features = false }
+ntapi = "0.4"
+object = { version = "0.32", default-features = false }
+once_cell = "1.7"
+openssl = "0.10.66"
+openssl-sys = "0.9"
+parking_lot = "0.12"
+paste = "1.0"
+pbjson = "0.5"
+pbjson-build = "0.5"
+pbjson-types = "0.5"
+pcap-file = "2.0.0"
+petgraph = "0.6.4"
+proc-macro2 = "1.0"
+prost = "0.11"
+prost-build = "0.11"
+prost-types = "0.11"
+quote = "1.0"
+range_map_vec = "0.2.0"
+rayon = "1.5"
+resolv-conf = "0.7"
+rlimit = "0.10.1"
+rustyline = "13"
+rustc-hash = "1.1"
+seccompiler = "0.4"
+serde = "1.0.185"
+serde_json = "1.0"
+serde_yaml = "0.9"
+sha2 = { version = "0.10.8", default-features = false }
+shell-words = "1.1"
+signal-hook = { version = "0.3", default-features = false }
+slab = "0.4"
+smallbox = "0.8"
+smallvec = "1.8"
+smoltcp = { version = "0.8", default-features = false }
+socket2 = "0.5"
+stackfuture = "0.3"
+static_assertions = "1.1"
+syn = "2"
+target-lexicon = "0.12.13"
+tempfile = "3.2"
+thiserror = "1.0"
+time = "0.3"
+toml_edit = "0.21"
+tracing = "0.1"
+tracing-subscriber = "0.3.16"
+typed-path = "0.7"
+uefi = "0.32"
+unicycle = "0.9"
+vergen = "8.2"
+vfio-bindings = "0.3.1"
+vmm-sys-util = "*"
+walkdir = "2.3"
+wchar = "0.11"
+which = "6"
+widestring = "1.0"
+win_etw_tracing = "0.1"
+winapi = "0.3"
+windows = "0.56"
+windows-service = "0.7"
+windows-sys = "0.52"
+xshell = "=0.2.2" # pin to 0.2.2 to work around https://github.com/matklad/xshell/issues/63
+xshell-macros = "0.2"
+# We add the derive feature here since the vast majority of our crates use it.
+zerocopy = { version = "0.7.32", features = ["derive"] }
+
+[profile.release]
+panic = 'abort'
+debug = true
+lto = 'thin'
+
+[profile.underhill-ship]
+inherits = 'release'
+codegen-units = 1
+lto = 'fat'
+
+[profile.dev]
+panic = 'abort'
+
+[profile.xtask]
+inherits = 'dev'
+# xtask is CPU bound in places, so enable light optimizations
+opt-level = 1
+
+[profile.flowey-ci]
+inherits = 'dev'
+# flowey-ci is published+downloaded during CI; avoid debug symbols to minimize
+# upload/download times.
+debug = false
+
+[profile.bench]
+debug = true
+
+[profile.boot-dev]
+inherits = 'dev'
+panic = 'abort'
+# Even though this is a dev profile we need some opts to remove references to
+# unimplemented symbols.
+opt-level = 1
+lto = 'thin'
+
+[profile.boot-release]
+inherits = 'release'
+panic = 'abort'
+codegen-units = 1
+opt-level = 'z'
+lto = 'fat'
+
+[patch.crates-io]
+# Pending <https://github.com/ferrilab/bitvec/pull/273>
+bitvec = { git = "https://github.com/smalis-msft/bitvec", branch = "set-aliased-previous-val" }
+# Pending <https://github.com/influxdata/pbjson/pull/94>
+pbjson-build = { git = "https://github.com/jstarks/pbjson", branch = "aliases" }
+
+[workspace.lints.rust]
+# Lint groups need a priority lower than individual lints so they get applied first.
+future_incompatible = { level = "deny", priority = -1 }
+nonstandard_style = { level = "deny", priority = -1 }
+rust_2018_idioms = { level = "deny", priority = -1 }
+
+unused_qualifications = "warn"
+
+# Code that needs unsafe should opt-in via a module-scoped allow.
+unsafe_code = "deny"
+unsafe_op_in_unsafe_fn = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+debug_assert_with_mut_call = "warn"
+filter_map_next = "warn"
+fn_params_excessive_bools = "warn"
+imprecise_flops = "warn"
+inefficient_to_string = "warn"
+linkedlist = "warn"
+lossy_float_literal = "warn"
+macro_use_imports = "warn"
+match_on_vec_items = "warn"
+needless_continue = "warn"
+option_option = "warn"
+ptr_as_ptr = "warn"
+ptr_cast_constness = "warn"
+ref_as_ptr = "warn"
+ref_option_ref = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+string_to_string = "warn"
+suboptimal_flops = "warn"
+undocumented_unsafe_blocks = "warn"
+unnecessary_box_returns = "warn"
+
+# Possible future additions:
+#
+# useful, but _very_ tedious to fix
+#   doc_markdown = "warn"
+# will be useful to weed-out stubbed codepaths in production
+#   todo = "warn"
+#   unimplemented = "warn"
+# useful, but will require a follow-up PR to enable
+#   map_err_ignore = "warn"
+# useful, but requires a follow-up PR to enable
+#   unused_self = "warn"
+
+# Nested if / else if statements can be easier to read than an equivalent
+# flattened statements.
+collapsible_else_if = "allow"
+collapsible_if = "allow"
+# There are types where it makes sense to define the length, but it can never
+# be empty. This lint is reasonable for container-like data-structures, but
+# makes less sense for hardware-backed data structures.
+len_without_is_empty = "allow"
+# While it's generally a good idea to derive / implement `Default` when
+# appropriate, there are many types in the HvLite codebase where a type has a
+# `new()` method, but no sensible "Default".
+new_without_default = "allow"
+# This is the #1 most commonly ignored lint for a reason (at least according
+# to [this famous issue](https://github.com/rust-lang/rust-clippy/issues/5418)
+# on the clippy GitHub repo)! There are plenty of perfectly reasonable
+# functions that require a large number of non-optional arguments,
+# particularly when working with low-level hardware APIs.
+too_many_arguments = "allow"
+# This is a heuristic based lint that isn't always appropriate. While it's
+# often a good to decompose complex types into more digestible chunks, there
+# are many cases where a one-off complex type is required, and suppressing
+# this lint will simply add line-noise.
+type_complexity = "allow"
+# This lint attempts to simplify usages of if let usage in a loop where only
+# one variant type is used. While somewhat useful, its suggestions can lead to
+# throwing away potentially useful error information in non-obvious ways.
+manual_flatten = "allow"
+# This lint warns about comparing boolean values in an `assert_eq!` statement when `assert!`
+# could be used instead. While shorter, the explicit comparison can be more obvious to read
+# in certain cases than unary operators with `assert!`.
+bool_assert_comparison = "allow"
+# This lint suggests collapsing Box::new(Foo::default()) into Box::default(). We often
+# prefer to specify types completely for local code clarity's sake.
+box_default = "allow"
+# Needed for bitflags 1.x compatibility. Remove when we update to bitflags 2.x
+bad_bit_mask = "allow"
+# Besides the misleading name (this lint also triggers on arrays), we believe that it
+# doesn't provide value. If a developer gets their type wrong they'll notice and fix it.
+# Sometimes you do want a list of a single range.
+single_range_in_vec_init = "allow"

@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "acpi_spec"
+edition = "2021"
+
+[features]
+default = []
+
+alloc = []
+std = ["alloc", "dep:thiserror"]
+
+[dependencies]
+open_enum.workspace = true
+
+bitfield-struct.workspace = true
+static_assertions.workspace = true
+thiserror = { optional = true, workspace = true }
+zerocopy.workspace = true
+
+[lints]
+workspace = true

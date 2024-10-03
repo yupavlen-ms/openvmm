@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "net_tap"
+edition = "2021"
+
+[target.'cfg(unix)'.dependencies]
+net_backend.workspace = true
+net_backend_resources.workspace = true
+linux_net_bindings.workspace = true
+
+vm_resource.workspace = true
+
+inspect.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+libc.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

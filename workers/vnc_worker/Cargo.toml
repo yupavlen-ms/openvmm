@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vnc_worker"
+edition = "2021"
+
+[dependencies]
+vnc.workspace = true
+vnc_worker_defs.workspace = true
+
+framebuffer.workspace = true
+input_core.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+mesh_worker.workspace = true
+pal_async.workspace = true
+tracing_helpers.workspace = true
+vmsocket.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

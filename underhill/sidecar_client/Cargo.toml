@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "sidecar_client"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+hvdef = { workspace = true, features = ["std"] }
+sidecar_defs.workspace = true
+
+pal_async.workspace = true
+
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+fs-err.workspace = true
+libc.workspace = true
+nix = { workspace = true, features = ["ioctl"] }
+
+[lints]
+workspace = true

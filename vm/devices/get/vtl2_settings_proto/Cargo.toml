@@ -1,0 +1,18 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vtl2_settings_proto"
+edition = "2021"
+
+[dependencies]
+pbjson.workspace = true
+pbjson-types.workspace = true
+prost.workspace = true
+serde.workspace = true
+
+[build-dependencies]
+prost-build.workspace = true
+pbjson-build.workspace = true
+
+[lints]
+workspace = true

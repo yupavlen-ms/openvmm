@@ -1,0 +1,18 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "hvdef"
+edition = "2021"
+
+[features]
+default = []
+std = []
+
+[dependencies]
+open_enum.workspace = true
+bitfield-struct.workspace = true
+static_assertions.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

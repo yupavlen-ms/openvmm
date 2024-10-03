@@ -1,0 +1,16 @@
+{
+    "guest_arch": "aarch64",
+    "guest_configs": [
+        {
+            "guest_svn": 1,
+            "max_vtl": 0,
+            "isolation_type": "none",
+            "vtl0": {
+                "uefi": {
+                   "config_type": "none"
+                }
+            },
+            "vtl2": "none"
+        }
+    ]
+}

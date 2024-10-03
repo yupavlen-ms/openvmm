@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pci_resources"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+chipset_device_resources.workspace = true
+pci_core.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+[lints]
+workspace = true

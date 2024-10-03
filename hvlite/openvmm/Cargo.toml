@@ -1,0 +1,47 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "openvmm"
+edition = "2021"
+
+[features]
+default = [
+  "gdb",
+  "virt_hvf",
+  "virt_kvm",
+  "virt_mshv",
+  "virt_whp",
+  "net_consomme",
+  "net_tap",
+  "disk_blob",
+]
+
+# see the `hvlite_entry` crate for more info on these features
+encryption = ["hvlite_entry/encryption"]
+gdb = ["openvmm_resources/gdb"]
+openssl-vendored = ["hvlite_entry/openssl-vendored"]
+tpm = ["openvmm_resources/tpm"]
+virt_hvf = ["openvmm_resources/virt_hvf"]
+virt_kvm = ["openvmm_resources/virt_kvm"]
+virt_mshv = ["openvmm_resources/virt_mshv"]
+virt_whp = ["openvmm_resources/virt_whp"]
+
+net_consomme = ["openvmm_resources/net_consomme"]
+net_tap = ["openvmm_resources/net_tap"]
+
+disk_blob = ["openvmm_resources/disk_blob"]
+
+# build openvmm to support the latest insider build of windows on arm
+# rather than latest release build
+# TODO: remove once whp on arm is stabilized
+unstable_whp = ["hvlite_entry/unstable_whp", "openvmm_resources/unstable_whp"]
+
+[dependencies]
+hvlite_entry.workspace = true
+openvmm_resources.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+win1_support.workspace = true
+
+[lints]
+workspace = true

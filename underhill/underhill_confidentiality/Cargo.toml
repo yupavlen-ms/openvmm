@@ -1,0 +1,11 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_confidentiality"
+edition = "2021"
+
+[features]
+std = []
+
+[lints]
+workspace = true

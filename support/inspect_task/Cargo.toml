@@ -1,0 +1,12 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "inspect_task"
+edition = "2021"
+
+[dependencies]
+inspect.workspace = true
+pal_async.workspace = true
+
+[lints]
+workspace = true

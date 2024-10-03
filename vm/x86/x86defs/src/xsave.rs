@@ -1,0 +1,103 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+//! Xsave-related definitions.
+
+use zerocopy::AsBytes;
+use zerocopy::FromBytes;
+use zerocopy::FromZeroes;
+
+#[repr(C)]
+#[derive(Clone, Debug, AsBytes, FromBytes, FromZeroes)]
+pub struct Fxsave {
+    pub fcw: u16,
+    pub fsw: u16,
+    pub ftw: u8,
+    pub reserved: u8,
+    pub fop: u16,
+    pub fip: u64,
+    pub fdp: u64,
+    pub mxcsr: u32,
+    pub mxcsr_mask: u32,
+    pub st: [[u8; 16]; 8],
+    pub xmm: [[u8; 16]; 16],
+    pub reserved2: [u8; 48],
+    pub unused: [u8; 48],
+}
+
+#[repr(C)]
+#[derive(Clone, Debug, AsBytes, FromBytes, FromZeroes)]
+pub struct XsaveHeader {
+    pub xstate_bv: u64,
+    pub xcomp_bv: u64,
+    pub reserved: [u64; 6],
+}
+
+pub const DEFAULT_MXCSR: u32 = 0x1f80;
+pub const INIT_FCW: u16 = 0x37f;
+
+pub const XSAVE_LEGACY_LEN: usize = size_of::<Fxsave>();
+pub const XSAVE_HEADER_LEN: usize = size_of::<XsaveHeader>();
+pub const XSAVE_VARIABLE_OFFSET: usize = XSAVE_LEGACY_LEN + XSAVE_HEADER_LEN;
+pub const XSAVE_MINIMUM_XSAVE_AREA_SIZE: u32 = 576;
+pub const XSAVE_REQUIRED_XSAVE_AREA_ALIGNMENT: u32 = 64;
+
+// XSAVE feature indices.
+const XSAVE_FEATURE_INDEX_LEGACY_X87: u32 = 0;
+const XSAVE_FEATURE_INDEX_LEGACY_SSE: u32 = 1;
+const XSAVE_FEATURE_INDEX_AVX: u32 = 2;
+const XSAVE_FEATURE_INDEX_MPX_BNDREG: u32 = 3;
+const XSAVE_FEATURE_INDEX_MPX_BNDCSR: u32 = 4;
+const XSAVE_FEATURE_INDEX_AVX512_OPMASK: u32 = 5;
+const XSAVE_FEATURE_INDEX_AVX512_ZMMHI: u32 = 6;
+const XSAVE_FEATURE_INDEX_AVX512_ZMM16_31: u32 = 7;
+const XSAVE_SUPERVISOR_FEATURE_INDEX_PASID: u32 = 10;
+pub const XSAVE_SUPERVISOR_FEATURE_INDEX_CET_U: u32 = 11;
+pub const XSAVE_SUPERVISOR_FEATURE_INDEX_CET_S: u32 = 12;
+const XSAVE_FEATURE_INDEX_XTILECFG: u32 = 17;
+const XSAVE_FEATURE_INDEX_XTILEDATA: u32 = 18;
+
+pub const XFEATURE_X87: u64 = 1u64 << XSAVE_FEATURE_INDEX_LEGACY_X87;
+pub const XFEATURE_SSE: u64 = 1u64 << XSAVE_FEATURE_INDEX_LEGACY_SSE;
+pub const XFEATURE_YMM: u64 = 1u64 << XSAVE_FEATURE_INDEX_AVX;
+pub const XFEATURE_MPX_BNDCSR: u64 = 1u64 << XSAVE_FEATURE_INDEX_MPX_BNDCSR;
+pub const XFEATURE_MPX_BNDREG: u64 = 1u64 << XSAVE_FEATURE_INDEX_MPX_BNDREG;
+pub const XFEATURE_MPX: u64 = XFEATURE_MPX_BNDREG | XFEATURE_MPX_BNDCSR;
+
+pub const XFEATURE_AVX512: u64 = (1u64 << XSAVE_FEATURE_INDEX_AVX512_OPMASK)
+    | (1u64 << XSAVE_FEATURE_INDEX_AVX512_ZMMHI)
+    | (1u64 << XSAVE_FEATURE_INDEX_AVX512_ZMM16_31);
+
+pub const XFEATURE_XTILEDATA: u64 = 1u64 << XSAVE_FEATURE_INDEX_XTILEDATA;
+
+pub const XFEATURE_AMX: u64 =
+    (1u64 << XSAVE_FEATURE_INDEX_XTILECFG) | (1u64 << XSAVE_FEATURE_INDEX_XTILEDATA);
+
+pub const XSAVE_SUPERVISOR_FEATURE_PASID: u64 = 1u64 << XSAVE_SUPERVISOR_FEATURE_INDEX_PASID;
+
+pub const XSAVE_SUPERVISOR_FEATURE_CET_U: u64 = 1 << XSAVE_SUPERVISOR_FEATURE_INDEX_CET_U;
+pub const XSAVE_SUPERVISOR_FEATURE_CET_S: u64 = 1 << XSAVE_SUPERVISOR_FEATURE_INDEX_CET_S;
+
+pub const XSAVE_SUPERVISOR_FEATURE_CET: u64 =
+    XSAVE_SUPERVISOR_FEATURE_CET_U | XSAVE_SUPERVISOR_FEATURE_CET_S;
+
+pub const X86X_XSAVE_LEGACY_FEATURES: u64 = XFEATURE_X87 | XFEATURE_SSE;
+pub const X86X_XSAVE_NUM_LEGACY_FEATURES: u32 = 2;
+
+pub const XSAVE_EXTENDED_USER_FEATURES: u64 =
+    XFEATURE_YMM | XFEATURE_MPX | XFEATURE_AVX512 | XFEATURE_AMX;
+
+pub const X86X_XSAVE_USER_FEATURES: u64 = X86X_XSAVE_LEGACY_FEATURES | XSAVE_EXTENDED_USER_FEATURES;
+
+pub const X86X_XSAVE_SUPERVISOR_FEATURES: u64 =
+    XSAVE_SUPERVISOR_FEATURE_PASID | XSAVE_SUPERVISOR_FEATURE_CET;
+
+pub const X86X_XSAVE_EXTENDED_FEATURES: u64 =
+    XSAVE_EXTENDED_USER_FEATURES | X86X_XSAVE_SUPERVISOR_FEATURES;
+
+pub const X86X_XSAVE_FEATURES: u64 = X86X_XSAVE_USER_FEATURES | X86X_XSAVE_SUPERVISOR_FEATURES;
+
+pub const XCOMP_COMPRESSED: u64 = 1 << 63;
+
+pub const X86X_CET_CONFIG_MSR_RESERVED: u64 = 0x3C0;
+pub const X86X_CET_CONFIG_MSR_SS_MASK: u64 = 0x3;
+pub const X86X_CET_CONFIG_MSR_IBT_MASK: u64 = 0xFFFFFFFFFFFFFC3C;

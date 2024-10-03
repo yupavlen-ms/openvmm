@@ -1,0 +1,13 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "get_helpers"
+edition = "2021"
+
+[dependencies]
+get_protocol.workspace = true
+guid.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

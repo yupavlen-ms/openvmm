@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "firmware_uefi_custom_vars"
+edition = "2021"
+
+[dependencies]
+uefi_specs.workspace = true
+
+guid = { workspace = true, features = ["mesh"] }
+mesh_protobuf.workspace = true
+
+thiserror.workspace = true
+
+[lints]
+workspace = true

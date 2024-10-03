@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "build_info"
+edition = "2021"
+
+[dependencies]
+inspect.workspace = true
+
+[build-dependencies]
+vergen = { workspace = true, features = ["git", "gitcl"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,51 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmgs"
+edition = "2021"
+
+[features]
+default = []
+
+inspect = ["vmgs_format/inspect", "dep:inspect", "dep:inspect_counters"]
+save_restore = ["dep:mesh_protobuf"]
+
+# Use native windows crypto APIs
+encryption_win = ["dep:windows"]
+# Use OpenSSL crypto APIs
+encryption_ossl = ["dep:openssl"]
+
+[dependencies]
+vmgs_format.workspace = true
+
+vhd1_defs.workspace = true
+
+guid.workspace = true
+inspect = { workspace = true, optional = true }
+inspect_counters = { workspace = true, optional = true }
+mesh_protobuf = { workspace = true, optional = true }
+
+anyhow.workspace = true
+async-trait.workspace = true
+cfg-if.workspace = true
+crc32fast.workspace = true
+getrandom.workspace = true
+openssl = { optional = true, features = ["vendored"], workspace = true }
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+optional = true
+features = [
+  "Win32_Foundation",
+  "Win32_Security_Cryptography",
+]
+
+[dev-dependencies]
+pal_async.workspace = true
+tempfile_helpers.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virt_support_gic"
+edition = "2021"
+
+[dependencies]
+vm_topology.workspace = true
+
+inspect.workspace = true
+open_enum.workspace = true
+
+parking_lot.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

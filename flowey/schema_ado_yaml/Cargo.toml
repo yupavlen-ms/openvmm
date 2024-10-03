@@ -1,0 +1,12 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "schema_ado_yaml"
+edition = "2021"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_yaml.workspace = true
+
+[lints]
+workspace = true

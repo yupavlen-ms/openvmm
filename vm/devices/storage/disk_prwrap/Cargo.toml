@@ -1,0 +1,20 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "disk_prwrap"
+edition = "2021"
+
+[dependencies]
+disk_backend.workspace = true
+disk_backend_resources.workspace = true
+inspect.workspace = true
+scsi_buffers.workspace = true
+
+async-trait.workspace = true
+vm_resource.workspace = true
+parking_lot.workspace = true
+stackfuture.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

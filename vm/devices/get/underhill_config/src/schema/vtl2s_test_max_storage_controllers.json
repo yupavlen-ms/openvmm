@@ -1,0 +1,56 @@
+{
+  "version": "V1",
+  "fixed": {
+    "scsi_sub_channels": 1
+  },
+  "dynamic": {
+    "storage_controllers": [
+      {
+        "instance_id": "0bf355d1-0cae-411e-9662-86c3035556ae",
+        "protocol": "SCSI",
+        "luns": [
+          {
+            "location": 0,
+            "device_id": "9fb1f839-b879-423a-93fe-43691514125c",
+            "vendor_id": "SCSI",
+            "product_id": "SCSI Disk",
+            "product_revision_level": "1.0",
+            "serial_number": "2",
+            "model_number": "3",
+            "fua": false,
+            "write_cache": true,
+            "physical_devices": {
+              "type": "single",
+              "device": {
+                "device_type": "vscsi",
+                "device_path": "0E1F3333-9C52-45E1-8B45-7C7A69A25786",
+                "sub_device_path": 0
+              }
+            }
+          }
+        ]
+      },
+      {
+        "instance_id": "0bf355d2-0cae-411e-9662-86c3035556ae",
+        "protocol": "SCSI",
+        "luns": [
+          
+        ]
+      },
+      {
+        "instance_id": "0bf355d3-0cae-411e-9662-86c3035556ae",
+        "protocol": "SCSI",
+        "luns": [
+          
+        ]
+      },
+      {
+        "instance_id": "0bf355d4-0cae-411e-9662-86c3035556ae",
+        "protocol": "SCSI",
+        "luns": [
+          
+        ]
+      }
+    ]
+  }
+}

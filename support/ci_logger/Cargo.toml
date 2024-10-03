@@ -1,0 +1,12 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "ci_logger"
+edition = "2021"
+
+[dependencies]
+env_logger.workspace = true
+log.workspace = true
+
+[lints]
+workspace = true

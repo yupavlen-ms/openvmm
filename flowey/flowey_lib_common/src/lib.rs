@@ -1,0 +1,45 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+//! A "standard library" of flowey nodes, not tied to any particular project.
+//!
+//! These nodes can be considered "building blocks" that project-specific flows
+//! can leverage to quickly get up and running.
+
+#![forbid(unsafe_code)]
+// #![warn(missing_docs)] // TODO: lots to do here
+
+pub mod _util;
+pub mod ado_task_azure_key_vault;
+pub mod ado_task_npm_authenticate;
+pub mod ado_task_nuget_authenticate;
+pub mod ado_task_nuget_tool_installer;
+pub mod cache;
+pub mod cfg_cargo_common_flags;
+pub mod cfg_persistent_dir_cargo_install;
+pub mod check_needs_relaunch;
+pub mod copy_to_artifact_dir;
+pub mod download_azcopy;
+pub mod download_cargo_fuzz;
+pub mod download_cargo_nextest;
+pub mod download_gh_cli;
+pub mod download_gh_release;
+pub mod download_mdbook;
+pub mod download_nuget_exe;
+pub mod download_protoc;
+pub mod gh_download_azure_key_vault_secret;
+pub mod gh_task_azure_login;
+pub mod git_checkout;
+pub mod install_apt_pkg;
+pub mod install_azure_cli;
+pub mod install_git;
+pub mod install_nodejs;
+pub mod install_nuget_azure_credential_provider;
+pub mod install_rust;
+pub mod junit_publish_test_results;
+pub mod nuget_install_package;
+pub mod run_cargo_build;
+pub mod run_cargo_clippy;
+pub mod run_cargo_doc;
+pub mod run_cargo_nextest_archive;
+pub mod run_cargo_nextest_run;
+pub mod use_gh_cli;

@@ -1,0 +1,33 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "hcl_compat_uefi_nvram_storage"
+edition = "2021"
+
+[features]
+default = []
+
+inspect = ["dep:inspect", "uefi_nvram_storage/inspect"]
+
+[dependencies]
+uefi_nvram_storage.workspace = true
+
+guid.workspace = true
+inspect = { workspace = true, optional = true }
+open_enum.workspace = true
+ucs2.workspace = true
+zerocopy_helpers.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+static_assertions.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+wchar.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+pal_async.workspace = true
+
+[lints]
+workspace = true

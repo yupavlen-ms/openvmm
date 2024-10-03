@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "guest_watchdog"
+edition = "2021"
+
+[dependencies]
+vmcore.workspace = true
+
+chipset_device.workspace = true
+watchdog_core.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+tracelimit.workspace = true
+
+[lints]
+workspace = true

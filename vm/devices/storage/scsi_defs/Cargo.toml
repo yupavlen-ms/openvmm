@@ -1,0 +1,13 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "scsi_defs"
+edition = "2021"
+
+[dependencies]
+zerocopy.workspace = true
+bitfield-struct.workspace = true
+open_enum.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,39 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmswitch"
+edition = "2021"
+
+[target.'cfg(windows)'.dependencies]
+guid.workspace = true
+pal.workspace = true
+pal_event.workspace = true
+pal_async.workspace = true
+
+futures.workspace = true
+getrandom.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+widestring.workspace = true
+zerocopy.workspace = true
+zerocopy_helpers.workspace = true
+
+[target.'cfg(windows)'.dependencies.winapi]
+features = [
+  "consoleapi",
+  "handleapi",
+  "memoryapi",
+  "namedpipeapi",
+  "processenv",
+  "realtimeapiset",
+  "synchapi",
+  "winbase",
+  "wincon",
+  "winnls",
+  "winnt",
+  "winsock2",
+]
+workspace = true
+
+[lints]
+workspace = true

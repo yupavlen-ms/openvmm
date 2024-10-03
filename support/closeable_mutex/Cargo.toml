@@ -1,0 +1,11 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "closeable_mutex"
+edition = "2021"
+
+[dependencies]
+parking_lot.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmm_test_petri_support"
+edition = "2021"
+
+[dependencies]
+petri_artifacts_vmm_test.workspace = true
+
+petri_artifacts_common.workspace = true
+petri.workspace = true
+
+anyhow.workspace = true
+parking_lot.workspace = true
+
+[lints]
+workspace = true

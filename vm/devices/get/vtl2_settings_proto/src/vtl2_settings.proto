@@ -1,0 +1,28 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+syntax = "proto3";
+
+import "vtl2_settings.namespaces.proto";
+package underhill.settings;
+
+
+// Internal VTL2 settings provided by the host.
+message Vtl2Settings {
+    repeated Vtl2SettingsChunk namespace_settings = 1;
+
+    // Support legacy non-namespace JSON schema
+    Vtl2SettingsBase.Version version = 2;
+    Vtl2SettingsFixed fixed = 3;
+    Vtl2SettingsDynamic dynamic = 4;
+
+
+    // Reserve field numbers that would make this start with an ASCII whitespace
+    // character or JSON object opening brace '{', which would conflict with
+    // JSON detection.
+    reserved 9, 10, 12, 13, 32, 123;
+}
+
+message Vtl2SettingsChunk {
+    string namespace = 1;
+    bytes settings = 2;
+}

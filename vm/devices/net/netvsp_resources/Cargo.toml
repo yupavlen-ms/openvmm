@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "netvsp_resources"
+edition = "2021"
+
+[dependencies]
+guid.workspace = true
+mesh.workspace = true
+net_backend_resources.workspace = true
+vm_resource.workspace = true
+
+[lints]
+workspace = true

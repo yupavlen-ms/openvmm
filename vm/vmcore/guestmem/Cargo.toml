@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "guestmem"
+edition = "2021"
+
+[dependencies]
+inspect.workspace = true
+pal_event.workspace = true
+sparse_mmap.workspace = true
+
+thiserror.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

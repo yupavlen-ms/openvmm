@@ -1,0 +1,352 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+use crate::OfferInfo;
+use crate::RestoreError;
+use crate::RestoredChannel;
+use crate::VmbusMessageSource;
+use guid::Guid;
+use mesh::payload::Protobuf;
+use vmbus_channel::bus::OfferKey;
+use vmbus_core::protocol;
+use vmbus_core::protocol::ChannelId;
+use vmbus_core::protocol::FeatureFlags;
+use vmbus_core::protocol::GpadlId;
+use vmbus_core::VersionInfo;
+
+impl<T: VmbusMessageSource> super::ClientTask<T> {
+    pub fn handle_save(&mut self) -> SavedState {
+        // It's the responsibility of the caller to ensure the client is in a state where it's
+        // possible to save.
+        SavedState {
+            client_state: self.state.into(),
+            channels: self
+                .inner
+                .channels
+                .iter()
+                .map(|(id, v)| {
+                    assert!(
+                        v.modify_response_send.is_none(),
+                        "Cannot save a channel that is being modified."
+                    );
+                    let key = offer_key(&v.offer);
+                    tracing::info!(%key, %v.state, "channel saved");
+
+                    Channel {
+                        id: id.0,
+                        state: ChannelState::save(&v.state),
+                        offer: v.offer.into(),
+                    }
+                })
+                .collect(),
+            gpadls: self
+                .inner
+                .gpadls
+                .iter()
+                .map(|(&(channel_id, gpadl_id), gpadl_state)| Gpadl {
+                    gpadl_id: gpadl_id.0,
+                    channel_id: channel_id.0,
+                    state: GpadlState::save(gpadl_state),
+                })
+                .collect(),
+        }
+    }
+
+    pub fn handle_restore(
+        &mut self,
+        saved_state: SavedState,
+    ) -> Result<(Option<VersionInfo>, Vec<RestoredChannel>), RestoreError> {
+        let mut restored_channels = Vec::new();
+        self.state = saved_state.client_state.try_into()?;
+        for saved_channel in saved_state.channels {
+            if let Some(offer_info) = self.restore_channel(saved_channel) {
+                let key = offer_key(&offer_info.offer);
+                tracing::info!(%key, state = %saved_channel.state, "channel restored");
+                restored_channels.push(RestoredChannel {
+                    offer: offer_info,
+                    open: saved_channel.state == ChannelState::Opened,
+                });
+            }
+            if let Some(channel) = self.inner.channels.get_mut(&ChannelId(saved_channel.id)) {
+                channel.state = saved_channel.state.restore()
+            }
+        }
+
+        if let super::ClientState::RequestingOffers(_) = &self.state {
+            self.request_offers_send
+                .send(Some(super::Offer::AllOffersDelivered));
+        }
+
+        for gpadl in saved_state.gpadls {
+            let channel_id = ChannelId(gpadl.channel_id);
+            let gpadl_id = GpadlId(gpadl.gpadl_id);
+            let gpadl_state = gpadl.state.restore();
+            let tearing_down = matches!(gpadl_state, super::GpadlState::TearingDown);
+
+            if self
+                .inner
+                .gpadls
+                .insert((channel_id, gpadl_id), gpadl_state)
+                .is_some()
+            {
+                return Err(RestoreError::DuplicateGpadlId(gpadl_id.0));
+            }
+
+            if tearing_down
+                && self
+                    .inner
+                    .teardown_gpadls
+                    .insert(gpadl_id, Some(channel_id))
+                    .is_some()
+            {
+                unreachable!("gpadl ID validated above");
+            }
+        }
+
+        Ok((self.state.get_version(), restored_channels))
+    }
+
+    fn restore_channel(&mut self, channel: Channel) -> Option<OfferInfo> {
+        self.create_channel_core(channel.offer.into(), channel.state.restore())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub struct SavedState {
+    #[mesh(1)]
+    pub client_state: ClientState,
+    #[mesh(2)]
+    pub channels: Vec<Channel>,
+    #[mesh(3)]
+    pub gpadls: Vec<Gpadl>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub enum ClientState {
+    #[mesh(1)]
+    Disconnected,
+    #[mesh(2)]
+    Connected {
+        #[mesh(1)]
+        version: u32,
+        #[mesh(2)]
+        feature_flags: u32,
+    },
+}
+
+impl From<super::ClientState> for ClientState {
+    fn from(state: super::ClientState) -> Self {
+        // It is the responsibility of the caller to ensure the client is in a state where it's
+        // possible to save.
+        match state {
+            super::ClientState::Disconnected => ClientState::Disconnected,
+            super::ClientState::Connecting(..) => {
+                unreachable!("Cannot save in Connecting state.")
+            }
+            super::ClientState::Connected(info) => ClientState::Connected {
+                version: info.version as u32,
+                feature_flags: info.feature_flags.into(),
+            },
+            super::ClientState::RequestingOffers(..) => {
+                unreachable!("Cannot save in RequestingOffers state.")
+            }
+            super::ClientState::Disconnecting(..) => {
+                unreachable!("Cannot save in Disconnecting state.")
+            }
+        }
+    }
+}
+
+impl TryFrom<ClientState> for super::ClientState {
+    type Error = RestoreError;
+
+    fn try_from(state: ClientState) -> Result<Self, Self::Error> {
+        let result = match state {
+            ClientState::Disconnected => Self::Disconnected,
+            ClientState::Connected {
+                version,
+                feature_flags,
+            } => {
+                let version = super::SUPPORTED_VERSIONS
+                    .iter()
+                    .find(|v| version == **v as u32)
+                    .copied()
+                    .ok_or(RestoreError::UnsupportedVersion(version))?;
+
+                let feature_flags = FeatureFlags::from(feature_flags);
+                if feature_flags.contains_unsupported_bits() {
+                    return Err(RestoreError::UnsupportedFeatureFlags(feature_flags.into()));
+                }
+
+                Self::Connected(VersionInfo {
+                    version,
+                    feature_flags,
+                })
+            }
+        };
+
+        Ok(result)
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub struct Channel {
+    #[mesh(1)]
+    pub id: u32,
+    #[mesh(2)]
+    pub state: ChannelState,
+    #[mesh(3)]
+    pub offer: Offer,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub enum ChannelState {
+    #[mesh(1)]
+    Offered,
+    #[mesh(2)]
+    Opened,
+}
+
+impl ChannelState {
+    fn save(state: &super::ChannelState) -> Self {
+        match state {
+            super::ChannelState::Offered => Self::Offered,
+            super::ChannelState::Opening(..) => {
+                unreachable!("Cannot save channel in opening state.")
+            }
+            super::ChannelState::Opened => Self::Opened,
+        }
+    }
+
+    fn restore(self) -> super::ChannelState {
+        match self {
+            ChannelState::Offered => super::ChannelState::Offered,
+            ChannelState::Opened => super::ChannelState::Opened,
+        }
+    }
+}
+
+impl std::fmt::Display for ChannelState {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ChannelState::Offered => write!(fmt, "Offered"),
+            ChannelState::Opened => write!(fmt, "Opened"),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub enum GpadlState {
+    #[mesh(1)]
+    Created,
+    #[mesh(2)]
+    TearingDown,
+}
+
+impl GpadlState {
+    fn save(value: &super::GpadlState) -> Self {
+        match value {
+            super::GpadlState::Offered(..) => unreachable!("Cannot save gpadl in offered state."),
+            super::GpadlState::Created => Self::Created,
+            super::GpadlState::TearingDown => Self::TearingDown,
+        }
+    }
+
+    fn restore(self) -> super::GpadlState {
+        match self {
+            GpadlState::Created => super::GpadlState::Created,
+            GpadlState::TearingDown => super::GpadlState::TearingDown,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub struct Gpadl {
+    #[mesh(1)]
+    pub gpadl_id: u32,
+    #[mesh(2)]
+    pub channel_id: u32,
+    #[mesh(3)]
+    pub state: GpadlState,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Protobuf)]
+#[mesh(package = "vmbus.client")]
+pub struct Offer {
+    #[mesh(1)]
+    pub interface_id: Guid,
+    #[mesh(2)]
+    pub instance_id: Guid,
+    #[mesh(3)]
+    pub flags: u16,
+    #[mesh(4)]
+    pub mmio_megabytes: u16,
+    #[mesh(5)]
+    pub user_defined: [u8; 120],
+    #[mesh(6)]
+    pub subchannel_index: u16,
+    #[mesh(7)]
+    pub mmio_megabytes_optional: u16,
+    #[mesh(8)]
+    pub channel_id: u32,
+    #[mesh(9)]
+    pub monitor_id: u8,
+    #[mesh(10)]
+    pub monitor_allocated: u8,
+    #[mesh(11)]
+    pub is_dedicated: u16,
+    #[mesh(12)]
+    pub connection_id: u32,
+}
+
+impl From<protocol::OfferChannel> for Offer {
+    fn from(offer: protocol::OfferChannel) -> Self {
+        Self {
+            interface_id: offer.interface_id,
+            instance_id: offer.instance_id,
+            flags: offer.flags.into(),
+            mmio_megabytes: offer.mmio_megabytes,
+            user_defined: offer.user_defined.into(),
+            subchannel_index: offer.subchannel_index,
+            mmio_megabytes_optional: offer.mmio_megabytes_optional,
+            channel_id: offer.channel_id.0,
+            monitor_id: offer.monitor_id,
+            monitor_allocated: offer.monitor_allocated,
+            is_dedicated: offer.is_dedicated,
+            connection_id: offer.connection_id,
+        }
+    }
+}
+
+impl From<Offer> for protocol::OfferChannel {
+    fn from(offer: Offer) -> Self {
+        Self {
+            interface_id: offer.interface_id,
+            instance_id: offer.instance_id,
+            flags: offer.flags.into(),
+            rsvd: [0; 4],
+            mmio_megabytes: offer.mmio_megabytes,
+            user_defined: offer.user_defined.into(),
+            subchannel_index: offer.subchannel_index,
+            mmio_megabytes_optional: offer.mmio_megabytes_optional,
+            channel_id: ChannelId(offer.channel_id),
+            monitor_id: offer.monitor_id,
+            monitor_allocated: offer.monitor_allocated,
+            is_dedicated: offer.is_dedicated,
+            connection_id: offer.connection_id,
+        }
+    }
+}
+
+fn offer_key(offer: &protocol::OfferChannel) -> OfferKey {
+    OfferKey {
+        interface_id: offer.interface_id,
+        instance_id: offer.instance_id,
+        subchannel_index: offer.subchannel_index,
+    }
+}

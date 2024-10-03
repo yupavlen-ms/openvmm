@@ -1,0 +1,24 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "flowey_hvlite"
+edition = "2021"
+
+[dependencies]
+flowey_cli.workspace = true
+flowey_lib_common.workspace = true
+flowey_lib_hvlite.workspace = true
+flowey.workspace = true
+
+anyhow.workspace = true
+clap = { workspace = true, features = ["derive"] }
+log.workspace = true
+serde.workspace = true
+target-lexicon = { workspace = true, features = ["serde_support"] }
+
+[lints]
+workspace = true
+
+[package.metadata.xtask.unused-deps]
+# Pulled in via prelude
+ignored = ["serde"]

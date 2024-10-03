@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_threadpool"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+inspect = { workspace = true, features = ["std"] }
+pal.workspace = true
+pal_async.workspace = true
+pal_uring.workspace = true
+
+fs-err.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

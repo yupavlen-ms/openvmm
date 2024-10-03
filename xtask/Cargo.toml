@@ -1,0 +1,38 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "xtask"
+edition = "2021"
+rust-version = "1.81"
+
+[dependencies]
+vmm_test_images = { workspace = true, features = ["clap"] }
+
+anyhow.workspace = true
+cargo_toml.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
+fatfs = { workspace = true, features = ["std", "alloc"] }
+fs-err.workspace = true
+futures.workspace = true
+glob.workspace = true
+gptman.workspace = true
+grep-regex.workspace = true
+grep-searcher.workspace = true
+ignore.workspace = true
+log.workspace = true
+mbrman.workspace = true
+rayon.workspace = true
+serde_json.workspace = true
+serde.workspace = true
+toml_edit = { workspace = true, features = ["serde"] }
+walkdir.workspace = true
+which.workspace = true
+xshell.workspace = true
+zerocopy.workspace = true
+
+ci_logger.workspace = true
+clap_dyn_complete.workspace = true
+guid.workspace = true
+
+[lints]
+workspace = true

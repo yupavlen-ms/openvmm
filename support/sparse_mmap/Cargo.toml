@@ -1,0 +1,40 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "sparse_mmap"
+edition = "2021"
+
+[build-dependencies]
+cc.workspace = true
+
+[dependencies]
+pal.workspace = true
+
+thiserror.workspace = true
+zerocopy.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(all(unix, not(target_os = "linux")))'.dependencies]
+getrandom.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+parking_lot.workspace = true
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Kernel",
+    "Win32_System_Memory",
+    "Win32_System_Threading",
+]}
+
+[[bench]]
+name = "perf"
+harness = false
+
+[dev-dependencies]
+criterion.workspace = true
+
+[lints]
+workspace = true

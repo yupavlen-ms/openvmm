@@ -1,0 +1,13 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "page_table"
+edition = "2021"
+
+[dependencies]
+bitfield-struct.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

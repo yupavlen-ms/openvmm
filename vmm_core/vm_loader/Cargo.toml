@@ -1,0 +1,24 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vm_loader"
+edition = "2021"
+
+[dependencies]
+hvdef.workspace = true
+loader.workspace = true
+virt.workspace = true
+memory_range.workspace = true
+vm_topology.workspace = true
+guestmem.workspace = true
+
+range_map_vec.workspace = true
+
+anyhow.workspace = true
+tracing.workspace = true
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

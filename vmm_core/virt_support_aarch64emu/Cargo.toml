@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virt_support_aarch64emu"
+edition = "2021"
+
+[dependencies]
+aarch64defs.workspace = true
+guestmem.workspace = true
+hvdef.workspace = true
+vm_topology.workspace = true
+virt.workspace = true
+aarch64emu.workspace = true
+
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "nvme_spec"
+edition = "2021"
+
+[dependencies]
+storage_string.workspace = true
+
+inspect.workspace = true
+
+bitfield-struct.workspace = true
+open_enum.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

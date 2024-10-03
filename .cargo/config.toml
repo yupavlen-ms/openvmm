@@ -1,0 +1,117 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[alias]
+xtask = "run -p xtask --profile xtask --"
+xflowey = "run -p flowey_hvlite -- pipeline run"
+
+[env]
+# Use the packaged openssl libraries on musl targets.
+X86_64_UNDERHILL_LINUX_MUSL_OPENSSL_NO_VENDOR = "1"
+X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_NO_VENDOR = "1"
+AARCH64_UNDERHILL_LINUX_MUSL_OPENSSL_NO_VENDOR = "1"
+AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_NO_VENDOR = "1"
+
+# pkg-config-rs has all sorts of sharp edges, so just tell openssl-sys exactly
+# where to get openssl.
+X86_64_UNDERHILL_LINUX_MUSL_OPENSSL_DIR = { value = ".packages/extracted/x86_64-sysroot", relative = true }
+X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR = { value = ".packages/extracted/x86_64-sysroot", relative = true }
+X86_64_UNDERHILL_LINUX_MUSL_OPENSSL_STATIC = "1"
+X86_64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC = "1"
+AARCH64_UNDERHILL_LINUX_MUSL_OPENSSL_DIR = { value = ".packages/extracted/aarch64-sysroot", relative = true }
+AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_DIR = { value = ".packages/extracted/aarch64-sysroot", relative = true }
+AARCH64_UNDERHILL_LINUX_MUSL_OPENSSL_STATIC = "1"
+AARCH64_UNKNOWN_LINUX_MUSL_OPENSSL_STATIC = "1"
+
+# Tell cc-rs where the Underhill compilers are.
+CC_aarch64_underhill_linux_musl = { value = "build_support/underhill_cross/aarch64-underhill-musl-gcc", relative = true }
+CC_aarch64_unknown_linux_musl = { value = "build_support/underhill_cross/aarch64-underhill-musl-gcc", relative = true }
+CC_x86_64_underhill_linux_musl = { value = "build_support/underhill_cross/x86_64-underhill-musl-gcc", relative = true }
+CC_x86_64_unknown_linux_musl = { value = "build_support/underhill_cross/x86_64-underhill-musl-gcc", relative = true }
+
+# Use the packaged verison of protoc, symlinked by repo setup tooling
+PROTOC = { value = ".packages/Google.Protobuf.Tools/tools/protoc", relative = true }
+
+# The path of the library for NTFS formatting
+X86_64_LIB_NTFS_FMT_DIR = { value = ".packages/extracted/x86_64-sysroot/lib", relative = true }
+AARCH64_LIB_NTFS_FMT_DIR = { value = ".packages/extracted/aarch64-sysroot/lib", relative = true }
+
+# Path to lxutil.dll
+X86_64_LXUTIL_DLL_DIR = { value = ".packages/Microsoft.WSL.LxUtil.amd64fre/build/native/bin", relative = true }
+AARCH64_LXUTIL_DLL_DIR = { value = ".packages/Microsoft.WSL.LxUtil.arm64fre/build/native/bin", relative = true }
+
+# Path to sysroot (used by build_support/underhill_cross)
+X86_64_SYSROOT = { value = ".packages/extracted/x86_64-sysroot", relative = true }
+AARCH64_SYSROOT = { value = ".packages/extracted/aarch64-sysroot", relative = true }
+
+# Streamline the OpenVMM `cargo run` experience by setting a sane-default for
+# what kernel and initrd to use when booting via Linux direct (i.e: use the
+# sample kernel packaged alongside openvmm-deps)
+X86_64_OPENVMM_LINUX_DIRECT_KERNEL = { value = ".packages/underhill-deps-private/x64/vmlinux", relative = true }
+X86_64_OPENVMM_LINUX_DIRECT_INITRD = { value = ".packages/underhill-deps-private/x64/initrd", relative = true }
+AARCH64_OPENVMM_LINUX_DIRECT_KERNEL = { value = ".packages/underhill-deps-private/aarch64/Image", relative = true }
+AARCH64_OPENVMM_LINUX_DIRECT_INITRD = { value = ".packages/underhill-deps-private/aarch64/initrd", relative = true }
+# Streamline the OpenVMM `cargo run` experience by setting a sane-default for
+# what UEFI firmware to use (i.e: use the Microsoft MSVM firmware)
+X86_64_OPENVMM_UEFI_FIRMWARE = { value = ".packages/hyperv.uefi.mscoreuefi.x64.RELEASE/MsvmX64/RELEASE_VS2022/FV/MSVM.fd", relative = true }
+AARCH64_OPENVMM_UEFI_FIRMWARE = { value = ".packages/hyperv.uefi.mscoreuefi.AARCH64.RELEASE/MsvmAARCH64/RELEASE_VS2022/FV/MSVM.fd", relative = true }
+
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = [
+  # Set up delayloads.
+  "-C", "link-args=dloadhelper.lib /delayload:ws2_32.dll /delayload:virtdisk.dll /delayload:user32.dll /delayload:winhvplatform.dll",
+  # Set up the CRT: use ucrtbase.dll but statically link the VC runtime.
+  "-C", "link-args=/nodefaultlib onecore_apiset.lib ucrt.lib libvcruntime.lib libcmt.lib",
+  # Enable CFG
+  "-Ccontrol-flow-guard"
+]
+
+[target.aarch64-apple-darwin]
+# At least some of our macos binaries need to have entitlements for running
+# hypervisor code, so they must be signed.
+runner = "build_support/macos/sign_and_run.sh"
+
+# Use the internal gcc to invoke link so that we can use our spec file that
+# points to our version of musl.
+[target.x86_64-unknown-linux-musl]
+linker = "build_support/underhill_cross/x86_64-underhill-musl-gcc"
+[target.x86_64-underhill-linux-musl]
+linker = "build_support/underhill_cross/x86_64-underhill-musl-gcc"
+[target.aarch64-unknown-linux-musl]
+linker = "build_support/underhill_cross/aarch64-underhill-musl-gcc"
+[target.aarch64-underhill-linux-musl]
+linker = "build_support/underhill_cross/aarch64-underhill-musl-gcc"
+
+[target.'cfg(target_arch = "aarch64")']
+rustflags = [
+  # This enables efficient atomics via LSE and SIMD via Neon.
+  # The machines like DevKit and CC have these.
+  "-Ctarget-feature=+lse,+neon",
+]
+
+[target.'cfg(target_env = "musl")']
+rustflags = [
+  # Use the musl from the sysroot, not from the Rust distribution.
+  "-Clink-self-contained=n",
+]
+
+[target.'cfg(all(target_arch = "aarch64", target_env = "musl"))']
+rustflags = [
+  # Avoid swapping in and out the hefty SVE state on Underhill/arm64.
+  # That is not enabled by default in the compiler at the moment, making
+  # this explicit.
+  "-Ctarget-feature=-sve,-sve2",
+]
+
+# Specify a common set of rustflags for all targets.
+[target.'cfg(all())']
+rustflags = [
+  # Disable FPO to get full call stack as the '--call-graph=dwarf' option
+  # is not working well.
+  "-Cforce-frame-pointers=yes",
+
+  # Enable v0 symbols to get better output from `perf` and related tools.
+  "-Csymbol-mangling-version=v0",
+
+  # Treat warnings as errors in CI.
+### ENABLE_IN_CI "-Dwarnings",
+]

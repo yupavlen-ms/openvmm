@@ -1,0 +1,16 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+// Sample prost.proto for tests in prost.rs.
+
+syntax = "proto3";
+
+package foo;
+
+message Foo {
+    string bar = 1;
+    uint32 baz = 2;
+    oneof stuff {
+        uint32 abc = 3;
+        string def = 4;
+    }
+}

@@ -1,0 +1,69 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pal_async"
+edition = "2021"
+
+[features]
+# Enable executor_tests module for out-of-crate executor testing.
+tests = ["dep:tempfile_helpers"]
+
+[dependencies]
+pal.workspace = true
+unix_socket.workspace = true
+pal_event.workspace = true
+pal_async_test.workspace = true
+
+async-channel.workspace = true
+async-task.workspace = true
+cfg-if.workspace = true
+futures.workspace = true
+getrandom.workspace = true
+once_cell.workspace = true
+parking_lot.workspace = true
+slab.workspace = true
+smallbox.workspace = true
+socket2 = { workspace = true, features = ["all"] }
+tempfile_helpers = { workspace = true, optional = true }
+unicycle.workspace = true
+zerocopy.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true, features = ["extra_traits"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_WindowsProgramming"] }
+
+# TODO: move all these uses to windows-sys.
+[target.'cfg(windows)'.dependencies.winapi]
+workspace = true
+features = [
+    "errhandlingapi",
+    "fileapi",
+    "handleapi",
+    "heapapi",
+    "ioapiset",
+    "impl-default",
+    "memoryapi",
+    "namedpipeapi",
+    "ntstatus",
+    "processenv",
+    "processthreadsapi",
+    "sddl",
+    "securitybaseapi",
+    "std",
+    "synchapi",
+    "threadpoolapiset",
+    "winbase",
+    "winerror",
+    "winioctl",
+    "winnt",
+    "winsock2",
+]
+
+[dev-dependencies]
+tempfile.workspace = true
+tempfile_helpers.workspace = true
+
+[lints]
+workspace = true

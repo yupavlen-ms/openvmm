@@ -1,0 +1,29 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "term"
+edition = "2021"
+
+[target.'cfg(windows)'.dependencies.winapi]
+features = [
+  "consoleapi",
+  "handleapi",
+  "memoryapi",
+  "namedpipeapi",
+  "processenv",
+  "realtimeapiset",
+  "synchapi",
+  "winbase",
+  "wincon",
+  "winnls",
+  "winnt",
+  "winsock2",
+]
+workspace = true
+
+[target.'cfg(unix)'.dependencies]
+crossterm.workspace = true
+libc.workspace = true
+
+[lints]
+workspace = true

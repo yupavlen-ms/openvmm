@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmbus_serial_protocol"
+edition = "2021"
+
+[dependencies]
+guid.workspace = true
+open_enum.workspace = true
+
+static_assertions.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

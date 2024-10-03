@@ -1,0 +1,45 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmbus_server"
+edition = "2021"
+
+[dependencies]
+vmbus_async.workspace = true
+vmbus_channel.workspace = true
+vmbus_core.workspace = true
+vmbus_ring.workspace = true
+
+hvdef.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+
+guid.workspace = true
+inspect.workspace = true
+mesh.workspace = true
+unix_socket.workspace = true
+pal_event.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+parking_lot.workspace = true
+safeatomic.workspace = true
+slab.workspace = true
+thiserror.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+unicycle.workspace = true
+zerocopy.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+vmbus_proxy.workspace = true
+
+[dev-dependencies]
+test_with_tracing.workspace = true
+zerocopy_helpers.workspace = true
+
+[lints]
+workspace = true

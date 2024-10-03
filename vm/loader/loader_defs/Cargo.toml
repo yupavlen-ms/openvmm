@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "loader_defs"
+edition = "2021"
+
+[features]
+std = []
+inspect = ["std", "dep:inspect"]
+
+[dependencies]
+hvdef.workspace = true
+open_enum.workspace = true
+
+inspect = { workspace = true, optional = true }
+
+bitfield-struct.workspace = true
+static_assertions.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

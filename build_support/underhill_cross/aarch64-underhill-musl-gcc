@@ -1,0 +1,4 @@
+#!/bin/sh
+
+script_dir="$(dirname "$0")"
+MUSL_ARCH=aarch64 MUSL_SYSROOT="$AARCH64_SYSROOT" exec "${REALGCC:-aarch64-linux-gnu-gcc}" "$@" -specs "$script_dir/musl-gcc.specs"

@@ -1,0 +1,38 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "openhcl_boot"
+edition = "2021"
+
+[dependencies]
+aarch64defs.workspace = true
+minimal_rt.workspace = true
+underhill_confidentiality.workspace = true
+host_fdt_parser.workspace = true
+loader_defs.workspace = true
+igvm_defs.workspace = true
+hvdef.workspace = true
+fdt.workspace = true
+memory_range.workspace = true
+sidecar_defs.workspace = true
+
+arrayvec.workspace = true
+cfg-if.workspace = true
+crc32fast.workspace = true
+# By default the sha2 crate uses cpu feature detection which on x86_64 uses the
+# cpuid instruction. Executing cpuid in an SNP CVM would require implementing an
+# exception handler. Using the force-soft feature flag enables a software
+# implementation of the hashing algorithms that does not use cpuid.
+sha2 = { workspace = true, features = ["force-soft"] }
+zerocopy.workspace = true
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+safe_x86_intrinsics.workspace = true
+tdcall.workspace = true
+x86defs.workspace = true
+
+[build-dependencies]
+minimal_rt_build.workspace = true
+
+[lints]
+workspace = true

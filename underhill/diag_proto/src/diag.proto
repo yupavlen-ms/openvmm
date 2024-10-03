@@ -1,0 +1,97 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+syntax = "proto3";
+
+package diag;
+
+import "google/protobuf/empty.proto";
+
+service UnderhillDiag {
+    rpc Exec(ExecRequest) returns (ExecResponse);
+    rpc Wait(WaitRequest) returns (WaitResponse);
+    rpc Start(StartRequest) returns (google.protobuf.Empty);
+    rpc Crash(CrashRequest) returns (google.protobuf.Empty);
+    rpc Kmsg(KmsgRequest) returns (google.protobuf.Empty);
+    rpc Restart(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc Pause(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc Resume(google.protobuf.Empty) returns (google.protobuf.Empty);
+    rpc ReadFile(FileRequest) returns (google.protobuf.Empty);
+    rpc DumpSavedState(google.protobuf.Empty) returns (DumpSavedStateResponse);
+    rpc PacketCapture(NetworkPacketCaptureRequest) returns (NetworkPacketCaptureResponse);
+}
+
+message ExecRequest {
+    string command = 1;
+    repeated string args = 2;
+    bool tty = 3;
+    uint64 stdin = 4;
+    uint64 stdout = 5;
+    uint64 stderr = 6;
+    bool combine_stderr = 7;
+    repeated EnvPair env = 8;
+    bool clear_env = 9;
+    bool raw_socket_io = 10;
+}
+
+message EnvPair {
+    string name = 1;
+    optional string value = 2;
+}
+
+message ExecResponse {
+    int32 pid = 1;
+}
+
+message WaitRequest {
+    int32 pid = 1;
+}
+
+message WaitResponse {
+    int32 exit_code = 1;
+}
+
+message StartRequest {
+    repeated EnvPair env = 1;
+    repeated string args = 2;
+}
+
+message KmsgRequest {
+    bool follow = 1;
+    uint64 conn = 2;
+}
+
+message FileRequest {
+    bool follow = 1;
+    uint64 conn = 2;
+    string file_path = 3;
+}
+
+message DumpSavedStateResponse {
+    bytes data = 1;
+}
+
+message StartPacketCaptureData {
+    uint32 snaplen = 1;
+    repeated uint64 conns = 2;
+}
+
+message NetworkPacketCaptureRequest {
+    enum Operation {
+        Query = 0;
+        Start = 1;
+        Stop = 2;
+    }
+
+    Operation operation = 3;
+    oneof OpData {
+        StartPacketCaptureData start_data = 4;
+    }
+}
+
+message NetworkPacketCaptureResponse {
+    uint32 num_streams = 1;
+}
+
+message CrashRequest {
+    int32 pid = 1;
+}

@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmbus_core"
+edition = "2021"
+
+[dependencies]
+hvdef.workspace = true
+inspect.workspace = true
+guid.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+
+bitfield-struct.workspace = true
+futures.workspace = true
+static_assertions.workspace = true
+thiserror.workspace = true
+zerocopy.workspace = true
+zerocopy_helpers.workspace = true
+
+[lints]
+workspace = true

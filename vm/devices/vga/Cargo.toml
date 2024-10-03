@@ -1,0 +1,27 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vga"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+framebuffer.workspace = true
+pci_core.workspace = true
+video_core.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+memory_range.workspace = true
+
+inspect.workspace = true
+open_enum.workspace = true
+pal_async.workspace = true
+task_control.workspace = true
+
+parking_lot.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

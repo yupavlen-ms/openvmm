@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "openssl_kdf"
+edition = "2021"
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+openssl.workspace = true
+openssl-sys.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

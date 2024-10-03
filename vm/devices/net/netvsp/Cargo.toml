@@ -1,0 +1,47 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "netvsp"
+edition = "2021"
+
+[dependencies]
+net_backend.workspace = true
+net_backend_resources.workspace = true
+netvsp_resources.workspace = true
+vmbus_async.workspace = true
+vmbus_channel.workspace = true
+vmbus_core.workspace = true
+vmbus_ring.workspace = true
+vm_resource.workspace = true
+
+guestmem.workspace = true
+vmcore.workspace = true
+
+guid.workspace = true
+inspect.workspace = true
+inspect_counters.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+pal_async.workspace = true
+safeatomic.workspace = true
+task_control.workspace = true
+
+anyhow.workspace = true
+arrayvec.workspace = true
+async-trait.workspace = true
+bitfield-struct.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+hvdef.workspace = true
+
+[dev-dependencies]
+event-listener.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

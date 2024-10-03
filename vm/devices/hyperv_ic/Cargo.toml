@@ -1,0 +1,29 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "hyperv_ic"
+edition = "2021"
+
+[dependencies]
+hyperv_ic_protocol.workspace = true
+hyperv_ic_resources.workspace = true
+vmbus_async.workspace = true
+vmbus_channel.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+task_control.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+zerocopy_helpers.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

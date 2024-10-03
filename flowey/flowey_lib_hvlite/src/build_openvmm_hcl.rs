@@ -1,0 +1,155 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+//! Build `openvmm_hcl` binaries (NOT IGVM FILES!)
+
+use crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch;
+use crate::run_cargo_build::common::CommonArch;
+use crate::run_cargo_build::common::CommonTriple;
+use flowey::node::prelude::*;
+use std::collections::BTreeMap;
+use std::collections::BTreeSet;
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum OpenvmmHclFeature {
+    Gdb,
+    Tpm,
+    LocalOnlyCustom(String),
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+pub enum OpenvmmHclBuildProfile {
+    Debug,
+    Release,
+    OpenvmmHclShip,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct OpenvmmHclOutput {
+    pub bin: PathBuf,
+    pub dbg: Option<PathBuf>,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub struct OpenvmmHclBuildParams {
+    pub target: CommonTriple,
+    pub profile: OpenvmmHclBuildProfile,
+    pub features: BTreeSet<OpenvmmHclFeature>,
+    pub no_split_dbg_info: bool,
+}
+
+flowey_request! {
+    pub struct Request {
+        pub build_params: OpenvmmHclBuildParams,
+        pub openvmm_hcl_output: WriteVar<OpenvmmHclOutput>,
+    }
+}
+
+new_flow_node!(struct Node);
+
+impl FlowNode for Node {
+    type Request = Request;
+
+    fn imports(ctx: &mut ImportCtx<'_>) {
+        ctx.import::<crate::run_cargo_build::Node>();
+        ctx.import::<crate::init_openvmm_magicpath_openhcl_sysroot::Node>();
+    }
+
+    fn emit(requests: Vec<Self::Request>, ctx: &mut NodeCtx<'_>) -> anyhow::Result<()> {
+        // de-dupe incoming requests
+        let requests = requests
+            .into_iter()
+            .fold(BTreeMap::<_, Vec<_>>::new(), |mut m, r| {
+                let Request {
+                    build_params,
+                    openvmm_hcl_output,
+                } = r;
+                m.entry(build_params).or_default().push(openvmm_hcl_output);
+                m
+            });
+
+        // -- end of req processing -- //
+
+        for (
+            OpenvmmHclBuildParams {
+                target,
+                profile,
+                features,
+                no_split_dbg_info,
+            },
+            outvars,
+        ) in requests
+        {
+            let mut pre_build_deps = Vec::new();
+
+            let target = target.as_triple();
+
+            let arch = CommonArch::from_triple(&target).ok_or_else(|| {
+                anyhow::anyhow!("cannot build openvmm_hcl on {}", target.architecture)
+            })?;
+
+            let openhcl_deps_path =
+                ctx.reqv(|v| crate::init_openvmm_magicpath_openhcl_sysroot::Request {
+                    arch: match arch {
+                        CommonArch::X86_64 => OpenvmmSysrootArch::X64,
+                        CommonArch::Aarch64 => OpenvmmSysrootArch::Aarch64,
+                    },
+                    path: v,
+                });
+
+            // required due to ambient dependencies in openvmm_hcl's source code
+            pre_build_deps.push(openhcl_deps_path.clone().into_side_effect());
+
+            let output = ctx.reqv(|v| crate::run_cargo_build::Request {
+                crate_name: "openvmm_hcl".into(),
+                out_name: "openvmm_hcl".into(),
+                crate_type: flowey_lib_common::run_cargo_build::CargoCrateType::Bin,
+                profile: match profile {
+                    OpenvmmHclBuildProfile::Debug => crate::run_cargo_build::BuildProfile::Debug,
+                    OpenvmmHclBuildProfile::Release => {
+                        crate::run_cargo_build::BuildProfile::Release
+                    }
+                    OpenvmmHclBuildProfile::OpenvmmHclShip => {
+                        crate::run_cargo_build::BuildProfile::UnderhillShip
+                    }
+                },
+                features: features
+                    .iter()
+                    .map(|f| {
+                        match f {
+                            OpenvmmHclFeature::Gdb => "gdb",
+                            OpenvmmHclFeature::Tpm => "tpm",
+                            OpenvmmHclFeature::LocalOnlyCustom(s) => s,
+                        }
+                        .into()
+                    })
+                    .collect(),
+                target,
+                no_split_dbg_info,
+                extra_env: None,
+                pre_build_deps,
+                output: v,
+            });
+
+            ctx.emit_rust_step("report built openvmm_hcl", |ctx| {
+                let outvars = outvars.claim(ctx);
+                let output = output.claim(ctx);
+                move |rt| {
+                    let output = match rt.read(output) {
+                        crate::run_cargo_build::CargoBuildOutput::ElfBin { bin, dbg } => {
+                            OpenvmmHclOutput { bin, dbg }
+                        }
+                        _ => unreachable!(),
+                    };
+
+                    for var in outvars {
+                        rt.write(var, &output);
+                    }
+
+                    Ok(())
+                }
+            });
+        }
+
+        Ok(())
+    }
+}

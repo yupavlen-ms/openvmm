@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmm_core_defs"
+edition = "2021"
+
+[dependencies]
+virt.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+
+[lints]
+workspace = true

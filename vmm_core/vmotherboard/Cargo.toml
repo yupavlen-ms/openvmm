@@ -1,0 +1,63 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmotherboard"
+edition = "2021"
+
+[features]
+encryption = ["firmware_uefi/auth-var-verify-crypto"]
+
+dev_hyperv_vga = ["dep:vga"]
+dev_underhill_vga_proxy = ["dep:vga_proxy"]
+dev_generic_isa_floppy = ["dep:floppy"]
+dev_winbond_super_io_and_floppy_stub = ["dep:floppy_pcat_stub", "dep:floppy"] # dep:floppy is only used for the DriveRibbon type
+dev_winbond_super_io_and_floppy_full = ["dep:floppy"]
+
+[dependencies]
+chipset_device.workspace = true
+chipset_device_resources.workspace = true
+
+state_unit.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+# vm/devices
+chipset_legacy.workspace = true
+chipset.workspace = true
+chipset_resources.workspace = true
+firmware_pcat.workspace = true
+firmware_uefi.workspace = true
+uefi_nvram_storage = { workspace = true, features = ["inspect"] }
+framebuffer.workspace = true
+floppy = { optional = true, workspace = true }
+floppy_pcat_stub = { optional = true, workspace = true }
+generation_id.workspace = true
+guest_watchdog.workspace = true
+ide.workspace = true
+missing_dev.workspace = true
+pci_bus.workspace = true
+vga_proxy = { optional = true, workspace = true }
+vga = { optional = true, workspace = true }
+watchdog_core.workspace = true
+
+arc_cyclic_builder.workspace = true
+closeable_mutex.workspace = true
+inspect_counters.workspace = true
+inspect.workspace = true
+local_clock.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+range_map_vec.workspace = true
+tracelimit.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+parking_lot.workspace = true
+paste.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmm_test_macros"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+petri_artifacts_common.workspace = true
+petri_artifacts_vmm_test.workspace = true
+
+proc-macro2.workspace = true
+quote.workspace = true
+syn = { workspace = true, features = [ "full" ] }
+
+[lints]
+workspace = true

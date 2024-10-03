@@ -1,0 +1,156 @@
+// Copyright (C) Microsoft Corporation. All rights reserved.
+
+syntax = "proto3";
+
+package proto;
+
+import "google/protobuf/empty.proto";
+
+// Use short names so the fuzzer is more likely to be able to find it
+service S {
+    rpc A(a) returns (google.protobuf.Empty);
+    rpc B(b) returns (google.protobuf.Empty);
+    rpc C(c) returns (google.protobuf.Empty);
+    rpc D(d) returns (google.protobuf.Empty);
+    rpc E(e) returns (google.protobuf.Empty);
+    rpc F(f) returns (google.protobuf.Empty);
+    rpc G(g) returns (google.protobuf.Empty);
+    rpc H(h) returns (google.protobuf.Empty);
+    rpc I(i) returns (google.protobuf.Empty);
+    rpc J(j) returns (google.protobuf.Empty);
+    rpc K(k) returns (google.protobuf.Empty);
+    rpc L(l) returns (google.protobuf.Empty);
+    rpc M(m) returns (google.protobuf.Empty);
+    rpc N(n) returns (google.protobuf.Empty);
+    rpc O(o) returns (google.protobuf.Empty);
+    rpc P(p) returns (google.protobuf.Empty);
+    rpc Q(q) returns (google.protobuf.Empty);
+    rpc R(r) returns (google.protobuf.Empty);
+    // Skip S for name conflict
+    rpc T(t) returns (google.protobuf.Empty);
+    rpc U(u) returns (google.protobuf.Empty);
+    rpc V(v) returns (google.protobuf.Empty);
+    rpc W(w) returns (google.protobuf.Empty);
+}
+
+message a {
+    double a = 1;
+}
+
+message b {
+    float b = 2;
+}
+
+message c {
+    int32 c = 3;
+}
+
+message d {
+    int64 d = 4;
+}
+
+message e {
+    uint32 e = 5;
+}
+
+message f {
+    uint64 f = 6;
+}
+
+message g {
+    sint32 g = 1234;
+}
+
+message h {
+    sint64 h = 8;
+}
+
+message i {
+    fixed32 i = 9;
+}
+
+message j {
+    fixed64 j = 10;
+}
+
+message k {
+    sfixed32 k = 11;
+}
+
+message l {
+    sfixed64 l = 12;
+}
+
+message m {
+    bool m = 4090;
+}
+
+message n {
+    string n = 14;
+}
+
+message o {
+    bytes o = 15;
+}
+
+message p {
+    bool p = 1;
+    bytes p2 = 2;
+}
+
+message q {
+    enum Qe {
+        A = 0;
+        B = 1;
+        C = 2;
+        D = 3;
+        E = 4;
+        F = 5;
+        G = 6;
+        H = 7;
+        I = 8;
+        J = 9;
+        K = 10;
+        L = 11;
+        M = 12;
+        N = 13;
+        O = 14;
+        P = 15;
+        Q = 16;
+        R = 17;
+        S = 18;
+        T = 19;
+        U = 20;
+        V = 21;
+        W = 22;
+        X = 23;
+        Y = 24;
+        Z = 25;
+    }
+
+    Qe q = 1;
+}
+
+message r {
+    o r = 1;
+}
+
+message t {
+    map<string, bytes> t = 2;
+}
+
+message u {
+    optional bytes u = 1;
+}
+
+message v {
+    repeated bytes v = 1;
+}
+
+message w {
+    oneof w {
+        string w1 = 3;
+        bytes w2 = 7;
+        bool w3 = 12;
+    }
+}

@@ -1,0 +1,29 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "diag_client"
+edition = "2021"
+
+[dependencies]
+diag_proto.workspace = true
+
+fs-err.workspace = true
+inspect_proto.workspace = true
+guid.workspace = true
+inspect.workspace = true
+mesh.workspace = true
+mesh_ttrpc.workspace = true
+unix_socket.workspace = true
+pal_async.workspace = true
+vmsocket.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+socket2.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_Networking_WinSock"] }
+
+[lints]
+workspace = true

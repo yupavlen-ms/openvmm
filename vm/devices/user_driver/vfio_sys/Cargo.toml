@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vfio_sys"
+edition = "2021"
+
+[target.'cfg(unix)'.dependencies]
+anyhow.workspace = true
+bitfield-struct.workspace = true
+libc.workspace = true
+nix = { workspace = true, features = ["ioctl"] }
+tracing.workspace = true
+vfio-bindings.workspace = true
+
+[lints]
+workspace = true

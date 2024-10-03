@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "win1_support"
+edition = "2021"
+
+[target.'cfg(windows)'.dependencies]
+widestring.workspace = true
+
+[build-dependencies]
+win_import_lib.workspace = true
+
+[lints]
+workspace = true

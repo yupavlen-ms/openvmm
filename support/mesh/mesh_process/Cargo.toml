@@ -1,0 +1,26 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mesh_process"
+edition = "2021"
+
+[dependencies]
+debug_ptr.workspace = true
+inspect = { workspace = true, features = ["std", "defer"] }
+inspect_rlimit.workspace = true
+inspect_task.workspace = true
+mesh.workspace = true
+mesh_remote.workspace = true
+pal.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+base64.workspace = true
+futures.workspace = true
+futures-concurrency.workspace = true
+slab.workspace = true
+tracing.workspace = true
+unicycle.workspace = true
+
+[lints]
+workspace = true

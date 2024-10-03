@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "scsi_buffers"
+edition = "2021"
+
+[dependencies]
+guestmem.workspace = true
+safeatomic.workspace = true
+
+smallvec.workspace = true
+zerocopy.workspace = true
+event-listener.workspace = true
+
+[lints]
+workspace = true

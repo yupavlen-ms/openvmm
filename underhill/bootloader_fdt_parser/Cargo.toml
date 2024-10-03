@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "bootloader_fdt_parser"
+edition = "2021"
+
+[dependencies]
+fdt = { workspace = true, features = ["std"] }
+inspect.workspace = true
+loader_defs = { workspace = true, features = ["inspect"] }
+memory_range = { workspace = true, features = ["inspect"] }
+vm_topology = { workspace = true, features = ["inspect"] }
+
+anyhow.workspace = true
+fs-err.workspace = true
+igvm_defs.workspace = true
+
+[lints]
+workspace = true

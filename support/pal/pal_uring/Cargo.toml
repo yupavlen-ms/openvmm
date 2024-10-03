@@ -1,0 +1,32 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pal_uring"
+edition = "2021"
+
+[features]
+# Disable tests that do not pass in the CI environment.
+ci = []
+
+[target.'cfg(target_os = "linux")'.dependencies]
+inspect.workspace = true
+pal.workspace = true
+pal_async.workspace = true
+
+libc.workspace = true
+futures.workspace = true
+io-uring.workspace = true
+parking_lot.workspace = true
+slab.workspace = true
+smallbox.workspace = true
+tracing.workspace = true
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+pal_async = { workspace = true, features = ["tests"] }
+
+once_cell.workspace = true
+tempfile.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

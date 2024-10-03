@@ -1,0 +1,42 @@
+/target
+**/*.rs.bk
+
+.vscode/
+.packages
+
+*.vhdx
+*.vhd
+*.img
+*.iso
+*.vmgs
+
+# local fuzzing artifacts
+**/fuzz/target
+**/fuzz/corpus
+**/fuzz/artifacts
+**/fuzz/coverage
+
+# criterion output files
+**/target/criterion
+
+# Ignore vm artifacts in the root directory
+/*.bin
+/*.json
+/*.cpio.gz
+/*.fd
+
+# Ignore developer scripts in the root directory
+/*.sh
+/*.cmd
+/*.ps1
+/*.code-workspace
+
+# Output from vmm tests
+vmm_test_results/
+
+.gdb_history
+.hvlite_history
+__pycache__
+
+flowey-out
+flowey-persist

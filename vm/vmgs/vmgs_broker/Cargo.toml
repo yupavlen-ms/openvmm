@@ -1,0 +1,31 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmgs_broker"
+edition = "2021"
+
+[features]
+default = []
+
+# Use native windows crypto APIs
+encryption_win = ["vmgs/encryption_win"]
+# Use OpenSSL crypto APIs
+encryption_ossl = ["vmgs/encryption_ossl"]
+
+[dependencies]
+vmgs_format.workspace = true
+vmgs_resources.workspace = true
+vmgs = { workspace = true, features = ["inspect", "save_restore"] }
+vm_resource.workspace = true
+vmcore.workspace = true
+
+inspect = { workspace = true, features = ["defer"] }
+mesh_channel.workspace = true
+pal_async.workspace = true
+
+async-trait.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

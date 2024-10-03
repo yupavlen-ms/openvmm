@@ -1,0 +1,16 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "ucs2"
+edition = "2021"
+
+[features]
+mesh = ["mesh_protobuf"]
+
+[dependencies]
+mesh_protobuf = { workspace = true, optional = true }
+
+thiserror.workspace = true
+
+[lints]
+workspace = true

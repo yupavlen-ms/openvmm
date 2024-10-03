@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vga_proxy"
+edition = "2021"
+
+[dependencies]
+inspect.workspace = true
+chipset_device.workspace = true
+vmcore.workspace = true
+
+async-trait.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

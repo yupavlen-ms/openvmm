@@ -1,0 +1,24 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "net_dio"
+edition = "2021"
+
+[target.'cfg(windows)'.dependencies]
+net_backend.workspace = true
+net_backend_resources.workspace = true
+vmswitch.workspace = true
+
+vm_resource.workspace = true
+
+inspect.workspace = true
+guid.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+parking_lot.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "flowey_lib_hvlite"
+edition = "2021"
+
+[dependencies]
+flowey.workspace = true
+flowey_lib_common.workspace = true
+
+vmm_test_images = { workspace = true, features = ["serde"] }
+igvmfilegen_config.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+log.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+target-lexicon = { workspace = true, features = ["serde_support"] }
+which.workspace = true
+xshell.workspace = true
+
+[lints]
+workspace = true

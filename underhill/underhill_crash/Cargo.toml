@@ -1,0 +1,27 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_crash"
+edition = "2021"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+get_protocol.workspace = true
+pal_async.workspace = true
+vmbus_async.workspace = true
+vmbus_user_channel.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+futures.workspace = true
+guid.workspace = true
+libc.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+zerocopy.workspace = true
+
+[build-dependencies]
+vergen = { workspace = true, features = ["git", "gitcl"] }
+
+[lints]
+workspace = true

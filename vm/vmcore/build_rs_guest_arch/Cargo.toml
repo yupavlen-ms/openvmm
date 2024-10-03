@@ -1,0 +1,10 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "build_rs_guest_arch"
+edition = "2021"
+
+[dependencies]
+
+[lints]
+workspace = true

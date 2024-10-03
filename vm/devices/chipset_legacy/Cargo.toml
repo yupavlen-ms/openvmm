@@ -1,0 +1,31 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "chipset_legacy"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+chipset.workspace = true
+floppy_pcat_stub.workspace = true
+floppy.workspace = true
+guestmem.workspace = true
+local_clock.workspace = true
+pci_bus.workspace = true
+pci_core.workspace = true
+memory_range.workspace = true
+vmcore.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+open_enum.workspace = true
+
+thiserror.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+pal_async.workspace = true
+
+[lints]
+workspace = true

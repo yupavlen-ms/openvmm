@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mesh_tracing"
+edition = "2021"
+
+[dependencies]
+mesh.workspace = true
+pal_async.workspace = true
+guid = { workspace = true, features = ["mesh"] }
+inspect = { workspace = true, features = ["std", "defer"] }
+tracing-subscriber.workspace = true
+tracing.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+
+[lints]
+workspace = true

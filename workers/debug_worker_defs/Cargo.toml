@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "debug_worker_defs"
+edition = "2021"
+
+[dependencies]
+vmm_core_defs.workspace = true
+
+mesh.workspace = true
+mesh_worker.workspace = true
+vmsocket.workspace = true
+
+[lints]
+workspace = true

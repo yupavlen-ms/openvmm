@@ -1,0 +1,22 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vm_manifest_builder"
+edition = "2021"
+
+[dependencies]
+chipset_resources.workspace = true
+input_core.workspace = true
+missing_dev_resources.workspace = true
+serial_16550_resources.workspace = true
+serial_pl011_resources.workspace = true
+serial_core.workspace = true
+vmotherboard.workspace = true
+vm_resource.workspace = true
+
+mesh.workspace = true
+
+thiserror.workspace = true
+
+[lints]
+workspace = true

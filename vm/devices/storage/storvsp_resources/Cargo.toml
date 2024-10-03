@@ -1,0 +1,14 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "storvsp_resources"
+edition = "2021"
+
+[dependencies]
+vm_resource.workspace = true
+
+guid = { workspace = true, features = ["mesh"] }
+mesh.workspace = true
+
+[lints]
+workspace = true

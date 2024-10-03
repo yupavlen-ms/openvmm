@@ -1,0 +1,21 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pci_bus"
+edition = "2021"
+
+[dependencies]
+chipset_device.workspace = true
+vmcore.workspace = true
+
+inspect.workspace = true
+mesh.workspace = true
+
+bitfield-struct.workspace = true
+thiserror.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

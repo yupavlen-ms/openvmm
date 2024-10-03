@@ -1,0 +1,177 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "underhill_core"
+edition = "2021"
+
+[features]
+# Enable profiler support
+profiler = ["dep:profiler_worker", "diag_server/profiler"]
+
+# Enable gdbstub support
+gdb = ["debug_worker_defs", "vmm_core/gdb", "virt_underhill/gdb"]
+
+# Enable locally compiling and statically linking a copy of OpenSSL.
+# The build process requires a C compiler, perl, and make.
+openssl-vendored = ["underhill_attestation/openssl-vendored"]
+
+# Enable VPCI device support
+vpci = []
+
+[target.'cfg(target_os = "linux")'.dependencies]
+vmotherboard = { workspace = true, features = [
+    "encryption",
+    "dev_underhill_vga_proxy",
+    "dev_winbond_super_io_and_floppy_stub",
+] }
+
+build_info.workspace = true
+cvm_tracing.workspace = true
+diag_proto.workspace = true
+diag_server.workspace = true
+debug_worker_defs = { workspace = true, optional = true }
+hcl.workspace = true
+shared_pool_alloc =  { workspace = true, features = ["vfio"] }
+virt.workspace = true
+vmm_core.workspace = true
+vmm_core_defs.workspace = true
+state_unit.workspace = true
+vm_loader.workspace = true
+vnc_worker_defs.workspace = true
+chipset.workspace = true
+chipset_device.workspace = true
+chipset_device_resources.workspace = true
+closeable_mutex.workspace = true
+profiler_worker = { workspace = true, optional = true }
+chipset_legacy.workspace = true
+disk_backend.workspace = true
+disk_backend_resources.workspace = true
+disk_blockdevice.workspace = true
+disk_nvme.workspace = true
+firmware_uefi.workspace = true
+firmware_uefi_custom_vars.workspace = true
+hyperv_ic_guest.workspace = true
+hyperv_ic_resources.workspace = true
+hyperv_secure_boot_templates.workspace = true
+hyperv_uefi_custom_vars_json.workspace = true
+framebuffer.workspace = true
+hcl_compat_uefi_nvram_storage = { workspace = true, features = ["inspect"] }
+get_helpers.workspace = true
+get_protocol.workspace = true
+guest_emulation_transport.workspace = true
+ide.workspace = true
+ide_resources.workspace = true
+input_core.workspace = true
+kmsg_defs.workspace = true
+mana_driver.workspace = true
+mcr_resources.workspace = true
+net_backend.workspace = true
+net_backend_resources.workspace = true
+net_packet_capture.workspace = true
+net_mana.workspace = true
+netvsp.workspace = true
+nvme_driver.workspace = true
+nvme_resources.workspace = true
+scsi_core.workspace = true
+scsidisk.workspace = true
+scsidisk_resources.workspace = true
+serial_16550_resources.workspace = true
+sidecar_client.workspace = true
+storage_string.workspace = true
+storvsp.workspace = true
+storvsp_resources.workspace = true
+tpm_resources.workspace = true
+tpm = { workspace = true, features = ["tpm"] }
+tracelimit.workspace = true
+uidevices_resources.workspace = true
+underhill_attestation.workspace = true
+underhill_confidentiality = { workspace = true, features = ["std"] }
+underhill_config.workspace = true
+underhill_mem.workspace = true
+underhill_threadpool.workspace = true
+bootloader_fdt_parser.workspace = true
+vga_proxy.workspace = true
+video_core.workspace = true
+virt_underhill.workspace = true
+vm_manifest_builder.workspace = true
+vmbus_async.workspace = true
+vmbus_user_channel.workspace = true
+vmbus_channel.workspace = true
+vmbus_core.workspace = true
+vmbus_relay.workspace = true
+vmbus_relay_intercept_device.workspace = true
+vmbus_serial_guest.workspace = true
+vmbus_server.workspace = true
+vpci.workspace = true
+watchdog_core.workspace = true
+watchdog_vmgs_format.workspace = true
+scsi_buffers.workspace = true
+
+aarch64defs.workspace = true
+acpi_spec = { workspace = true, features = ["std"] }
+hvdef.workspace = true
+igvm.workspace = true
+igvm_defs.workspace = true
+loader_defs = { workspace = true, features = ["inspect"] }
+loader.workspace = true
+memory_range.workspace = true
+vm_topology.workspace = true
+guestmem.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+vmgs = { workspace = true, features = ["encryption_ossl", "save_restore"] }
+vmgs_broker = { workspace = true, features = ["encryption_ossl"] }
+vmgs_resources.workspace = true
+x86defs.workspace = true
+
+safe_x86_intrinsics.workspace = true
+debug_ptr.workspace = true
+guid.workspace = true
+inspect.workspace = true
+kmsg.workspace = true
+local_clock.workspace = true
+mesh_process.workspace = true
+mesh_worker.workspace = true
+mesh.workspace = true
+mesh_tracing.workspace = true
+pal_async.workspace = true
+pal_uring.workspace = true
+pal.workspace = true
+sparse_mmap.workspace = true
+tracing_helpers.workspace = true
+tee_call.workspace = true
+uevent.workspace = true
+user_driver.workspace = true
+vmsocket.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+blocking.workspace = true
+cfg-if.workspace = true
+fs-err.workspace = true
+futures-concurrency.workspace = true
+futures.workspace = true
+getrandom.workspace = true
+libc.workspace = true
+parking_lot.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_helpers.workspace = true
+serde_json.workspace = true
+socket2.workspace = true
+thiserror.workspace = true
+time = { workspace = true, features = ["macros"] }
+tracing-subscriber = { workspace = true, features = ["registry"] }
+tracing.workspace = true
+zerocopy.workspace = true
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+firmware_pcat.workspace = true
+
+[dev-dependencies]
+guest_emulation_transport = { workspace = true, features = ["test_utilities"] }
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,29 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "sidecar"
+edition = "2021"
+
+[[bin]]
+name = "sidecar"
+test = false
+
+[features]
+# Disable build scripts that do not pass in the CI environment.
+ci = []
+
+[dependencies]
+minimal_rt.workspace = true
+hvdef.workspace = true
+memory_range.workspace = true
+sidecar_defs.workspace = true
+x86defs.workspace = true
+
+arrayvec.workspace = true
+zerocopy.workspace = true
+
+[build-dependencies]
+minimal_rt_build.workspace = true
+
+[lints]
+workspace = true

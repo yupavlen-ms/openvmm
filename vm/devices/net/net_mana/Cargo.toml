@@ -1,0 +1,34 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "net_mana"
+edition = "2021"
+
+[dependencies]
+gdma_defs.workspace = true
+mana_driver.workspace = true
+mesh.workspace = true
+net_backend.workspace = true
+user_driver.workspace = true
+
+guestmem.workspace = true
+vmcore.workspace = true
+
+inspect = { workspace = true, features = ["std"] }
+pal_async.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+chipset_device.workspace = true
+gdma.workspace = true
+pci_core.workspace = true
+test_with_tracing.workspace = true
+
+[lints]
+workspace = true

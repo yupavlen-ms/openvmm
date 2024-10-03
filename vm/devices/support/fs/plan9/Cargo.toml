@@ -1,0 +1,15 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "plan9"
+edition = "2021"
+
+[dependencies]
+lx.workspace = true
+lxutil.workspace = true
+
+parking_lot.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

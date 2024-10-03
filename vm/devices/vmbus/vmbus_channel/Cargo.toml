@@ -1,0 +1,31 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmbus_channel"
+edition = "2021"
+
+[dependencies]
+vmbus_core.workspace = true
+vmbus_ring.workspace = true
+
+guestmem.workspace = true
+vmcore.workspace = true
+vm_resource.workspace = true
+
+inspect.workspace = true
+guid = { workspace = true, features = ["mesh", "inspect"] }
+mesh.workspace = true
+pal_event.workspace = true
+pal_async.workspace = true
+task_control.workspace = true
+
+anyhow.workspace = true
+async-trait.workspace = true
+futures.workspace = true
+parking_lot.workspace = true
+thiserror.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

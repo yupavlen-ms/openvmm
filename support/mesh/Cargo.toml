@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "mesh"
+edition = "2021"
+
+[features]
+default = []
+prost = ["mesh_protobuf/prost"]
+socket2 = ["mesh_protobuf/socket2"]
+
+[dependencies]
+mesh_channel.workspace = true
+mesh_derive.workspace = true
+mesh_node.workspace = true
+mesh_protobuf.workspace = true
+
+[lints]
+workspace = true

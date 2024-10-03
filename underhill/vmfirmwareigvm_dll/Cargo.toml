@@ -1,0 +1,17 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmfirmwareigvm_dll"
+edition = "2021"
+
+[features]
+ci = []
+
+[lib]
+crate-type = ["cdylib"]
+
+[build-dependencies]
+embed-resource.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "profiler_worker"
+edition = "2021"
+
+[dependencies]
+mesh = { workspace = true, features = ["socket2"] }
+mesh_worker.workspace = true
+pal_async.workspace = true
+
+anyhow.workspace = true
+fs-err.workspace = true
+futures.workspace = true
+tracing.workspace = true
+socket2.workspace = true
+
+[lints]
+workspace = true

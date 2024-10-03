@@ -1,0 +1,34 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "vmbus_relay_intercept_device"
+edition = "2021"
+
+[dependencies]
+vmbus_channel.workspace = true
+vmbus_client.workspace = true
+vmbus_core.workspace = true
+vmbus_relay.workspace = true
+vmbus_ring.workspace = true
+vmbus_server.workspace = true
+vmcore.workspace = true
+
+guid.workspace = true
+hcl.workspace = true
+hvdef.workspace = true
+inspect.workspace = true
+mesh.workspace = true
+pal_async.workspace = true
+safeatomic.workspace = true
+task_control.workspace = true
+user_driver.workspace = true
+virt.workspace = true
+
+anyhow.workspace = true
+futures.workspace = true
+tracelimit.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[lints]
+workspace = true

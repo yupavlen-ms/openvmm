@@ -1,0 +1,12 @@
+{
+    "version": "V1",
+    "fixed": {
+        "scsi_sub_channels": 31
+    },
+    "dynamic": {
+        "storage_controllers": [
+        ],
+        "nic_devices": [
+        ]
+    }
+}

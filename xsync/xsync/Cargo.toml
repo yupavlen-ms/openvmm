@@ -1,0 +1,23 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "xsync"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+cargo_toml.workspace = true
+cargo-lock.workspace = true
+clap = { workspace = true, features = ["derive", "env"] }
+dunce.workspace = true
+fs-err.workspace = true
+log.workspace = true
+pathdiff.workspace = true
+semver.workspace = true
+serde.workspace = true
+toml_edit = { workspace = true, features = ["serde"] }
+
+ci_logger.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,64 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "pal"
+edition = "2021"
+
+[features]
+# Disable tests that do not pass in the CI environment.
+ci = []
+sandbox_tests = []
+
+[build-dependencies]
+win_import_lib.workspace = true
+
+[dependencies]
+getrandom.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+pal_event.workspace = true
+
+ntapi = { workspace = true, features = ["impl-default"] }
+socket2 = { workspace = true, features = ["all"] }
+widestring.workspace = true
+
+[target.'cfg(windows)'.dependencies.winapi]
+workspace = true
+features = [
+    "errhandlingapi",
+    "fileapi",
+    "handleapi",
+    "heapapi",
+    "ioapiset",
+    "impl-default",
+    "jobapi2",
+    "memoryapi",
+    "namedpipeapi",
+    "ntstatus",
+    "processenv",
+    "processthreadsapi",
+    "sddl",
+    "securitybaseapi",
+    "std",
+    "synchapi",
+    "threadpoolapiset",
+    "winbase",
+    "winerror",
+    "winioctl",
+    "winnt",
+    "winsock2",
+]
+
+[target.'cfg(unix)'.dependencies]
+libc.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+caps.workspace = true
+seccompiler.workspace = true
+landlock.workspace = true
+fs-err.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

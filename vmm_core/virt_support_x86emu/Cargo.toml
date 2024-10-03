@@ -1,0 +1,25 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virt_support_x86emu"
+edition = "2021"
+
+[dependencies]
+guestmem.workspace = true
+hvdef.workspace = true
+tracelimit.workspace = true
+vm_topology.workspace = true
+virt.workspace = true
+x86defs.workspace = true
+x86emu.workspace = true
+
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+pal_async.workspace = true
+iced-x86 = { workspace = true, features = ["code_asm"] }
+
+[lints]
+workspace = true

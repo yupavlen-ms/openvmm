@@ -1,0 +1,139 @@
+{
+    "version": "V1",
+    "fixed": {
+        "scsi_sub_channels": 31
+    },
+    "dynamic": {
+        "storage_controllers": [
+            {
+                "instance_id": "9e14fd10-19cb-4da5-b667-e8e38a436cb8",
+                "protocol": "IDE",
+                "luns": [
+                    {
+                        "channel": 0,
+                        "location": 0,
+                        "device_id": "d32872fd-e6a6-474c-a1a6-dd0d5248857e",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some model number",
+                        "fua": false,
+                        "write_cache": true,
+                        "physical_devices": {
+                            "type": "single",
+                            "device": {
+                                "device_type": "nvme",
+                                "device_path": "3217a48a-c820-4727-8c4c-3e2086aba839",
+                                "sub_device_path": 1
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "instance_id": "ca567511-e643-4bef-bf54-f73678e8b7b5",
+                "protocol": "SCSI",
+                "luns": [
+                    {
+                        "location": 0,
+                        "device_id": "8c3c18a5-fd30-4700-bea3-d1a643ea77d0",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some model number",
+                        "fua": false,
+                        "write_cache": true,
+                        "physical_devices": {
+                            "type": "single",
+                            "device": {
+                                "device_type": "nvme",
+                                "device_path": "3217a48a-c820-4727-8c4c-3e2086aba839",
+                                "sub_device_path": 2
+                            }
+                        }
+                    },
+                    {
+                        "location": 1,
+                        "device_id": "231dccec-d821-469c-afb7-622711249aaa",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some model number",
+                        "fua": false,
+                        "write_cache": true,
+                        "physical_devices": {
+                            "type": "single",
+                            "device": {
+                                "device_type": "nvme",
+                                "device_path": "3217a48a-c820-4727-8c4c-3e2086aba839",
+                                "sub_device_path": 3
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "instance_id": "ca567512-e643-4bef-bf54-f73678e8b7b5",
+                "protocol": "SCSI",
+                "luns": [
+                    {
+                        "location": 2,
+                        "chunk_size_in_kb": 128,
+                        "total_logic_size_in_kb": 643200,
+                        "device_id": "9A1714E8-4490-4D97-B4D8-E80888A7992E",
+                        "vendor_id": "Msft",
+                        "product_id": "Virtual Disk",
+                        "product_revision_level": "1.0",
+                        "serial_number": "some serial number",
+                        "model_number": "some module number",
+                        "fua": false,
+                        "write_cache": true,
+                        "physical_devices": {
+                            "type": "striping",
+                            "devices": [
+                                {
+                                    "device_type": "NVMe",
+                                    "device_path": "1B863315-B019-4F7B-AE4B-D1A4E60FC73E",
+                                    "sub_device_path": 1
+                                },
+                                {
+                                    "device_type": "NVMe",
+                                    "device_path": "0C6F3775-E810-4BD2-975A-FFE1413BBA89",
+                                    "sub_device_path": 1
+                                },
+                                {
+                                    "device_type": "NVMe",
+                                    "device_path": "F7B7ECC5-82B9-4FCB-BA61-9D2ADD490FD4",
+                                    "sub_device_path": 1
+                                },
+                                {
+                                    "device_type": "NVMe",
+                                    "device_path": "5ED341EE-D76C-483D-AB90-3FA84FD8555B",
+                                    "sub_device_path": 1
+                                },
+                                {
+                                    "device_type": "NVMe",
+                                    "device_path": "96FD55DC-9922-4618-AC35-A29639A19887",
+                                    "sub_device_path": 1
+                                },
+                                {
+                                    "device_type": "NVMe",
+                                    "device_path": "280FE622-D2D6-433B-A7E1-9DE878640324",
+                                    "sub_device_path": 1
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        ],
+        "nic_devices": [
+            {
+                "instance_id": "9e14fd10-19cb-4da5-b667-e8e38a436cb8"
+            }
+        ]
+    }
+}

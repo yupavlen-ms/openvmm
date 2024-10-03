@@ -1,0 +1,35 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "virt"
+edition = "2021"
+
+[dependencies]
+aarch64defs.workspace = true
+hvdef.workspace = true
+pci_core.workspace = true
+memory_range = { workspace = true, features = ["inspect"] }
+vm_topology = { workspace = true, features = ["inspect"] }
+guestmem.workspace = true
+vmcore.workspace = true
+x86defs.workspace = true
+
+inspect.workspace = true
+mesh_protobuf.workspace = true
+pal_event.workspace = true
+tracelimit.workspace = true
+
+anyhow.workspace = true
+parking_lot.workspace = true
+slab.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+zerocopy.workspace = true
+
+[dev-dependencies]
+
+[build-dependencies]
+build_rs_guest_arch.workspace = true
+
+[lints]
+workspace = true

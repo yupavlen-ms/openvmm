@@ -1,0 +1,19 @@
+# Copyright (C) Microsoft Corporation. All rights reserved.
+
+[package]
+name = "azure_profiler_proto"
+edition = "2021"
+
+[dependencies]
+inspect.workspace = true
+mesh.workspace = true
+mesh_ttrpc.workspace = true
+
+prost.workspace = true
+
+[build-dependencies]
+mesh_build.workspace = true
+prost-build.workspace = true
+
+[lints]
+workspace = true
