@@ -15,16 +15,17 @@ pub(crate) const LINUX_TARGET: &str = "linux_log";
 pub(crate) const PCAT_TARGET: &str = "pcat_log";
 pub(crate) const UEFI_TARGET: &str = "uefi_log";
 pub(crate) const OPENHCL_TARGET: &str = "openhcl_log";
-pub(crate) const HVLITE_TARGET: &str = "hvlite_log";
+pub(crate) const OPENVMM_TARGET: &str = "openvmm_log";
 
 pub(crate) fn try_init_tracing(
     log_file: File,
 ) -> Result<(), tracing_subscriber::util::TryInitError> {
-    let targets = if let Ok(var) = std::env::var("HVLITE_LOG") {
-        var.parse().unwrap()
-    } else {
-        Targets::new().with_default(LevelFilter::DEBUG)
-    };
+    let targets =
+        if let Ok(var) = std::env::var("OPENVMM_LOG").or_else(|_| std::env::var("HVLITE_LOG")) {
+            var.parse().unwrap()
+        } else {
+            Targets::new().with_default(LevelFilter::DEBUG)
+        };
     tracing_subscriber::fmt()
         .compact()
         .with_ansi(false) // avoid polluting logs with escape sequences
@@ -60,7 +61,7 @@ impl<'a> MakeWriter<'a> for PetriWriter {
             PCAT_TARGET,
             UEFI_TARGET,
             OPENHCL_TARGET,
-            HVLITE_TARGET,
+            OPENVMM_TARGET,
         ]
         .contains(&meta.target())
         {
