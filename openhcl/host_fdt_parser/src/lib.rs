@@ -197,6 +197,7 @@ pub struct ParsedDeviceTree<
     const MAX_MEMORY_ENTRIES: usize,
     const MAX_CPU_ENTRIES: usize,
     const MAX_COMMAND_LINE_SIZE: usize,
+    const MAX_ENTROPY_SIZE: usize,
 > {
     /// Total size of the parsed device tree, in bytes.
     pub device_tree_size: usize,
@@ -226,6 +227,9 @@ pub struct ParsedDeviceTree<
     pub gic: Option<GicInfo>,
     /// The vtl2 memory allocation mode OpenHCL should use for memory.
     pub memory_allocation_mode: MemoryAllocationMode,
+    /// Entropy from the host to be used by the OpenHCL kernel
+    #[cfg_attr(feature = "inspect", inspect(with = "Option::is_some"))]
+    pub entropy: Option<ArrayVec<u8, MAX_ENTROPY_SIZE>>,
 }
 
 /// The memory allocation mode provided by the host. This determines how OpenHCL
@@ -285,7 +289,9 @@ impl<
         const MAX_MEMORY_ENTRIES: usize,
         const MAX_CPU_ENTRIES: usize,
         const MAX_COMMAND_LINE_SIZE: usize,
-    > ParsedDeviceTree<MAX_MEMORY_ENTRIES, MAX_CPU_ENTRIES, MAX_COMMAND_LINE_SIZE>
+        const MAX_ENTROPY_SIZE: usize,
+    >
+    ParsedDeviceTree<MAX_MEMORY_ENTRIES, MAX_CPU_ENTRIES, MAX_COMMAND_LINE_SIZE, MAX_ENTROPY_SIZE>
 {
     /// Create an empty parsed device tree structure. This is used to construct
     /// a valid instance to pass into [`Self::parse`].
@@ -301,6 +307,7 @@ impl<
             com3_serial: false,
             gic: None,
             memory_allocation_mode: MemoryAllocationMode::Host,
+            entropy: None,
         }
     }
 
@@ -471,6 +478,45 @@ impl<
                         }
                         mode => {
                             return Err(ErrorKind::UnexpectedMemoryAllocationMode { mode });
+                        }
+                    }
+
+                    for openhcl_child in child.children() {
+                        let openhcl_child = openhcl_child.map_err(|error| ErrorKind::Node {
+                            parent_name: root.name,
+                            error,
+                        })?;
+
+                        #[allow(clippy::single_match)]
+                        match openhcl_child.name {
+                            "entropy" => {
+                                let host_entropy = openhcl_child
+                                    .find_property("reg")
+                                    .map_err(ErrorKind::Prop)?
+                                    .ok_or(ErrorKind::PropMissing {
+                                        node_name: openhcl_child.name,
+                                        prop_name: "reg",
+                                    })?
+                                    .data;
+
+                                if host_entropy.len() > MAX_ENTROPY_SIZE {
+                                    #[cfg(feature = "std")]
+                                    tracing::warn!(
+                                        entropy_len = host_entropy.len(),
+                                        "Truncating host-provided entropy",
+                                    );
+                                }
+                                let use_entropy_bytes =
+                                    core::cmp::min(host_entropy.len(), MAX_ENTROPY_SIZE);
+                                let entropy =
+                                    ArrayVec::try_from(&host_entropy[..use_entropy_bytes]).unwrap();
+
+                                storage.entropy = Some(entropy);
+                            }
+                            _ => {
+                                #[cfg(feature = "std")]
+                                tracing::warn!(?openhcl_child.name, "Unrecognized OpenHCL child node");
+                            }
                         }
                     }
                 }
@@ -658,6 +704,7 @@ impl<
             com3_serial: _,
             gic: _,
             memory_allocation_mode: _,
+            entropy: _,
         } = storage;
 
         *device_tree_size = parser.total_size;
@@ -1027,7 +1074,7 @@ mod tests {
     use fdt::builder::BuilderConfig;
     use fdt::builder::Nest;
 
-    type TestParsedDeviceTree = ParsedDeviceTree<32, 32, 1024>;
+    type TestParsedDeviceTree = ParsedDeviceTree<32, 32, 1024, 64>;
 
     fn new_vmbus_mmio(mmio: &[MemoryRange]) -> ArrayVec<MemoryRange, 2> {
         let mut vec = ArrayVec::new();
