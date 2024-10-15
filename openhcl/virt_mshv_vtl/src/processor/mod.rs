@@ -234,6 +234,8 @@ mod private {
         /// Copies shared registers (per VSM TLFS spec) from the last VTL to
         /// the target VTL that will become active.
         fn switch_vtl_state(this: &mut UhProcessor<'_, Self>, target_vtl: Vtl);
+
+        fn inspect_extra(_this: &mut UhProcessor<'_, Self>, _resp: &mut inspect::Response<'_>) {}
     }
 }
 
@@ -312,7 +314,7 @@ impl UhVpInner {
             waker: Default::default(),
             cpu_index,
             vp_info,
-            vtl1_enabled: Mutex::new(false),
+            hcvm_vtl1_enabled: Mutex::new(false),
             hv_start_enable_vtl_vp: VtlArray::from_fn(|_| Mutex::new(None)),
             sidecar_exit_reason: Default::default(),
             tlb_lock_info: VtlArray::<_, 2>::from_fn(|_| super::TlbLockInfo::new(vp_count)),
@@ -443,6 +445,8 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             "sidecar_base_cpu",
             self.partition.hcl.sidecar_base_cpu(self.vp_index().index()),
         );
+
+        T::inspect_extra(self, resp);
     }
 
     fn update_synic(&mut self, vtl: Vtl, untrusted_synic: bool) {
@@ -714,6 +718,23 @@ impl<'p, T: Backing> Processor for UhProcessor<'p, T> {
 
     fn access_state(&mut self, vtl: Vtl) -> Self::StateAccess<'_> {
         T::access_vp_state(self, vtl)
+    }
+
+    fn vtl_inspectable(&self, vtl: Vtl) -> bool {
+        match vtl {
+            Vtl::Vtl0 => true,
+            Vtl::Vtl1 => {
+                if self.partition.is_hardware_isolated() {
+                    *self.inner.hcvm_vtl1_enabled.lock()
+                } else {
+                    // TODO: when there's support for returning VTL 1 registers,
+                    // use the VsmVpStatus register to query the hypervisor for
+                    // whether VTL 1 is enabled on the vp (this can be cached).
+                    false
+                }
+            }
+            Vtl::Vtl2 => false,
+        }
     }
 }
 
