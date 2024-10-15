@@ -1,6 +1,6 @@
 // Copyright (C) Microsoft Corporation. All rights reserved.
 
-//! Ensure hvlite repo is `clippy` clean.
+//! Ensure the OpenVMM repo is `clippy` clean.
 
 use crate::download_lxutil::LxutilArch;
 use crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch;
@@ -61,7 +61,7 @@ impl SimpleFlowNode for Node {
                 OpenvmmSysrootArch::Aarch64,
                 LxutilArch::Aarch64,
             ),
-            arch => unreachable!("unsupported arch {arch}"),
+            arch => anyhow::bail!("unsupported arch {arch}"),
         };
 
         let mut pre_build_deps = Vec::new();

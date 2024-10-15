@@ -56,17 +56,7 @@ impl FlowNode for Node {
             return Ok(());
         }
 
-        let side_effects = [
-            ctx.reqv(crate::install_openvmm_rust_build_essential::Request),
-            // lxutil is required by certain build.rs scripts.
-            //
-            // FUTURE: should prob have a way to opt-out of this lxutil build
-            // script requirement in non-interactive scenarios?
-            ctx.reqv(|v| crate::init_openvmm_magicpath_lxutil::Request {
-                arch: LxutilArch::X86_64,
-                done: v,
-            }),
-        ];
+        let side_effects = vec![ctx.reqv(crate::install_openvmm_rust_build_essential::Request)];
 
         let openvmm_repo_path = ctx.reqv(crate::git_checkout_openvmm_repo::req::GetRepoDir);
 
@@ -74,6 +64,22 @@ impl FlowNode for Node {
         let document_private_items = false; // TODO: would be nice to turn this on
 
         for (target_triple, docs_dir) in doc_requests {
+            let mut target_side_effects = side_effects.clone();
+
+            // lxutil is required by certain build.rs scripts.
+            //
+            // FUTURE: should prob have a way to opt-out of this lxutil build
+            // script requirement in non-interactive scenarios?
+            let lxutil_arch = match target_triple.architecture {
+                target_lexicon::Architecture::X86_64 => LxutilArch::X86_64,
+                target_lexicon::Architecture::Aarch64(_) => LxutilArch::Aarch64,
+                arch => anyhow::bail!("unsupported arch {arch}"),
+            };
+            target_side_effects.push(ctx.reqv(|v| crate::init_openvmm_magicpath_lxutil::Request {
+                arch: lxutil_arch,
+                done: v,
+            }));
+
             let cargo_cmd = ctx.reqv(|v| {
                 flowey_lib_common::run_cargo_doc::Request {
                     in_folder: openvmm_repo_path.clone(),
@@ -99,7 +105,7 @@ impl FlowNode for Node {
             });
 
             ctx.emit_rust_step(format!("document repo for target {target_triple}"), |ctx| {
-                side_effects.to_vec().claim(ctx);
+                target_side_effects.to_vec().claim(ctx);
                 let docs_dir = docs_dir.claim(ctx);
                 let cargo_cmd = cargo_cmd.claim(ctx);
                 move |rt| {

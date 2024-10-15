@@ -8,20 +8,6 @@
     tenant-id: {{OPENVMM_TENANT_ID}}
     subscription-id: {{OPENVMM_SUBSCRIPTION_ID}}
 
-- name: Installing Azure CLI (Windows)
-  run: |
-    $ProgressPreference = 'SilentlyContinue'
-    Invoke-WebRequest -Uri https://aka.ms/installazurecliwindowsx64 -OutFile .\AzureCLI.msi
-    Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'
-    Remove-Item .\AzureCLI.msi
-  if: runner.os == 'Windows'
-  shell: pwsh
-
-- name: Installing Azure CLI (Linux)
-  run: curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-  if: runner.os == 'Linux'
-  shell: bash
-
 - name: Pull Azure Key Vault secrets
   run: |
     VPackAccessToken=$(az keyvault secret show --name "VPackAccessToken" --vault-name "HvLite-PATs" --query value --output tsv)
@@ -45,8 +31,17 @@
     curl -sSfLo rustup-init.exe https://win.rustup.rs/x86_64 --output rustup-init
     ./rustup-init.exe -y
     echo "$USERPROFILE\\.cargo\\bin" >> $GITHUB_PATH
-  if: runner.os == 'Windows'
-  name: rustup (Windows)
+  if: runner.os == 'Windows' && runner.arch == 'X64'
+  name: rustup (Windows X64)
+  shell: bash
+
+- run: |
+    set -x
+    curl -sSfLo rustup-init.exe https://win.rustup.rs/aarch64 --output rustup-init
+    ./rustup-init.exe -y
+    echo "$USERPROFILE\\.cargo\\bin" >> $GITHUB_PATH
+  if: runner.os == 'Windows' && runner.arch == 'ARM64'
+  name: rustup (Windows ARM64)
   shell: bash
 
 - uses: actions/checkout@v4

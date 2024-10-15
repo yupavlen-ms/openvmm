@@ -126,10 +126,11 @@ pub(crate) fn job_flowey_bootstrap_source(
             // artifact with the same name
             floweyno += 1;
             let platform = graph[*idx].platform;
+            let arch = graph[*idx].arch;
             bootstrapped_flowey.insert(
                 *idx,
                 FloweySource::Bootstrap(
-                    format!("_internal-flowey-bootstrap-{platform}-uid-{floweyno}"),
+                    format!("_internal-flowey-bootstrap-{arch}-{platform}-uid-{floweyno}"),
                     false,
                 ),
             );

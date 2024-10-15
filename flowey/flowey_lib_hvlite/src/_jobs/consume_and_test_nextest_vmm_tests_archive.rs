@@ -126,30 +126,45 @@ impl SimpleFlowNode for Node {
 
         // FIXME: share this with build_and_run_nextest_vmm_tests
         let disk_images_dir = Some({
-            ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
-                crate::download_openvmm_vmm_tests_vhds::Request::DownloadVhds(vec![
-                    vmm_test_images::KnownVhd::FreeBsd13_2,
-                    vmm_test_images::KnownVhd::Gen1WindowsDataCenterCore2022,
-                    vmm_test_images::KnownVhd::Gen2WindowsDataCenterCore2022,
-                    vmm_test_images::KnownVhd::Ubuntu2204Server,
-                ]),
-            ]);
+            match target.architecture {
+                target_lexicon::Architecture::X86_64 => {
+                    ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
+                        crate::download_openvmm_vmm_tests_vhds::Request::DownloadVhds(vec![
+                            vmm_test_images::KnownVhd::FreeBsd13_2,
+                            vmm_test_images::KnownVhd::Gen1WindowsDataCenterCore2022,
+                            vmm_test_images::KnownVhd::Gen2WindowsDataCenterCore2022,
+                            vmm_test_images::KnownVhd::Ubuntu2204Server,
+                        ]),
+                    ]);
 
-            ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
-                crate::download_openvmm_vmm_tests_vhds::Request::DownloadIsos(vec![
-                    vmm_test_images::KnownIso::FreeBsd13_2,
-                ]),
-            ]);
+                    ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
+                        crate::download_openvmm_vmm_tests_vhds::Request::DownloadIsos(vec![
+                            vmm_test_images::KnownIso::FreeBsd13_2,
+                        ]),
+                    ]);
+                }
+                target_lexicon::Architecture::Aarch64(_) => {}
+                arch => anyhow::bail!("unsupported arch {arch}"),
+            }
 
             ctx.reqv(crate::download_openvmm_vmm_tests_vhds::Request::GetDownloadFolder)
         });
 
         // FUTURE: once we move away from the known_paths resolver, this will no
         // longer be an ambient pre-run dependency.
+        let mu_msvm_arch = match target.architecture {
+            target_lexicon::Architecture::X86_64 => {
+                crate::download_uefi_mu_msvm::MuMsvmArch::X86_64
+            }
+            target_lexicon::Architecture::Aarch64(_) => {
+                crate::download_uefi_mu_msvm::MuMsvmArch::Aarch64
+            }
+            arch => anyhow::bail!("unsupported arch {arch}"),
+        };
         let pre_run_deps =
             vec![
                 ctx.reqv(|v| crate::init_openvmm_magicpath_uefi_mu_msvm::Request {
-                    arch: crate::download_uefi_mu_msvm::MuMsvmArch::X86_64,
+                    arch: mu_msvm_arch,
                     done: v,
                 }),
             ];

@@ -3,6 +3,7 @@
 //! Build and run the cargo-nextest based VMM tests.
 
 use crate::build_nextest_vmm_tests::BuildNextestVmmTestsMode;
+use crate::build_openhcl_igvm_from_recipe::OpenhclIgvmRecipe;
 use crate::run_cargo_build::common::CommonArch;
 use crate::run_cargo_build::common::CommonProfile;
 use crate::run_cargo_build::common::CommonTriple;
@@ -62,9 +63,34 @@ impl SimpleFlowNode for Node {
             done,
         } = request;
 
-        if !matches!(target.architecture, target_lexicon::Architecture::X86_64) {
-            anyhow::bail!("running VMM tests only supported on x86 at this time")
+        let arch = match target.architecture {
+            target_lexicon::Architecture::X86_64 => CommonArch::X86_64,
+            target_lexicon::Architecture::Aarch64(_) => CommonArch::Aarch64,
+            arch => anyhow::bail!("unsupported arch {arch}"),
+        };
+
+        struct TestTargets<'a> {
+            windows: CommonTriple,
+            linux: CommonTriple,
+            openhcl_recipies: &'a [OpenhclIgvmRecipe],
         }
+
+        let targets = match arch {
+            CommonArch::X86_64 => TestTargets {
+                windows: CommonTriple::X86_64_WINDOWS_MSVC,
+                linux: CommonTriple::X86_64_LINUX_MUSL,
+                openhcl_recipies: &[
+                    OpenhclIgvmRecipe::X64,
+                    OpenhclIgvmRecipe::X64TestLinuxDirect,
+                    OpenhclIgvmRecipe::X64Cvm,
+                ],
+            },
+            CommonArch::Aarch64 => TestTargets {
+                windows: CommonTriple::AARCH64_WINDOWS_MSVC,
+                linux: CommonTriple::AARCH64_LINUX_MUSL,
+                openhcl_recipies: &[OpenhclIgvmRecipe::Aarch64],
+            },
+        };
 
         // FUTURE: we can be smarter with the feature-set openvmm gets built
         // with depending on what tests are being run.
@@ -96,11 +122,7 @@ impl SimpleFlowNode for Node {
         });
 
         let mut register_openhcl_igvm_files = Vec::new();
-        for recipe in [
-            crate::build_openhcl_igvm_from_recipe::OpenhclIgvmRecipe::X64,
-            crate::build_openhcl_igvm_from_recipe::OpenhclIgvmRecipe::X64TestLinuxDirect,
-            crate::build_openhcl_igvm_from_recipe::OpenhclIgvmRecipe::X64Cvm,
-        ] {
+        for recipe in targets.openhcl_recipies {
             let (_read_built_openvmm_hcl, built_openvmm_hcl) = ctx.new_var();
             let (read_built_openhcl_igvm, built_openhcl_igvm) = ctx.new_var();
             let (_read_built_openhcl_boot, built_openhcl_boot) = ctx.new_var();
@@ -128,37 +150,42 @@ impl SimpleFlowNode for Node {
         let register_openhcl_igvm_files = ReadVar::transpose_vec(ctx, register_openhcl_igvm_files);
 
         let register_pipette_windows = ctx.reqv(|v| crate::build_pipette::Request {
-            target: CommonTriple::X86_64_WINDOWS_MSVC,
+            target: targets.windows,
             profile,
             pipette: v,
         });
 
         let register_pipette_linux_musl = ctx.reqv(|v| crate::build_pipette::Request {
-            target: CommonTriple::X86_64_LINUX_MUSL,
+            target: targets.linux,
             profile,
             pipette: v,
         });
 
         let register_guest_test_uefi = ctx.reqv(|v| crate::build_guest_test_uefi::Request {
-            arch: CommonArch::X86_64,
+            arch,
             profile,
             guest_test_uefi: v,
         });
 
-        ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
-            crate::download_openvmm_vmm_tests_vhds::Request::DownloadVhds(vec![
-                vmm_test_images::KnownVhd::FreeBsd13_2,
-                vmm_test_images::KnownVhd::Gen1WindowsDataCenterCore2022,
-                vmm_test_images::KnownVhd::Gen2WindowsDataCenterCore2022,
-                vmm_test_images::KnownVhd::Ubuntu2204Server,
-            ]),
-        ]);
+        match arch {
+            CommonArch::X86_64 => {
+                ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
+                    crate::download_openvmm_vmm_tests_vhds::Request::DownloadVhds(vec![
+                        vmm_test_images::KnownVhd::FreeBsd13_2,
+                        vmm_test_images::KnownVhd::Gen1WindowsDataCenterCore2022,
+                        vmm_test_images::KnownVhd::Gen2WindowsDataCenterCore2022,
+                        vmm_test_images::KnownVhd::Ubuntu2204Server,
+                    ]),
+                ]);
 
-        ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
-            crate::download_openvmm_vmm_tests_vhds::Request::DownloadIsos(vec![
-                vmm_test_images::KnownIso::FreeBsd13_2,
-            ]),
-        ]);
+                ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
+                    crate::download_openvmm_vmm_tests_vhds::Request::DownloadIsos(vec![
+                        vmm_test_images::KnownIso::FreeBsd13_2,
+                    ]),
+                ]);
+            }
+            CommonArch::Aarch64 => {}
+        }
 
         let disk_images_dir =
             ctx.reqv(crate::download_openvmm_vmm_tests_vhds::Request::GetDownloadFolder);

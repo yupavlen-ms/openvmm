@@ -75,12 +75,17 @@ impl SimpleFlowNode for Node {
             get_env,
         } = request;
 
-        // FUTURE: support ARM tests
-        let test_linux_initrd_x64 = ctx.reqv(|v| {
-            crate::download_openvmm_deps::Request::GetLinuxTestInitrd(OpenvmmDepsArch::X86_64, v)
+        let openvmm_deps_arch = match vmm_tests_target.architecture {
+            target_lexicon::Architecture::X86_64 => OpenvmmDepsArch::X86_64,
+            target_lexicon::Architecture::Aarch64(_) => OpenvmmDepsArch::Aarch64,
+            arch => anyhow::bail!("unsupported arch {arch}"),
+        };
+
+        let test_linux_initrd = ctx.reqv(|v| {
+            crate::download_openvmm_deps::Request::GetLinuxTestInitrd(openvmm_deps_arch, v)
         });
-        let test_linux_kernel_x64 = ctx.reqv(|v| {
-            crate::download_openvmm_deps::Request::GetLinuxTestKernel(OpenvmmDepsArch::X86_64, v)
+        let test_linux_kernel = ctx.reqv(|v| {
+            crate::download_openvmm_deps::Request::GetLinuxTestKernel(openvmm_deps_arch, v)
         });
 
         let openvmm_repo_root = ctx.reqv(crate::git_checkout_openvmm_repo::req::GetRepoDir);
@@ -96,12 +101,12 @@ impl SimpleFlowNode for Node {
             let guest_test_uefi = register_guest_test_uefi.claim(ctx);
             let disk_image_dir = disk_images_dir.claim(ctx);
             let openhcl_igvm_files = register_openhcl_igvm_files.claim(ctx);
-            let test_linux_initrd_x64 = test_linux_initrd_x64.claim(ctx);
-            let test_linux_kernel_x64 = test_linux_kernel_x64.claim(ctx);
+            let test_linux_initrd = test_linux_initrd.claim(ctx);
+            let test_linux_kernel = test_linux_kernel.claim(ctx);
             let openvmm_repo_root = openvmm_repo_root.claim(ctx);
             move |rt| {
-                let test_linux_initrd_x64 = rt.read(test_linux_initrd_x64);
-                let test_linux_kernel_x64 = rt.read(test_linux_kernel_x64);
+                let test_linux_initrd = rt.read(test_linux_initrd);
+                let test_linux_kernel = rt.read(test_linux_kernel);
 
                 let test_content_dir = rt.read(test_content_dir);
                 let openvmm_repo_root = rt.read(openvmm_repo_root);
@@ -225,6 +230,7 @@ impl SimpleFlowNode for Node {
                             OpenhclIgvmRecipe::X64TestLinuxDirect => {
                                 "openhcl-x64-test-linux-direct.bin"
                             }
+                            OpenhclIgvmRecipe::Aarch64 => "openhcl-aarch64.bin",
                             _ => {
                                 log::info!("petri doesn't support this OpenHCL recipe: {recipe:?}");
                                 continue;
@@ -235,14 +241,18 @@ impl SimpleFlowNode for Node {
                     }
                 }
 
-                fs_err::create_dir_all(test_content_dir.join("x64"))?;
+                let (arch_dir, kernel_file_name) = match openvmm_deps_arch {
+                    OpenvmmDepsArch::X86_64 => ("x64", "vmlinux"),
+                    OpenvmmDepsArch::Aarch64 => ("aarch64", "Image"),
+                };
+                fs_err::create_dir_all(test_content_dir.join(arch_dir))?;
                 fs_err::copy(
-                    test_linux_initrd_x64,
-                    test_content_dir.join("x64").join("initrd"),
+                    test_linux_initrd,
+                    test_content_dir.join(arch_dir).join("initrd"),
                 )?;
                 fs_err::copy(
-                    test_linux_kernel_x64,
-                    test_content_dir.join("x64").join("vmlinux"),
+                    test_linux_kernel,
+                    test_content_dir.join(arch_dir).join(kernel_file_name),
                 )?;
 
                 // debug log the current contents of the dir

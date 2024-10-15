@@ -189,43 +189,52 @@ impl FlowNode for Node {
                             }
 
                             let sh = xshell::Shell::new()?;
-                            if matches!(rt.platform(), FlowPlatform::Linux) {
-                                let interactive_prompt = Some("-y");
-                                let mut default_toolchain = Vec::new();
-                                if let Some(ver) = rust_toolchain {
-                                    default_toolchain.push("--default-toolchain".into());
-                                    default_toolchain.push(ver)
-                                };
+                            match rt.platform() {
+                                FlowPlatform::Linux => {
+                                    let interactive_prompt = Some("-y");
+                                    let mut default_toolchain = Vec::new();
+                                    if let Some(ver) = rust_toolchain {
+                                        default_toolchain.push("--default-toolchain".into());
+                                        default_toolchain.push(ver)
+                                    };
 
-                                xshell::cmd!(
-                                    sh,
-                                    "curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh"
-                                )
-                                .run()?;
-                                xshell::cmd!(sh, "chmod +x ./rustup-init.sh").run()?;
-                                xshell::cmd!(
-                                    sh,
-                                    "./rustup-init.sh {interactive_prompt...} {default_toolchain...}"
-                                )
-                                .run()?;
-                            } else {
-                                let interactive_prompt = Some("-y");
-                                let mut default_toolchain = Vec::new();
-                                if let Some(ver) = rust_toolchain {
-                                    default_toolchain.push("--default-toolchain".into());
-                                    default_toolchain.push(ver)
-                                };
+                                    xshell::cmd!(
+                                        sh,
+                                        "curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh"
+                                    )
+                                    .run()?;
+                                    xshell::cmd!(sh, "chmod +x ./rustup-init.sh").run()?;
+                                    xshell::cmd!(
+                                        sh,
+                                        "./rustup-init.sh {interactive_prompt...} {default_toolchain...}"
+                                    )
+                                    .run()?;
+                                }
+                                FlowPlatform::Windows => {
+                                    let interactive_prompt = Some("-y");
+                                    let mut default_toolchain = Vec::new();
+                                    if let Some(ver) = rust_toolchain {
+                                        default_toolchain.push("--default-toolchain".into());
+                                        default_toolchain.push(ver)
+                                    };
 
-                                xshell::cmd!(
-                                    sh,
-                                    "curl -sSfLo rustup-init.exe https://win.rustup.rs/x86_64 --output rustup-init"
-                                )
-                                .run()?;
-                                xshell::cmd!(
-                                    sh,
-                                    "./rustup-init.exe {interactive_prompt...} {default_toolchain...}"
-                                )
-                                .run()?;
+                                    let arch = match rt.arch() {
+                                        FlowArch::X86_64 => "x86_64",
+                                        FlowArch::Aarch64 => "aarch64",
+                                        arch => anyhow::bail!("unsupported arch {arch}"),
+                                    };
+
+                                    xshell::cmd!(
+                                        sh,
+                                        "curl -sSfLo rustup-init.exe https://win.rustup.rs/{arch} --output rustup-init"
+                                    ).run()?;
+                                    xshell::cmd!(
+                                        sh,
+                                        "./rustup-init.exe {interactive_prompt...} {default_toolchain...}"
+                                    )
+                                    .run()?;
+                                },
+                                platform => anyhow::bail!("unsupported platform {platform}"),
                             }
 
                             if !additional_target_triples.is_empty() {

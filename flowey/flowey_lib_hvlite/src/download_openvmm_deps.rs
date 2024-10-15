@@ -140,7 +140,6 @@ impl FlowNode for Node {
                         )
                     })
                     .transpose()?;
-
                 let extract_dir_aarch64 = openvmm_deps_tar_bz2_aarch64
                     .map(|file| {
                         let file = rt.read(file);

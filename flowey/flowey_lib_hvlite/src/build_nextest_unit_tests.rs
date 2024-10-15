@@ -1,12 +1,13 @@
 // Copyright (C) Microsoft Corporation. All rights reserved.
 
-//! Build all cargo-nextest based unit-tests in the HvLite workspace.
+//! Build all cargo-nextest based unit-tests in the OpenVMM workspace.
 //!
-//! In the context of hvlite, we consider a "unit-test" to be any test which
+//! In the context of OpenVMM, we consider a "unit-test" to be any test which
 //! doesn't require any special dependencies (e.g: additional binaries, disk
 //! images, etc...), and can be run simply by invoking the test bin itself.
 
 use crate::download_lxutil::LxutilArch;
+use crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch;
 use crate::run_cargo_build::common::CommonArch;
 use crate::run_cargo_build::common::CommonPlatform;
 use crate::run_cargo_build::common::CommonProfile;
@@ -68,14 +69,19 @@ impl FlowNode for Node {
 
     fn emit(requests: Vec<Self::Request>, ctx: &mut NodeCtx<'_>) -> anyhow::Result<()> {
         let flowey_platform = ctx.platform();
+        let flowey_arch = ctx.arch();
 
         let xtask_target = CommonTriple::Common {
-            arch: CommonArch::X86_64, // FUTURE: support native ARM hosts
+            arch: match flowey_arch {
+                FlowArch::X86_64 => CommonArch::X86_64,
+                FlowArch::Aarch64 => CommonArch::Aarch64,
+                arch => anyhow::bail!("unsupported arch {arch}"),
+            },
             platform: match flowey_platform {
                 FlowPlatform::Windows => CommonPlatform::WindowsMsvc,
                 FlowPlatform::Linux => CommonPlatform::LinuxGnu,
                 FlowPlatform::MacOs => CommonPlatform::MacOs,
-                platform => anyhow::bail!("unknown platform {platform}"),
+                platform => anyhow::bail!("unsupported platform {platform}"),
             },
         };
         let xtask = ctx.reqv(|v| crate::build_xtask::Request {
@@ -85,22 +91,9 @@ impl FlowNode for Node {
 
         let openvmm_repo_path = ctx.reqv(crate::git_checkout_openvmm_repo::req::GetRepoDir);
 
-        // building these packages in the hvlite repo requires installing some
+        // building these packages in the OpenVMM repo requires installing some
         // additional deps
-        //
-        // FIXME: once we have ARM test runners, this code will need to check
-        // the target's arch to determine whether we should be requiring ARM or
-        // X86 packages
-        //
-        // for now, just assume x86
-
-        let ambient_deps = vec![
-            ctx.reqv(crate::install_openvmm_rust_build_essential::Request),
-            ctx.reqv(|v| crate::init_openvmm_magicpath_lxutil::Request {
-                arch: LxutilArch::X86_64,
-                done: v,
-            }),
-        ];
+        let ambient_deps = vec![ctx.reqv(crate::install_openvmm_rust_build_essential::Request)];
 
         let test_packages = ctx.emit_rust_stepv("determine unit test exclusions", |ctx| {
             let xtask = xtask.claim(ctx);
@@ -165,14 +158,32 @@ impl FlowNode for Node {
         {
             let mut pre_run_deps = ambient_deps.clone();
 
+            let (sysroot_arch, lxutil_arch) = match target.architecture {
+                target_lexicon::Architecture::X86_64 => {
+                    (OpenvmmSysrootArch::X64, LxutilArch::X86_64)
+                }
+                target_lexicon::Architecture::Aarch64(_) => {
+                    (OpenvmmSysrootArch::Aarch64, LxutilArch::Aarch64)
+                }
+                arch => anyhow::bail!("unsupported arch {arch}"),
+            };
+
+            // lxutil is required by certain build.rs scripts.
+            //
+            // FUTURE: should prob have a way to opt-out of this lxutil build
+            // script requirement in non-interactive scenarios?
+            pre_run_deps.push(ctx.reqv(|v| crate::init_openvmm_magicpath_lxutil::Request {
+                arch: lxutil_arch,
+                done: v,
+            }));
+
             // See comment in `crate::cargo_build` for why this is necessary.
             //
             // copied here since this node doesn't actually route through `cargo build`.
             if matches!(target.environment, target_lexicon::Environment::Musl) {
                 pre_run_deps.push(
                     ctx.reqv(|v| crate::init_openvmm_magicpath_openhcl_sysroot::Request {
-                        arch:
-                            crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch::X64,
+                        arch: sysroot_arch,
                         path: v,
                     })
                     .into_side_effect(),
