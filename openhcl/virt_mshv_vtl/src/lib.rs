@@ -218,6 +218,8 @@ struct UhPartitionInner {
     #[inspect(with = "inspect::AtomicMut")]
     no_sidecar_hotplug: AtomicBool,
     use_mmio_hypercalls: bool,
+    #[inspect(skip)]
+    dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 #[derive(Clone, Inspect)]
@@ -1097,6 +1099,8 @@ pub struct UhPartitionNewParams<'a> {
     pub use_mmio_hypercalls: bool,
     /// Intercept guest debug exceptions to support gdbstub.
     pub intercept_debug_exceptions: bool,
+    /// Allocator for DMA pages to be preserved during servicing.
+    pub dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 /// Trait for CVM-related protections on guest memory.
@@ -1420,6 +1424,7 @@ impl UhPartition {
             shared_vis_pages_pool: params.shared_vis_pages_pool,
             no_sidecar_hotplug: params.no_sidecar_hotplug.into(),
             use_mmio_hypercalls: params.use_mmio_hypercalls,
+            dma_pages_pool: None,
         });
 
         if cfg!(guest_arch = "x86_64") {

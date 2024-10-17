@@ -56,6 +56,7 @@ impl SubmissionQueue {
         }
         self.mem
             .write_obj(self.tail as usize * size_of_val(&command), &command);
+        tracing::info!("YSP: Wrote to base={:X} off={} pfn[0]={:X}", self.mem.base(), self.tail, self.mem.pfns()[0]);
         self.tail = next_tail;
         Ok(())
     }
@@ -99,7 +100,9 @@ impl CompletionQueue {
         let completion = self
             .mem
             .read_obj::<spec::Completion>(self.head as usize * size_of::<spec::Completion>());
+        tracing::info!("YSP: reading offset={} mem={:X} pfn[0]={:X}", self.head, self.mem.base(), self.mem.pfns()[0]);
         if completion.status.phase() != self.phase {
+            tracing::info!("YSP: phaselock? {}", completion.status.phase());
             return None;
         }
         self.head += 1;

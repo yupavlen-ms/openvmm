@@ -8,6 +8,7 @@
 
 use crate::interrupt::DeviceInterrupt;
 use crate::interrupt::DeviceInterruptSource;
+use crate::lockmem::LockedMemory;
 use crate::memory::MemoryBlock;
 use crate::DeviceBacking;
 use crate::DeviceRegisterIo;
@@ -448,6 +449,18 @@ pub struct LockedMemoryAllocator {
 
 impl crate::HostDmaAllocator for LockedMemoryAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG allocate_dma_buffer len={len:X}");
         self.dma_buffer.create_dma_buffer(len)
+    }
+
+    /// Restores the buffer at a fixed physical location.
+    /// Calls the default allocator if base_pfn is not provided.
+    fn restore_dma_buffer(&self, len: usize, base_pfn: Option<u64>) -> anyhow::Result<MemoryBlock> {
+        if base_pfn.is_none() {
+            self.allocate_dma_buffer(len)
+        } else {
+            // TODO: This is placeholder but there is no use for now so can be removed.
+            Ok(MemoryBlock::new(LockedMemory::new(len)?))
+        }
     }
 }

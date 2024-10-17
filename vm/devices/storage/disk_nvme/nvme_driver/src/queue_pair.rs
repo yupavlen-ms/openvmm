@@ -426,6 +426,7 @@ impl QueueHandler {
                     }
                 }
                 while !self.commands.is_empty() {
+                    tracing::info!("YSP: slab remaining len={}", self.commands.len());
                     if let Some(completion) = self.cq.read() {
                         return Event::Completion(completion).into();
                     }
@@ -452,11 +453,18 @@ impl QueueHandler {
                     Req::Inspect(deferred) => deferred.inspect(&self),
                 },
                 Event::Completion(completion) => {
-                    let command = self.commands.remove(completion.cid.into());
-                    assert_eq!(completion.sqid, self.sq.id());
-                    self.sq.update_head(completion.sqhd);
-                    command.respond.send(completion);
-                    self.stats.completed.increment();
+                    // YSP: FIXME: debug change - DO NOT MERGE!
+                    match self.commands.try_remove(completion.cid.into()) {
+                        Some(command) => {
+                            assert_eq!(completion.sqid, self.sq.id());
+                            self.sq.update_head(completion.sqhd);
+                            command.respond.send(completion);
+                            self.stats.completed.increment();
+                        }
+                        None => {
+                            tracing::info!("unexpected completion cq {} cid {}", self.cq._id(), completion.cid);
+                        }
+                    };
                 }
             }
         }

@@ -247,6 +247,15 @@ impl HostDmaAllocator for EmulatedDmaAllocator {
             self.shared_mem.alloc(len).context("out of memory")?,
         ))
     }
+
+    /// Always calls the default allocator for emulated devices.
+    fn restore_dma_buffer(
+        &self,
+        len: usize,
+        _base_pfn: Option<u64>,
+    ) -> anyhow::Result<MemoryBlock> {
+        self.allocate_dma_buffer(len)
+    }
 }
 
 impl<T: 'static + Send + InspectMut + MmioIntercept> DeviceBacking for EmulatedDevice<T> {

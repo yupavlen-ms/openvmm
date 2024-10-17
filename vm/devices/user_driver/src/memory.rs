@@ -15,7 +15,7 @@ pub const PAGE_SIZE64: u64 = PAGE_SIZE as u64;
 
 /// A mapped buffer that can be accessed by the host or the device.
 ///
-/// # Safety
+/// SAFETY:
 /// The implementor must ensure that the VA region from `base()..base() + len()`
 /// remains mapped for the lifetime.
 pub unsafe trait MappedDmaTarget: Send + Sync {
@@ -155,5 +155,10 @@ impl MemoryBlock {
     /// returned by [`Self::pfns`].
     pub fn offset_in_page(&self) -> u32 {
         self.base as u32 % PAGE_SIZE as u32
+    }
+
+    /// YSP: TODO: Not sure if ok to keep or only needed here
+    pub fn base(&self) -> u64 {
+        self.base as u64
     }
 }
