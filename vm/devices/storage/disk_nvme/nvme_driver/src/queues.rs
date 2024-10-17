@@ -236,7 +236,7 @@ fn advance(n: u32, l: u32) -> u32 {
 }
 
 #[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct SubmissionQueueSavedState {
     #[mesh(1)]
     pub sqid: u16,
@@ -255,7 +255,7 @@ pub struct SubmissionQueueSavedState {
 }
 
 #[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct CompletionQueueSavedState {
     #[mesh(1)]
     pub cqid: u16,
@@ -267,7 +267,7 @@ pub struct CompletionQueueSavedState {
     pub len: u32,
     #[mesh(5)]
     /// NVMe completion tag.
-    pub phase: bool, // YSP: Should be called 'tag'.
+    pub phase: bool,
     #[mesh(7)]
     pub base_mem: Option<u64>, // YSP: Should it be *const u8 instead?
     #[mesh(8)]
