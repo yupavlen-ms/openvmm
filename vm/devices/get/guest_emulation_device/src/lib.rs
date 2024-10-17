@@ -513,7 +513,7 @@ impl<T: RingMem + Unpin> GedChannel<T> {
                             get_protocol::GuestNotifications::SAVE_GUEST_VTL2_STATE,
                         ),
                         correlation_id: Guid::ZERO,
-                        capabilities_flags: 0,
+                        capabilities_flags: 0,  // TODO: Not supported when issuing from HvLite yet.
                         timeout_hint_secs: 60,
                     };
 

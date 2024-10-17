@@ -233,6 +233,7 @@ impl SharedPoolAllocator {
 #[cfg(feature = "vfio")]
 impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+        tracing::info!("YSP: SharedPoolAllocator::create_dma_buffer");
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }
@@ -272,6 +273,18 @@ impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
             _alloc: alloc,
             pfns,
         }))
+    }
+
+    /// Restore pool allocation from saved PFNs and/or GPA.
+    fn restore_dma_buffer(
+        &self,
+        _addr: u64,
+        len: usize,
+        _pfns: &[u64]
+    ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+        tracing::info!("YSP: unsupported restore_dma_buffer");
+        // Restore is not yet supported for shared pool, just call regular create.
+        self.create_dma_buffer(len)
     }
 }
 

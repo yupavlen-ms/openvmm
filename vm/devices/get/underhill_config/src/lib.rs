@@ -354,6 +354,9 @@ pub enum Vtl2SettingsErrorCode {
     NetworkingAddNicFailed => (Network, Configuration),
     /// Failed to remove NIC
     NetworkingRemoveNicFailed => (Network, Configuration),
+
+    /// Failed to update VTL2 servicing options
+    Vtl2ServicingOptions => (Underhill, Configuration),
 }
 }
 

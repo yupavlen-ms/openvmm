@@ -903,6 +903,7 @@ impl VpciChannel {
         interrupts: &[InterruptResourceRequest],
         add_resource: &mut dyn FnMut(protocol::MsiResourceRemapped),
     ) -> Result<(), PacketError> {
+        tracing::info!("YSP: map_interrupts count={}", interrupts.len());
         let interrupts = interrupts.iter().filter(|r| r.vector_count != 0);
         let count = interrupts.clone().count();
         let new_count = self.interrupts.len() + count;
@@ -937,6 +938,7 @@ impl VpciChannel {
     }
 
     fn unmap_interrupt(&mut self, interrupt: MsiAddressData) -> Result<(), PacketError> {
+        tracing::info!("YSP: unmap_interrupt");
         let i = self
             .interrupts
             .iter()

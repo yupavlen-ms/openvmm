@@ -104,6 +104,9 @@ impl<T: DeviceRegisterIo + Inspect> Bar0<T> {
 
     #[instrument(skip_all)]
     pub async fn reset(&self, driver: &dyn Driver) -> bool {
+        // YSP: FIXME: Investigation
+        //panic!("YSP: reset: Who called me?");
+        tracing::info!("YSP: still resetting");
         let cc = self.cc().with_en(false);
         self.set_cc(cc);
         let mut backoff = Backoff::new(driver);
@@ -117,5 +120,9 @@ impl<T: DeviceRegisterIo + Inspect> Bar0<T> {
             }
             backoff.back_off().await;
         }
+    }
+
+    pub fn base_va(&self) -> u64 {
+        self.0.base_va()
     }
 }

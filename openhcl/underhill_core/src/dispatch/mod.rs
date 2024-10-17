@@ -11,6 +11,7 @@ use crate::emuplat::EmuplatServicing;
 use crate::nvme_manager::NvmeManager;
 use crate::reference_time::ReferenceTime;
 use crate::servicing;
+use crate::servicing::NvmeSavedState;
 use crate::servicing::ServicingState;
 use crate::vmbus_relay_unit::VmbusRelayHandle;
 use crate::worker::FirmwareType;
@@ -38,6 +39,7 @@ use mesh::rpc::Rpc;
 use mesh::rpc::RpcSend;
 use mesh::CancelContext;
 use mesh::MeshPayload;
+use mesh_worker::RestartFlags;
 use mesh_worker::WorkerRpc;
 use net_packet_capture::PacketCaptureParams;
 use pal_async::task::Spawn;
@@ -257,10 +259,11 @@ impl LoadedVm {
                 Event::WorkerRpcGone => break None,
                 Event::WorkerRpc(message) => match message {
                     WorkerRpc::Stop => break None,
-                    WorkerRpc::Restart(response) => {
+                    WorkerRpc::Restart(flags, response) => {
                         let state = async {
+                            let RestartFlags { nvme_keepalive } = flags;
                             let running = self.stop().await;
-                            match self.save(None).await {
+                            match self.save(None, nvme_keepalive).await {
                                 Ok(servicing_state) => Some((response, servicing_state)),
                                 Err(err) => {
                                     if running {
@@ -322,7 +325,7 @@ impl LoadedVm {
                     UhVmRpc::Save(rpc) => {
                         rpc.handle_failable(|()| async {
                             let running = self.stop().await;
-                            let r = self.save(None).await;
+                            let r = self.save(None, true).await;
                             if running {
                                 self.start(None).await;
                             }
@@ -345,6 +348,7 @@ impl LoadedVm {
                     }
                 },
                 Event::ServicingRequest(message) => {
+                    tracing::info!("YSP: ServicingRequest");
                     // Explicitly destructure the message for easier tracking of its changes.
                     let GuestSaveRequest {
                         correlation_id,
@@ -428,6 +432,7 @@ impl LoadedVm {
         deadline: std::time::Instant,
         capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<bool> {
+        tracing::info!("YSP: capabilities_flags: {}", capabilities_flags.disable_nvme_keepalive());
         let running = self.state_units.is_running();
         let success = match self
             .handle_servicing_inner(correlation_id, deadline, capabilities_flags)
@@ -470,6 +475,8 @@ impl LoadedVm {
             anyhow::bail!("Servicing is not yet supported for isolated VMs");
         }
         let nvme_keepalive = !capabilities_flags.disable_nvme_keepalive();
+        // YSP: FIXME: Check if RuntimeServicing is still delivered after recent changes.
+        tracing::info!("YSP: handle_servicing_inner override --> {}", capabilities_flags.disable_nvme_keepalive());
         // Do everything before the log flush under a span.
         let mut state = async {
             if !self.stop().await {
@@ -483,7 +490,7 @@ impl LoadedVm {
                 anyhow::bail!("cannot service underhill while paused");
             }
 
-            let mut state = self.save(Some(deadline)).await?;
+            let mut state = self.save(Some(deadline), nvme_keepalive).await?;
             state.init_state.correlation_id = Some(correlation_id);
 
             // Unload any network devices.
@@ -612,6 +619,7 @@ impl LoadedVm {
     async fn save(
         &mut self,
         _deadline: Option<std::time::Instant>,
+        nvme_keepalive: bool,
     ) -> anyhow::Result<ServicingState> {
         assert!(!self.state_units.is_running());
 
@@ -619,7 +627,27 @@ impl LoadedVm {
             anyhow::bail!("save not supported for shared pages yet")
         }
 
+        tracing::info!("YSP: LoadedVm::save");
         let emuplat = (self.emuplat_servicing.save()).context("emuplat save failed")?;
+
+        // Only save NVMe state if there are NVMe controllers, otherwise save None.
+        let nvme_state = match self.nvme_manager.as_ref() {
+            Some(n) => {
+                if nvme_keepalive {
+                    Some(NvmeSavedState {
+                        nvme_state: n.save().await.ok(),
+                    })
+                } else {
+                    // nvme_keepalive was explicitly disabled.
+                    None
+                }
+            }
+            None => {
+                // No NVMe controllers to save.
+                None
+            }
+        };
+
         let units = self.save_units().await.context("state unit save failed")?;
         let vmgs = self
             .vmgs_thin_client
@@ -638,6 +666,7 @@ impl LoadedVm {
                 vm_stop_reference_time: self.last_state_unit_stop.unwrap().as_100ns(),
                 correlation_id: None,
                 emuplat,
+                nvme_state,
                 flush_logs_result: None,
                 vmgs: (vmgs, vmgs_get_storage_meta),
                 overlay_shutdown_device: self.shutdown_relay.is_some(),
