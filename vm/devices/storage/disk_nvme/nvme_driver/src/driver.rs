@@ -500,18 +500,17 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     /// Gets the namespace with namespace ID `nsid`.
     pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
         tracing::info!("YSP: namespace {} for {}", nsid, &self.device_id);
-        let ns = Arc::new(
-            Namespace::new(
-                &self.driver,
-                self.admin.as_ref().unwrap().clone(),
-                self.rescan_event.clone(),
-                self.identify.clone().unwrap(),
-                &self.io_issuers,
-                &self.device_id,
-                nsid,
-                None
-            )
-            .await?,
+        let ns = Arc::new(Namespace::new(
+            &self.driver,
+            self.admin.as_ref().unwrap().clone(),
+            self.rescan_event.clone(),
+            self.identify.clone().unwrap(),
+            &self.io_issuers,
+            &self.device_id,
+            nsid,
+            None
+        )
+        .await?,
         );
         self.namespace = Some(ns.clone());
         tracing::info!("YSP: namespace created {}", ns.clone().nsid());
