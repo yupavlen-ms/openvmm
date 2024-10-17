@@ -60,5 +60,10 @@ pub trait DeviceRegisterIo: Send + Sync {
 }
 
 pub trait HostDmaAllocator: Send + Sync {
+    /// Allocates the buffer in the default heap area.
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock>;
+
+    /// Restores the buffer at a fixed physical location.
+    /// Calls the default allocator if base_pfn is not provided.
+    fn restore_dma_buffer(&self, len: usize, base_pfn: Option<u64>) -> anyhow::Result<MemoryBlock>;
 }

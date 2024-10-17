@@ -18,6 +18,7 @@ use parking_lot::Mutex;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use thiserror::Error;
+use user_driver::memory::MemoryBlock;
 use vm_topology::memory::MemoryRangeWithNode;
 
 /// Error returned when unable to allocate memory.
@@ -232,7 +233,8 @@ impl SharedPoolAllocator {
 
 #[cfg(feature = "vfio")]
 impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
-    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG-2 create_dma_buffer len={len:X}");
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }
@@ -267,7 +269,7 @@ impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
 
-        Ok(user_driver::memory::MemoryBlock::new(SharedDmaBuffer {
+        Ok(MemoryBlock::new(SharedDmaBuffer {
             mapping,
             _alloc: alloc,
             pfns,

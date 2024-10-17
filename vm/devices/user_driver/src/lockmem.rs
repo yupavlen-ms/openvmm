@@ -3,6 +3,7 @@
 #![cfg(target_os = "linux")]
 
 use crate::memory::MappedDmaTarget;
+use crate::memory::MemoryBlock;
 use anyhow::Context;
 use std::ffi::c_void;
 use std::fs::File;
@@ -94,6 +95,7 @@ impl LockedMemory {
         let mapping = Mapping::new(len).context("failed to create mapping")?;
         mapping.lock().context("failed to lock mapping")?;
         let pages = mapping.pages()?;
+        tracing::info!("YSP: WRONG-1 --> pfn[0]={} {len:X}", pages[0]);
         Ok(Self {
             mapping,
             pfns: pages,
@@ -122,7 +124,8 @@ pub struct LockedMemorySpawner;
 
 #[cfg(feature = "vfio")]
 impl crate::vfio::VfioDmaBuffer for LockedMemorySpawner {
-    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<crate::memory::MemoryBlock> {
-        Ok(crate::memory::MemoryBlock::new(LockedMemory::new(len)?))
+    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG-1 create_dma_buffer len={len:X}");
+        Ok(MemoryBlock::new(LockedMemory::new(len)?))
     }
 }
