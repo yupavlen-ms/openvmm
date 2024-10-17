@@ -643,7 +643,7 @@ fn nvm_cmd(opcode: nvm::NvmOpcode, nsid: u32) -> spec::Command {
 
 /// Save/restore NVMe namespace data.
 #[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct SavedNamespaceData {
     #[mesh(1)]
     pub nsid: u32,

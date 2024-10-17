@@ -500,17 +500,18 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     /// Gets the namespace with namespace ID `nsid`.
     pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
         tracing::info!("YSP: namespace {} for {}", nsid, &self.device_id);
-        let ns = Arc::new(Namespace::new(
-            &self.driver,
-            self.admin.as_ref().unwrap().clone(),
-            self.rescan_event.clone(),
-            self.identify.clone().unwrap(),
-            &self.io_issuers,
-            &self.device_id,
-            nsid,
-            None
-        )
-        .await?
+        let ns = Arc::new(
+            Namespace::new(
+                &self.driver,
+                self.admin.as_ref().unwrap().clone(),
+                self.rescan_event.clone(),
+                self.identify.clone().unwrap(),
+                &self.io_issuers,
+                &self.device_id,
+                nsid,
+                None
+            )
+            .await?,
         );
         self.namespace = Some(ns.clone());
         tracing::info!("YSP: namespace created {}", ns.clone().nsid());
@@ -539,7 +540,10 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .await?;
 
         // Update other fields not accessible by worker task.
-        self.identify.as_ref().unwrap().write_to(save_state.identify_ctrl.as_mut());
+        self.identify
+            .as_ref()
+            .unwrap()
+            .write_to(save_state.identify_ctrl.as_mut());
         save_state.device_id = self.device_id.clone();
         save_state.nsid = self.namespace.as_ref().map_or(0, |ns| ns.nsid());
         // Either 1 or 0 namespaces per driver.
@@ -1036,10 +1040,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
 
     /// Wrapper around save() to consume its response (for AsyncRun thread).
     async fn save_wrapper(&mut self, worker_state: &mut WorkerState) -> NvmeDriverSavedState {
-        match self
-            .save(worker_state)
-            .await
-        {
+        match self.save(worker_state).await {
             Ok(state) => {
                 tracing::info!("YSP: save_wrapper done max_io_q={}", state.max_io_queues);
                 state
@@ -1070,7 +1071,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
     /// Save NVMe driver state for servicing.
     pub async fn save(
         &mut self,
-	worker_state: &mut WorkerState
+        worker_state: &mut WorkerState,
     ) -> anyhow::Result<NvmeDriverSavedState> {
         tracing::info!("YSP: NvmeDriverWorkerTask::save");
         let admin = self.admin.as_ref().unwrap().save().await?;
@@ -1092,17 +1093,17 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             dma_base,
             dma_len,
             dma_pfns,
-            nsid: 0,                        // Will be updated by the caller.
-            identify_ctrl: [0; 4096],       // Will be updated by the caller.
-            device_id: "".to_string(),      // Will be updated by the caller.
-            namespace: None,                // Will be updated by the caller.
-            bar0_va: None,                  // Will be updated by the caller.
+            nsid: 0,                   // Will be updated by the caller.
+            identify_ctrl: [0; 4096],  // Will be updated by the caller.
+            device_id: "".to_string(), // Will be updated by the caller.
+            namespace: None,           // Will be updated by the caller.
+            bar0_va: None,             // Will be updated by the caller.
             qsize: worker_state.qsize,
             max_io_queues: worker_state.max_io_queues,
             vfio_state: VfioDeviceSavedState {
                 pci_id: self.device.id().to_owned(),
                 msix_info_count: self.device.max_interrupt_count(),
-            }
+            },
         };
 
         Ok(save_state)
@@ -1128,7 +1129,7 @@ impl<T: DeviceBacking> InspectTask<WorkerState> for DriverWorkerTask<T> {
 
 /// Save/restore state for NVMe driver.
 #[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct NvmeDriverSavedState {
     /// Namespace ID.
     #[mesh(1)]
@@ -1139,7 +1140,7 @@ pub struct NvmeDriverSavedState {
     /// IO queue states.
     #[mesh(3)]
     pub io: Vec<QueuePairSavedState>,
-    /// Copy of Identify Controller response.
+    /// Copy of the controller's IDENTIFY structure.
     #[mesh(4)]
     pub identify_ctrl: [u8; 4096],
     /// Device ID string.
