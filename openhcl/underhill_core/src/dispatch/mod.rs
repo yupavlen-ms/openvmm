@@ -40,7 +40,6 @@ use mesh::rpc::Rpc;
 use mesh::rpc::RpcSend;
 use mesh::CancelContext;
 use mesh::MeshPayload;
-use mesh_worker::RestartFlags;
 use mesh_worker::WorkerRpc;
 use net_packet_capture::PacketCaptureParams;
 use pal_async::task::Spawn;
@@ -260,11 +259,10 @@ impl LoadedVm {
                 Event::WorkerRpcGone => break None,
                 Event::WorkerRpc(message) => match message {
                     WorkerRpc::Stop => break None,
-                    WorkerRpc::Restart(flags, response) => {
+                    WorkerRpc::Restart(response) => {
                         let state = async {
-                            let RestartFlags { nvme_keepalive } = flags;
                             let running = self.stop().await;
-                            match self.save(None, nvme_keepalive).await {
+                            match self.save(None).await {
                                 Ok(servicing_state) => Some((response, servicing_state)),
                                 Err(err) => {
                                     if running {
@@ -326,7 +324,7 @@ impl LoadedVm {
                     UhVmRpc::Save(rpc) => {
                         rpc.handle_failable(|()| async {
                             let running = self.stop().await;
-                            let r = self.save(None, true).await;
+                            let r = self.save(None).await;
                             if running {
                                 self.start(None).await;
                             }
@@ -475,9 +473,16 @@ impl LoadedVm {
         if self.isolation.is_some() {
             anyhow::bail!("Servicing is not yet supported for isolated VMs");
         }
+
+        // capabilities_flags used to explicitly disable the feature
+        // which is enabled by default.
         let nvme_keepalive = !capabilities_flags.disable_nvme_keepalive();
         // YSP: FIXME: Check if RuntimeServicing is still delivered after recent changes.
         tracing::info!("YSP: handle_servicing_inner override --> {}", capabilities_flags.disable_nvme_keepalive());
+        self.nvme_manager.as_mut().map(|m| {
+            m.set_nvme_keepalive(nvme_keepalive);
+        });
+
         // Do everything before the log flush under a span.
         let mut state = async {
             if !self.stop().await {
@@ -491,7 +496,7 @@ impl LoadedVm {
                 anyhow::bail!("cannot service underhill while paused");
             }
 
-            let mut state = self.save(Some(deadline), nvme_keepalive).await?;
+            let mut state = self.save(Some(deadline)).await?;
             state.init_state.correlation_id = Some(correlation_id);
 
             // Unload any network devices.
@@ -508,8 +513,8 @@ impl LoadedVm {
             let shutdown_nvme = async {
                 if let Some(nvme_manager) = self.nvme_manager.take() {
                     nvme_manager
-                        .shutdown(nvme_keepalive)
-                        .instrument(tracing::info_span!("shutdown_nvme_vfio", %correlation_id))
+                        .shutdown()
+                        .instrument(tracing::info_span!("shutdown_nvme_vfio", %correlation_id, %nvme_keepalive))
                         .await;
                 }
             };
@@ -620,7 +625,6 @@ impl LoadedVm {
     async fn save(
         &mut self,
         _deadline: Option<std::time::Instant>,
-        nvme_keepalive: bool,
     ) -> anyhow::Result<ServicingState> {
         assert!(!self.state_units.is_running());
 
@@ -631,20 +635,20 @@ impl LoadedVm {
         tracing::info!("YSP: LoadedVm::save");
         let emuplat = (self.emuplat_servicing.save()).context("emuplat save failed")?;
 
-        // Only save NVMe state if there are NVMe controllers, otherwise save None.
+        // Only save NVMe state when there are NVMe controllers and nvme_keepalive
+        // wasn't explicitly disabled through capabilities_flags, otherwise save None.
         let nvme_state = match self.nvme_manager.as_ref() {
             Some(n) => {
-                if nvme_keepalive {
-                    Some(NvmeSavedState {
-                        nvme_state: n.save().await.ok(),
-                    })
-                } else {
-                    // nvme_keepalive was explicitly disabled.
-                    None
+                // Do not save NVMe state if there was an error during save
+                // or nvme_keepalive was explicitly disabled,
+                // revert back to the regular nvme_init after boot.
+                match n.save().await {
+                    Ok(s) => Some(NvmeSavedState { nvme_state: s }),
+                    Err(_) => None,
                 }
             }
-            None => {
-                // No NVMe controllers to save.
+            _ => {
+                // No NVMe controllers present.
                 None
             }
         };

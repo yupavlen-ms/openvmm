@@ -56,10 +56,19 @@ enum InnerError {
     },
 }
 
+/// Save/restore errors.
+#[derive(Debug, Error)]
+pub enum SaveRestoreError {
+    #[error("save explicitly disabled")]
+    ExplicitlyDisabled,
+}
+
 #[derive(Debug)]
 pub struct NvmeManager {
     task: Task<()>,
     client: NvmeManagerClient,
+    /// Flags controlling servicing behavior.
+    nvme_keepalive: bool,
 }
 
 impl Inspect for NvmeManager {
@@ -123,6 +132,7 @@ impl NvmeManager {
             client: NvmeManagerClient {
                 sender: Arc::new(send),
             },
+            nvme_keepalive: true,
         }
     }
 
@@ -130,18 +140,18 @@ impl NvmeManager {
         &self.client
     }
 
-    pub async fn shutdown(self, nvme_keepalive: bool) {
+    pub async fn shutdown(self) {
         // Early return would be the fastest way to skip shutdown.
         // Unfortunately, then there is no good way to prevent
         // controller reset in the drop() fn if we early return here.
         // YSP: FIXME: Figure out how to prevent reset in drop() function.
-        if nvme_keepalive {
+        if self.nvme_keepalive {
             tracing::info!("YSP: skip shutdown");
             return
         }
         self.client.sender.send(Request::Shutdown {
             span: tracing::info_span!("shutdown_nvme_manager"),
-            nvme_keepalive,
+            nvme_keepalive: self.nvme_keepalive,
         });
         self.task.await;
     }
@@ -151,7 +161,14 @@ impl NvmeManager {
         tracing::info!("YSP: NvmeManager::save");
         // NVMe manager has no own data to save, everything will be done
         // in the Worker task which can be contacted through Client.
-        self.client().save().await
+        if self.nvme_keepalive {
+            self.client().save().await
+        } else {
+            // If nvme_keepalive was explicitly disabled,
+            // return an error which is non-fatal indication
+            // that there is no save data.
+            return Err(anyhow::Error::from(SaveRestoreError::ExplicitlyDisabled {}));
+        }
     }
 
     /// Restore NVMe manager's state after servicing.
@@ -161,20 +178,19 @@ impl NvmeManager {
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManager::restore");
-        match saved_state.nvme_state.as_ref() {
-            Some(nvme_state) => {
-                worker.restore(
-                    dma_buffer,
-                    nvme_state,
-                )
-                .instrument(tracing::info_span!("nvme_worker_restore"))
-                .await
-            },
-            None => {
-                // No saved state provided, assume fresh boot.
-                Ok(())
-            },
-        }
+        worker.restore(
+            dma_buffer,
+            &saved_state.nvme_state,
+        )
+        .instrument(tracing::info_span!("nvme_worker_restore"))
+        .await?;
+
+        Ok(())
+    }
+
+    /// Control servicing behavior: to keep the attached device intact or not.
+    pub fn set_nvme_keepalive(&mut self, nvme_keepalive: bool) {
+        self.nvme_keepalive = nvme_keepalive;
     }
 }
 
@@ -224,7 +240,7 @@ impl NvmeManagerClient {
 }
 
 #[derive(Inspect)]
-pub(crate) struct NvmeManagerWorker {
+struct NvmeManagerWorker {
     #[inspect(skip)]
     driver_source: VmTaskDriverSource,
     #[inspect(iter_by_key)]
@@ -497,7 +513,7 @@ impl ResourceId<DiskHandleKind> for NvmeDiskConfig {
 }
 
 #[derive(Protobuf, SavedStateRoot)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct NvmeManagerSavedState {
     #[mesh(1)]
     pub cpu_count: u32,
@@ -512,7 +528,7 @@ pub struct NvmeManagerSavedState {
 }
 
 #[derive(Protobuf, Clone)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct NvmeSavedDiskConfig {
     #[mesh(1)]
     pub pci_id: String,
@@ -521,7 +537,7 @@ pub struct NvmeSavedDiskConfig {
 }
 
 #[derive(Protobuf)]
-#[mesh(package = "openhcl.nvme")]
+#[mesh(package = "underhill")]
 pub struct NvmeDmaBufferSavedState {
     /// GVA (TODO: or GPA?) of the DMA buffer assigned to NVMe device(s).
     #[mesh(1)]
