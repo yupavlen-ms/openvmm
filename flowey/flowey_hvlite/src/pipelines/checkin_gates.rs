@@ -105,11 +105,7 @@ impl IntoPipeline for CheckinGatesCli {
 
         if let RepoSource::GithubSelf = &openvmm_repo_source {
             pipeline.gh_set_flowey_bootstrap_template(
-                crate::pipelines_shared::gh_flowey_bootstrap_template::get_template(
-                    &client_id,
-                    &tenant_id,
-                    &subscription_id,
-                ),
+                crate::pipelines_shared::gh_flowey_bootstrap_template::get_template(),
             );
         }
 
@@ -127,11 +123,6 @@ impl IntoPipeline for CheckinGatesCli {
                         hvlite_repo_source: openvmm_repo_source.clone(),
                     },
                 )
-                .dep_on(|_| flowey_lib_hvlite::_jobs::cfg_gh_azure_login::Params {
-                    client_id: client_id.clone(),
-                    tenant_id: tenant_id.clone(),
-                    subscription_id: subscription_id.clone(),
-                })
                 .gh_grant_permissions::<flowey_lib_common::git_checkout::Node>([(
                     GhPermission::Contents,
                     GhPermissionValue::Read,
@@ -906,6 +897,11 @@ impl IntoPipeline for CheckinGatesCli {
                         fail_job_on_test_fail: true,
                         done: ctx.new_done_handle(),
                     }
+                })
+                .dep_on(|_| flowey_lib_hvlite::_jobs::cfg_gh_azure_login::Params {
+                    client_id: client_id.clone(),
+                    tenant_id: tenant_id.clone(),
+                    subscription_id: subscription_id.clone(),
                 });
 
             if let Some(pub_vmm_tests_junit_xml) = pub_vmm_tests_junit_xml {
