@@ -329,6 +329,18 @@ impl PartitionInfo {
 
         let command_line = params.command_line();
 
+        if parsed.preserve_dma_devices.is_some() {
+            log!("YSP: Hooray1 {}", parsed.preserve_dma_devices.unwrap());
+        }
+        else {
+            log!("YSP: Oopsie1");
+        }
+        if parsed.preserve_dma_mem_pages.is_some() {
+            log!("YSP: Hooray2 {}", parsed.preserve_dma_mem_pages.unwrap());
+        }
+        else {
+            log!("YSP: Oopsie2");
+        }
         // Always write the measured command line.
         write!(
             storage.cmdline,
@@ -355,6 +367,8 @@ impl PartitionInfo {
                     .try_extend_from_slice(parse_host_vtl2_ram(params, &parsed.memory).as_ref())
                     .expect("vtl2 ram should only be 64 big");
                 storage.memory_allocation_mode = MemoryAllocationMode::Host;
+                log!("YSP: memory alloc mode: Host {} mems", storage.vtl2_ram.len());
+                log!("YSP: cpus {}", storage.cpus.len());
             }
             MemoryAllocationMode::Vtl2 {
                 memory_size,
@@ -371,6 +385,7 @@ impl PartitionInfo {
                     memory_size,
                     mmio_size,
                 };
+                log!("YSP: memory alloc mode: VTL2");
             }
         }
 
@@ -430,11 +445,12 @@ impl PartitionInfo {
         let vtl2_config_region_reclaim =
             MemoryRange::try_new(reclaim_base..reclaim_end).expect("range is valid");
 
-        log!("reclaim aligned base {reclaim_base:x}, reclaim end {reclaim_end:x}");
+        log!("reclaim device tree memory {reclaim_base:x}-{reclaim_end:x}");
 
         for entry in &parsed.memory {
             storage.partition_ram.push(*entry);
         }
+        log!("YSP: partition_ram len={}", storage.partition_ram.len());
 
         // Set remaining struct fields before returning.
         let Self {

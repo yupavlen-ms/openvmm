@@ -27,7 +27,13 @@ use vm_topology::memory::MemoryLayout;
 use vm_topology::memory::MemoryRangeWithNode;
 use vm_topology::processor::ProcessorTopology;
 
+// YSP
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
+use zerocopy::AsBytes;
+
 #[derive(Inspect)]
+#[inspect(extra = "MemoryMappings::inspect_find_pfn")]
 pub struct MemoryMappings {
     vtl0: Arc<GuestMemoryMapping>,
     vtl1: Option<Arc<GuestMemoryMapping>>,
@@ -38,7 +44,7 @@ pub struct MemoryMappings {
     vtl1_gm: Option<GuestMemory>,
     #[inspect(skip)]
     untrusted_dma_memory: GuestMemory,
-    #[inspect(skip)]
+    // YSP #[inspect(skip)]
     layout: MemoryLayout,
     #[inspect(skip)]
     acceptor: Option<Arc<MemoryAcceptor>>,
@@ -72,6 +78,48 @@ impl MemoryMappings {
             }
             _ => Ok(None),
         }
+    }
+
+    // YSP
+    pub fn inspect_find_pfn(&self, resp: &mut inspect::Response<'_>) {
+        let mut find_pfn = 0u64;
+        let mut pfns = vec![0u64; 4096];
+        let mut seekpos: u64 = 0;
+
+        resp.child("find_pfn", |req| match req.update() {
+            Ok(update) => {
+                find_pfn = match update.new_value().parse() {
+                    Ok(v) => v,
+                    Err(_err) => 0u64,
+                }
+            }
+            Err(_req) => {
+                //req.value("".into());
+            },
+        });
+
+        let pagemap = File::open("/proc/self/pagemap");
+        if /* find_pfn != 0u64 && */ pagemap.is_ok() {
+            let mut filemap = pagemap.unwrap();
+            if filemap.seek(SeekFrom::Start(seekpos)).is_ok() {
+                match filemap.read(pfns.as_bytes_mut()) {
+                    Ok(size) => {
+                        resp.field("soze", size);
+                    },
+                    Err(_) => {
+                        //break;
+                    },
+                }
+                pfns[0] &= 0x3f_ffff_ffff_ffff;
+                if pfns[0] == find_pfn { //.load(std::sync::atomic::Ordering::Relaxed) {
+                    //break;
+                }
+                seekpos += 8;
+            }
+        }
+        resp.field("find_pfn", find_pfn)
+        .field("pfn", pfns[0])
+            .field("offset", seekpos);
     }
 }
 

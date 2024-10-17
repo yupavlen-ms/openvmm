@@ -41,9 +41,6 @@ use pci_core::spec::hwid::ProgrammingInterface;
 use pci_core::spec::hwid::Subclass;
 use std::sync::Arc;
 use vmcore::device_state::ChangeDeviceState;
-use vmcore::save_restore::SaveError;
-use vmcore::save_restore::SaveRestore;
-use vmcore::save_restore::SavedStateNotSupported;
 use vmcore::vm_task::VmTaskDriverSource;
 
 /// An NVMe controller.
@@ -261,6 +258,7 @@ impl NvmeController {
         // Check for 64-bit registers.
         let handled = match spec::Register(addr & !7) {
             spec::Register::ASQ => {
+                tracing::info!("YSP: writing ASQ");
                 if !self.registers.cc.en() {
                     self.registers.asq = update_reg(self.registers.asq) & PAGE_MASK;
                 } else {
@@ -269,6 +267,7 @@ impl NvmeController {
                 true
             }
             spec::Register::ACQ => {
+                tracing::info!("YSP: writing ACQ");
                 if !self.registers.cc.en() {
                     self.registers.acq = update_reg(self.registers.acq) & PAGE_MASK;
                 } else {
@@ -291,7 +290,10 @@ impl NvmeController {
         match spec::Register(addr) {
             spec::Register::INTMS => self.registers.interrupt_mask |= data,
             spec::Register::INTMC => self.registers.interrupt_mask &= !data,
-            spec::Register::CC => self.set_cc(data.into()),
+            spec::Register::CC => {
+                tracing::info!("YSP: writing CC");
+                self.set_cc(data.into())
+            },
             spec::Register::AQA => self.registers.aqa = data.into(),
             _ => return IoResult::Err(InvalidRegister),
         }
@@ -362,6 +364,9 @@ impl NvmeController {
                 if self.registers.csts.rdy() {
                     tracelimit::warn_ratelimited!("enabling during reset");
                     return;
+                } else {
+                    // Emulate device RDY after controller enabled.
+                    //self.registers.csts.set_rdy(true);
                 }
                 if cc.shn() == 0 {
                     self.registers.csts.set_shst(0);
@@ -375,6 +380,8 @@ impl NvmeController {
                 );
             } else if self.registers.csts.rdy() {
                 self.workers.controller_reset();
+                // Did controller reset clear it already?
+                self.registers.csts.set_rdy(false);
             } else {
                 tracelimit::warn_ratelimited!("disabling while not ready");
                 return;
@@ -484,17 +491,22 @@ impl PciConfigSpace for NvmeController {
     }
 }
 
-impl SaveRestore for NvmeController {
-    type SavedState = SavedStateNotSupported;
+mod save_restore {
+    use super::*;
+    use vmcore::save_restore::NoSavedState;
+    use vmcore::save_restore::RestoreError;
+    use vmcore::save_restore::SaveError;
+    use vmcore::save_restore::SaveRestore;
 
-    fn save(&mut self) -> Result<Self::SavedState, SaveError> {
-        Err(SaveError::NotSupported)
-    }
+    impl SaveRestore for NvmeController {
+        type SavedState = NoSavedState;
 
-    fn restore(
-        &mut self,
-        state: Self::SavedState,
-    ) -> Result<(), vmcore::save_restore::RestoreError> {
-        match state {}
+        fn save(&mut self) -> Result<Self::SavedState, SaveError> {
+            Ok(NoSavedState)
+        }
+
+        fn restore(&mut self, _state: Self::SavedState) -> Result<(), RestoreError> {
+            Ok(())
+        }
     }
 }

@@ -37,6 +37,8 @@ mod ioctl {
     use vfio_bindings::bindings::vfio::VFIO_BASE;
     use vfio_bindings::bindings::vfio::VFIO_TYPE;
 
+    const VFIO_PRIVATE_BASE: u32 = 200;
+
     nix::ioctl_write_int_bad!(vfio_set_iommu, request_code_none!(VFIO_TYPE, VFIO_BASE + 2));
     nix::ioctl_read_bad!(
         vfio_group_get_status,
@@ -73,6 +75,11 @@ mod ioctl {
         request_code_none!(VFIO_TYPE, VFIO_BASE + 10),
         vfio_irq_set
     );
+    nix::ioctl_write_ptr_bad!(
+        vfio_group_set_keep_alive,
+        request_code_none!(VFIO_TYPE, VFIO_PRIVATE_BASE + 0),
+        c_char
+    );
 }
 
 pub struct Container {
@@ -86,6 +93,14 @@ impl Container {
             .write(true)
             .open("/dev/vfio/vfio")
             .context("failed to open /dev/vfio/vfio")?;
+
+        Ok(Self { file })
+    }
+
+    /// This is temporary for testing.
+    pub fn new_from_fd(fd: i32) -> anyhow::Result<Self> {
+        // SAFETY: Test code, to be removed.
+        let file = unsafe { File::from_raw_fd(fd) };
 
         Ok(Self { file })
     }
@@ -185,6 +200,24 @@ impl Group {
                 .context("failed to get group status")?;
         };
         Ok(GroupStatus::from(status.flags))
+    }
+
+    pub fn set_keep_alive(&self, device_id: &str) -> anyhow::Result<()> {
+        // SAFETY: The file descriptor is valid and a correctly constructed struct is being passed.
+        unsafe {
+            let id = CString::new(device_id.to_owned())?;
+            ioctl::vfio_group_set_keep_alive(self.file.as_raw_fd(), id.as_ptr())
+                .context("failed to set keep-alive")?;
+        }
+        Ok(())
+    }
+
+    /// This is temporary for testing.
+    pub fn new_from_fd(fd: i32) -> anyhow::Result<Self> {
+        // SAFETY: Test code, to be removed.
+        let file = unsafe { File::from_raw_fd(fd) };
+
+        Ok(Self { file })
     }
 }
 
@@ -338,11 +371,36 @@ impl Device {
         Ok(MappedRegion { addr, len })
     }
 
+    /// Attempts to map the region to the specific VA.
+    pub fn map_to(&self, addr: u64, offset: u64, len: usize, write: bool) -> anyhow::Result<MappedRegion> {
+        let mut prot = libc::PROT_READ;
+        if write {
+            prot |= libc::PROT_WRITE;
+        }
+        // SAFETY: The file descriptor is valid and valid address is being passed.
+        // The result is being validated.
+        let addr = unsafe {
+            libc::mmap(
+                addr as *mut c_void,
+                len,
+                prot,
+                libc::MAP_SHARED,
+                self.file.as_raw_fd(),
+                offset as i64,
+            )
+        };
+        if addr == libc::MAP_FAILED {
+            return Err(std::io::Error::last_os_error()).context("failed to map region");
+        }
+        Ok(MappedRegion { addr, len })
+    }
+
     pub fn map_msix<I>(&self, start: u32, eventfd: I) -> anyhow::Result<()>
     where
         I: IntoIterator,
         I::Item: AsFd,
     {
+        tracing::info!("YSP: map_msix {}", start);
         #[repr(C)]
         struct VfioIrqSetWithArray {
             header: vfio_irq_set,
@@ -377,7 +435,16 @@ impl Device {
             ioctl::vfio_device_set_irqs(self.file.as_raw_fd(), &param.header)
                 .context("failed to set msi-x trigger")?;
         }
+        tracing::info!("YSP: map_msix {} done", start);
         Ok(())
+    }
+
+    /// This is temporary for testing.
+    pub fn new_from_fd(fd: i32) -> anyhow::Result<Self> {
+        // SAFETY: Test code, to be removed.
+        let file = unsafe { File::from_raw_fd(fd) };
+
+        Ok(Self { file })
     }
 }
 

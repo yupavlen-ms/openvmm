@@ -1168,6 +1168,7 @@ dependencies = [
  "pal",
  "scsi_buffers",
  "stackfuture",
+ "tracing",
 ]
 
 [[package]]
@@ -1535,6 +1536,23 @@ dependencies = [
  "mesh_protobuf",
  "thiserror",
  "uefi_specs",
+]
+
+[[package]]
+name = "fixed_pool_alloc"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "hcl",
+ "hvdef",
+ "inspect",
+ "libc",
+ "parking_lot",
+ "sparse_mmap",
+ "thiserror",
+ "tracing",
+ "user_driver",
+ "vm_topology",
 ]
 
 [[package]]
@@ -5794,6 +5812,7 @@ dependencies = [
  "pal",
  "parking_lot",
  "thiserror",
+ "tracing",
  "windows-sys 0.52.0",
  "zerocopy",
 ]
@@ -6562,6 +6581,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
+ "tracing",
  "vtl2_settings_proto",
 ]
 
@@ -6595,6 +6615,7 @@ dependencies = [
  "firmware_pcat",
  "firmware_uefi",
  "firmware_uefi_custom_vars",
+ "fixed_pool_alloc",
  "framebuffer",
  "fs-err",
  "futures",
@@ -6789,6 +6810,7 @@ dependencies = [
  "virt_mshv_vtl",
  "vm_topology",
  "x86defs",
+ "zerocopy",
 ]
 
 [[package]]

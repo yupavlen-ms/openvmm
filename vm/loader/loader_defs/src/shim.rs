@@ -88,6 +88,8 @@ open_enum! {
         VTL0_MMIO = 5,
         /// This range is mmio for VTL2.
         VTL2_MMIO = 6,
+        /// Memory preserved during servicing.
+        VTL2_PRESERVED = 7,
     }
 }
 
@@ -101,6 +103,7 @@ impl MemoryVtlType {
                 | MemoryVtlType::VTL2_CONFIG
                 | MemoryVtlType::VTL2_SIDECAR_IMAGE
                 | MemoryVtlType::VTL2_SIDECAR_NODE
+                | MemoryVtlType::VTL2_PRESERVED
         )
     }
 }
