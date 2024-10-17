@@ -364,9 +364,6 @@ impl NvmeController {
                 if self.registers.csts.rdy() {
                     tracelimit::warn_ratelimited!("enabling during reset");
                     return;
-                } else {
-                    // Emulate device RDY after controller enabled.
-                    //self.registers.csts.set_rdy(true);
                 }
                 if cc.shn() == 0 {
                     self.registers.csts.set_shst(0);
@@ -380,8 +377,6 @@ impl NvmeController {
                 );
             } else if self.registers.csts.rdy() {
                 self.workers.controller_reset();
-                // Did controller reset clear it already?
-                self.registers.csts.set_rdy(false);
             } else {
                 tracelimit::warn_ratelimited!("disabling while not ready");
                 return;

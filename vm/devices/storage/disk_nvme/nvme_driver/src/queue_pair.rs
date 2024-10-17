@@ -220,7 +220,7 @@ impl QueuePair {
         tracing::info!("YSP: QueuePair::save {:X} sq={:X} cq={:X}", self.mem.base_va(), self.sq_addr(), self.cq_addr());
         // Send an RPC request to QueueHandler thread to save its data.
         let queue_data = self.issuer.send.call(Req::Save, ()).await?;
-        
+
         // Add more data to the returned response.
         let mut local_queue_data = queue_data.unwrap();
         local_queue_data.sq_addr = self.sq_addr();
