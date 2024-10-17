@@ -27,6 +27,8 @@ use memory_range::walk_ranges;
 use memory_range::MemoryRange;
 use memory_range::RangeWalkResult;
 
+use crate::boot_logger::log; // YSP
+
 /// AArch64 defines
 mod aarch64 {
     // For compatibility with older hosts, use these legacy Hyper-V defaults if
@@ -211,6 +213,7 @@ pub fn write_dt(
     let p_enable_method = builder.add_string("enable-method")?;
 
     let num_cpus = partition_info.cpus.len();
+    log!("YSP: cpus2: {}", num_cpus);
 
     let mut root_builder = builder
         .start_node("")?
@@ -510,6 +513,7 @@ pub fn write_dt(
                     ReservedMemoryType::SidecarImage => MemoryVtlType::VTL2_SIDECAR_IMAGE,
                     ReservedMemoryType::SidecarNode => MemoryVtlType::VTL2_SIDECAR_NODE,
                     ReservedMemoryType::Vtl2Reserved => MemoryVtlType::VTL2_RESERVED,
+                    ReservedMemoryType::DmaBuffers => MemoryVtlType::VTL2_PRESERVED,
                 },
             )
         }),

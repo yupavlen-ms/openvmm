@@ -11,6 +11,7 @@ use crate::interrupt::DeviceInterruptSource;
 use crate::memory::MemoryBlock;
 use crate::DeviceBacking;
 use crate::DeviceRegisterIo;
+use crate::save_restore::VfioDeviceSavedState;
 use anyhow::Context;
 use futures::FutureExt;
 use futures_concurrency::future::Race;
@@ -38,6 +39,9 @@ use zerocopy::FromBytes;
 pub trait VfioDmaBuffer: 'static + Send + Sync {
     /// Create a new DMA buffer of the given `len` bytes. Guaranteed to be zero-initialized.
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock>;
+
+    /// Restore a dma buffer in the predefined location with the given `len` in bytes.
+    fn restore_dma_buffer(&self, addr: u64, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock>;
 }
 
 /// A device backend accessed via VFIO.
@@ -76,8 +80,22 @@ impl VfioDevice {
         pci_id: &str,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
     ) -> anyhow::Result<Self> {
+        Self::restore(driver_source, pci_id, dma_buffer, None).await
+    }
+
+    /// Creates a new VFIO-backed device for the PCI device with `pci_id`.
+    /// or creates a device from the saved state if provided.
+    pub async fn restore(
+        driver_source: &VmTaskDriverSource,
+        pci_id: &str,
+        dma_buffer: Arc<dyn VfioDmaBuffer>,
+        _saved_state: Option<&VfioDeviceSavedState>,
+    ) -> anyhow::Result<Self> {
+        let is_restoring = _saved_state.is_some();
+        tracing::info!("YSP: VFIO new/restore {}", is_restoring);
         let path = Path::new("/sys/bus/pci/devices").join(pci_id);
 
+        // YSP: FIXME: Looks like we can try vfio_set_device_reset_method()
         // The vfio device attaches asynchronously after the PCI device is added,
         // so make sure that it has completed by checking for the vfio-dev subpath.
         let vmbus_device =
@@ -85,6 +103,7 @@ impl VfioDevice {
         let instance_path = Path::new("/sys").join(vmbus_device.strip_prefix("../../..")?);
         let vfio_arrived_path = instance_path.join("vfio-dev");
         let uevent_listener = UeventListener::new(&driver_source.simple())?;
+        tracing::info!("YSP: VFIO: checkpoint 1");
         let wait_for_vfio_device = uevent_listener
             .wait_for_matching_child(&vfio_arrived_path, move |_, _| async move { Some(()) });
         let mut ctx = mesh::CancelContext::new().with_timeout(Duration::from_secs(1));
@@ -94,17 +113,24 @@ impl VfioDevice {
         let container = vfio_sys::Container::new()?;
         let group_id = vfio_sys::Group::find_group_for_device(&path)?;
         let group = vfio_sys::Group::open_noiommu(group_id)?;
+        tracing::info!("YSP: VFIO: checkpoint 2");
         group.set_container(&container)?;
         if !group.status()?.viable() {
             anyhow::bail!("group is not viable");
         }
 
         container.set_iommu(IommuType::NoIommu)?;
+        if is_restoring {
+            // Prevent physical hardware interaction when restoring.
+            group.set_keep_alive(path.file_name().unwrap().to_str().unwrap())?;
+            tracing::info!("YSP: VFIO: keep-alive was set");
+        }
         let device = group.open_device(path.file_name().unwrap().to_str().unwrap())?;
         let msix_info = device.irq_info(vfio_bindings::bindings::vfio::VFIO_PCI_MSIX_IRQ_INDEX)?;
         if msix_info.flags.noresize() {
             anyhow::bail!("unsupported: kernel does not support dynamic msix allocation");
         }
+        tracing::info!("YSP: VFIO: checkpoint 3 msix={}", msix_info.count);
 
         Ok(Self {
             pci_id: pci_id.into(),
@@ -118,13 +144,20 @@ impl VfioDevice {
         })
     }
 
-    fn map_bar(&self, n: u8) -> anyhow::Result<MappedRegionWithFallback> {
+    /// Maps PCI BAR[n] to VA space, optionally to a fixed address.
+    fn map_bar(&self, n: u8, addr_fixed: Option<u64>) -> anyhow::Result<MappedRegionWithFallback> {
         if n >= 6 {
             anyhow::bail!("invalid bar");
         }
         let info = self.device.region_info(n.into())?;
-        let mapping = self.device.map(info.offset, info.size as usize, true)?;
+        let mapping = if addr_fixed.is_none() {
+            self.device.map(info.offset, info.size as usize, true)?
+        }
+        else {
+            self.device.map_to(addr_fixed.unwrap(), info.offset, info.size as usize, true)?
+        };
         sparse_mmap::initialize_try_copy();
+        tracing::info!("YSP: map_bar off={:X} size={} addr={:X}", &info.offset, &info.size, mapping.as_ptr() as u64);
         Ok(MappedRegionWithFallback {
             device: self.device.clone(),
             mapping,
@@ -134,6 +167,16 @@ impl VfioDevice {
         })
     }
 }
+
+// YSP: FIXME: ???
+//impl Drop for VfioDevice {
+//    fn drop(&mut self) {
+//        std::mem::forget(self._container);
+//        std::mem::forget(self._group);
+//        std::mem::forget(self.device);
+//       tracing::info!("YSP: oopsie!");
+//    }
+//}
 
 /// A mapped region that falls back to read/write if the memory mapped access
 /// fails.
@@ -159,8 +202,8 @@ impl DeviceBacking for VfioDevice {
         &self.pci_id
     }
 
-    fn map_bar(&mut self, n: u8) -> anyhow::Result<Self::Registers> {
-        (*self).map_bar(n)
+    fn map_bar(&mut self, n: u8, addr_fixed: Option<u64>) -> anyhow::Result<Self::Registers> {
+        (*self).map_bar(n, addr_fixed)
     }
 
     fn host_allocator(&self) -> Self::DmaAllocator {
@@ -174,6 +217,7 @@ impl DeviceBacking for VfioDevice {
     }
 
     fn map_interrupt(&mut self, msix: u32, cpu: u32) -> anyhow::Result<DeviceInterrupt> {
+        tracing::info!("YSP: map_interrupt {} (max={}) to cpu {}", msix, self.msix_info.count, cpu);
         if msix >= self.msix_info.count {
             anyhow::bail!("invalid msix index");
         }
@@ -328,6 +372,10 @@ impl DeviceRegisterIo for vfio_sys::MappedRegion {
     fn write_u64(&self, offset: usize, data: u64) {
         self.write_u64(offset, data)
     }
+
+    fn base_va(&self) -> u64 {
+        self.as_ptr() as u64
+    }
 }
 
 impl MappedRegionWithFallback {
@@ -410,6 +458,10 @@ impl DeviceRegisterIo for MappedRegionWithFallback {
             self.write_to_file(offset, &data.to_ne_bytes());
         })
     }
+
+    fn base_va(&self) -> u64 {
+        self.mapping.base_va()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -448,6 +500,19 @@ pub struct LockedMemoryAllocator {
 
 impl crate::HostDmaAllocator for LockedMemoryAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: allocate_dma_buffer {}", len);
+        self.dma_buffer.create_dma_buffer(len)
+    }
+
+    fn reserve_dma_buffer(&self, _offset: usize, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: reserve_dma_buffer {:X} {}", _offset, len);
+        // FIXME: Just using regular allocate until we have memory mapping restore.
+        self.dma_buffer.create_dma_buffer(len)
+    }
+
+    fn restore_dma_buffer(&mut self, _addr: u64, len: usize, _pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: NOT THAT restore_dma_buffer {:X} {}", _addr, len);
+        // FIXME: Just using regular allocate until we have memory mapping restore.
         self.dma_buffer.create_dma_buffer(len)
     }
 }

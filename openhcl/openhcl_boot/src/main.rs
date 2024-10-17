@@ -10,7 +10,7 @@
 #![allow(unsafe_code)]
 
 mod arch;
-mod boot_logger;
+pub mod boot_logger;
 mod cmdline;
 mod dt;
 mod host_params;
@@ -289,9 +289,10 @@ fn shim_parameters(shim_params_raw_offset: isize) -> ShimParams {
 /// The maximum number of reserved memory ranges that we might use.
 ///
 /// 1. VTL2 parameter regions (could be up to 2).
-/// 2. Sidecar image.
-/// 3. One reserved range per sidecar node.
-pub const MAX_RESERVED_MEM_RANGES: usize = 3 + sidecar_defs::MAX_NODES;
+/// 2. Preserved DMA buffers and hardware queues. // YSP:
+/// 3. Sidecar image.
+/// 4. One reserved range per sidecar node.
+pub const MAX_RESERVED_MEM_RANGES: usize = 4 + sidecar_defs::MAX_NODES;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum ReservedMemoryType {
@@ -299,6 +300,7 @@ enum ReservedMemoryType {
     Vtl2Reserved,
     SidecarImage,
     SidecarNode,
+    DmaBuffers, // YSP:
 }
 
 /// Construct a slice representing the reserved memory ranges to be reported to
@@ -315,6 +317,7 @@ fn reserved_memory_regions(
             .map(|r| (r, ReservedMemoryType::Vtl2Config)),
     );
     if let Some(sidecar) = sidecar {
+        log!("-YSP: sidecar {:X}-{:X}", sidecar.image.start(), sidecar.image.end());
         reserved.push((sidecar.image, ReservedMemoryType::SidecarImage));
         reserved.extend(sidecar.node_params.iter().map(|x| {
             (
@@ -349,6 +352,7 @@ fn reserved_memory_regions(
 
 #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 mod x86_boot {
+    use crate::boot_logger::log;
     use crate::host_params::PartitionInfo;
     use crate::single_threaded::off_stack;
     use crate::single_threaded::OffStackRef;
@@ -419,6 +423,7 @@ mod x86_boot {
                 RangeWalkResult::Neither => {}
                 RangeWalkResult::Left(_) => {
                     add_e820_entry(entries.next(), range, E820_RAM)?;
+                    log!("YSP: added E820_RAM {:X} {}", range.start(), range.len());
                     n += 1;
                 }
                 RangeWalkResult::Right(_) => {
@@ -426,6 +431,7 @@ mod x86_boot {
                 }
                 RangeWalkResult::Both(_, _) => {
                     add_e820_entry(entries.next(), range, E820_RESERVED)?;
+                    log!("YSP: added E820_RESERVED {:X} {}", range.start(), range.len());
                     n += 1;
                 }
             }
@@ -687,9 +693,20 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
         partition_info.vtl2_ram.iter().map(|r| (r.range, ())),
         p.imported_regions(),
     ) {
+        let range_a = range.start();
+        let range_b = range.end();
         match result {
-            RangeWalkResult::Neither | RangeWalkResult::Left(_) | RangeWalkResult::Both(_, _) => {}
+            RangeWalkResult::Neither => {
+                log!("YSP: range {range_a:x}-{range_b:x} Neither");
+            }
+            RangeWalkResult::Left(_) => {
+                log!("YSP: range {range_a:x}-{range_b:x} Left");
+            }
+            RangeWalkResult::Both(_, _) => {
+                log!("YSP: range {range_a:x}-{range_b:x} Both");
+            }
             RangeWalkResult::Right(accepted) => {
+                log!("YSP: range {range_a:x}-{range_b:x} Right {}", accepted);
                 // Ranges that are not a part of VTL2 ram must have been
                 // preaccepted, as usermode expect that to be the case.
                 assert!(

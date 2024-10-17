@@ -90,6 +90,7 @@ impl VpciInterruptMapper for TestVpciInterruptController {
     }
 
     fn unregister_interrupt(&self, address: u64, data: u32) {
+        tracing::info!("YSP: unregister_interrupt {:X} {:X}", address, data);
         self.inner
             .mapping_table
             .lock()
