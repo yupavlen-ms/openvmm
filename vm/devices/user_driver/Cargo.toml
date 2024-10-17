@@ -8,6 +8,7 @@ edition = "2021"
 default = ["vfio"]
 vfio = ["vfio_sys", "sparse_mmap"]
 mmio_simulate_fallback = []
+nvme_keepalive = []
 
 [dependencies]
 chipset_device.workspace = true
