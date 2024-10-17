@@ -61,7 +61,6 @@ use disk_blockdevice::BlockDeviceResolver;
 use disk_blockdevice::OpenBlockDeviceConfig;
 use firmware_uefi::UefiCommandSet;
 use fixed_pool_alloc::FixedPool;
-use fixed_pool_alloc::FixedPoolAllocator;
 use futures::executor::block_on;
 use futures::future::join_all;
 use futures_concurrency::future::Race;

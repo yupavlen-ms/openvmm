@@ -83,7 +83,7 @@ impl SubmissionQueue {
             tail: self.tail,
             committed_tail: self.committed_tail,
             len: self.len,
-            base_mem: Some(self.mem.base_va()),
+            base_mem: self.mem.base_va(),
             pfns: self.mem.pfns().to_vec(),
         }
     }
@@ -188,7 +188,7 @@ impl CompletionQueue {
             committed_head: self.committed_head,
             len: self.len,
             phase: self.phase,
-            base_mem: Some(self.mem.base_va()),
+            base_mem: self.mem.base_va(),
             pfns: self.mem.pfns().to_vec(),
         }
     }
@@ -249,7 +249,7 @@ pub struct SubmissionQueueSavedState {
     #[mesh(5)]
     pub len: u32,
     #[mesh(7)]
-    pub base_mem: Option<u64>, // YSP: Should it be *const u8 instead?
+    pub base_mem: u64,
     #[mesh(8)]
     pub pfns: Vec<u64>,
 }
@@ -269,7 +269,7 @@ pub struct CompletionQueueSavedState {
     /// NVMe completion tag.
     pub phase: bool,
     #[mesh(7)]
-    pub base_mem: Option<u64>, // YSP: Should it be *const u8 instead?
+    pub base_mem: u64,
     #[mesh(8)]
     pub pfns: Vec<u64>,
 }
