@@ -1208,9 +1208,6 @@ jobs:
       run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 14
       shell: bash
     - name: 🌼 write_into Var
-      run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 15
-      shell: bash
-    - name: 🌼 write_into Var
       run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 17
       shell: bash
     - name: building openhcl initrd
@@ -1265,9 +1262,6 @@ jobs:
       run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 3
       shell: bash
     - name: 🌼 write_into Var
-      run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 4
-      shell: bash
-    - name: 🌼 write_into Var
       run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 6
       shell: bash
     - name: unpack Microsoft.OHCL.Kernel.6.6.51.2-main-arm64.zip
@@ -1301,6 +1295,9 @@ jobs:
       run: flowey e 11 flowey_lib_common::copy_to_artifact_dir 1
       shell: bash
     - name: 🌼 write_into Var
+      run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 15
+      shell: bash
+    - name: 🌼 write_into Var
       run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 11
       shell: bash
     - name: 🌼 Zip Vars
@@ -1311,6 +1308,9 @@ jobs:
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 11 flowey_lib_hvlite::_jobs::build_and_publish_openhcl_igvm_from_recipe 7
+      shell: bash
+    - name: 🌼 write_into Var
+      run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 4
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 11 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 0
@@ -1647,9 +1647,6 @@ jobs:
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 25
       shell: bash
     - name: 🌼 write_into Var
-      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 26
-      shell: bash
-    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 28
       shell: bash
     - name: building openhcl initrd
@@ -1704,9 +1701,6 @@ jobs:
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 36
       shell: bash
     - name: 🌼 write_into Var
-      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 37
-      shell: bash
-    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 39
       shell: bash
     - name: unpack Microsoft.OHCL.Kernel.6.6.51.2-main-x64.zip
@@ -1749,9 +1743,6 @@ jobs:
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 47
       shell: bash
     - name: 🌼 write_into Var
-      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 48
-      shell: bash
-    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 50
       shell: bash
     - name: building openhcl initrd
@@ -1789,9 +1780,6 @@ jobs:
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 3
-      shell: bash
-    - name: 🌼 write_into Var
-      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 4
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 6
@@ -1836,9 +1824,6 @@ jobs:
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 14
       shell: bash
     - name: 🌼 write_into Var
-      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 15
-      shell: bash
-    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 17
       shell: bash
     - name: building openhcl initrd
@@ -1869,6 +1854,9 @@ jobs:
       run: flowey e 12 flowey_lib_common::copy_to_artifact_dir 1
       shell: bash
     - name: 🌼 write_into Var
+      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 26
+      shell: bash
+    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 22
       shell: bash
     - name: 🌼 Zip Vars
@@ -1879,6 +1867,9 @@ jobs:
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::_jobs::build_and_publish_openhcl_igvm_from_recipe 7
+      shell: bash
+    - name: 🌼 write_into Var
+      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 37
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 33
@@ -1893,6 +1884,9 @@ jobs:
       run: flowey e 12 flowey_lib_hvlite::_jobs::build_and_publish_openhcl_igvm_from_recipe 11
       shell: bash
     - name: 🌼 write_into Var
+      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 48
+      shell: bash
+    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 44
       shell: bash
     - name: 🌼 Zip Vars
@@ -1905,6 +1899,9 @@ jobs:
       run: flowey e 12 flowey_lib_hvlite::_jobs::build_and_publish_openhcl_igvm_from_recipe 15
       shell: bash
     - name: 🌼 write_into Var
+      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 15
+      shell: bash
+    - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 11
       shell: bash
     - name: 🌼 Zip Vars
@@ -1915,6 +1912,9 @@ jobs:
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::_jobs::build_and_publish_openhcl_igvm_from_recipe 19
+      shell: bash
+    - name: 🌼 write_into Var
+      run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 4
       shell: bash
     - name: 🌼 write_into Var
       run: flowey e 12 flowey_lib_hvlite::build_openhcl_igvm_from_recipe 0
