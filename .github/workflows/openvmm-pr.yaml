@@ -11,7 +11,7 @@ on:
         default: false
         required: false
         type: boolean
-  pull_request_target:
+  pull_request:
     branches:
     - main
 concurrency:
