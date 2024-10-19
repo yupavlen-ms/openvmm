@@ -513,40 +513,31 @@ impl SimpleFlowNode for Node {
             }
         };
 
-        let openvmm_hcl_bin_stripped = {
-            if use_stripped_openvmm_hcl {
-                let (read, write) = ctx.new_var();
-                let (read_dbg, write_dbg) = ctx.new_var();
+        // use the stripped or unstripped openvmm_hcl as requested
+        let openvmm_hcl_bin = if use_stripped_openvmm_hcl {
+            let (read, write) = ctx.new_var();
+            let (read_dbg, write_dbg) = ctx.new_var();
 
-                let in_bin = openvmm_hcl_bin.map(ctx, |o| o.bin);
-                ctx.req(crate::run_split_debug_info::Request {
-                    arch,
-                    in_bin,
-                    out_bin: write,
-                    out_dbg_info: write_dbg,
-                });
+            let in_bin = openvmm_hcl_bin.map(ctx, |o| o.bin);
+            ctx.req(crate::run_split_debug_info::Request {
+                arch,
+                in_bin,
+                out_bin: write,
+                out_dbg_info: write_dbg,
+            });
 
-                Some(read.zip(ctx, read_dbg).map(ctx, |(bin, dbg)| {
-                    crate::build_openvmm_hcl::OpenvmmHclOutput {
-                        bin,
-                        dbg: Some(dbg),
-                    }
-                }))
-            } else {
-                None
-            }
-        };
-
-        // check if we should use the stripped vs. unstripped openvmm_hcl
-        let openvmm_hcl_bin = built_openvmm_hcl.new_reader();
-        if use_stripped_openvmm_hcl {
-            openvmm_hcl_bin_stripped
-                .as_ref()
-                .expect("exists due to pre-loop step")
-                .write_into(ctx, built_openvmm_hcl, |x| x)
+            read.zip(ctx, read_dbg).map(ctx, |(bin, dbg)| {
+                crate::build_openvmm_hcl::OpenvmmHclOutput {
+                    bin,
+                    dbg: Some(dbg),
+                }
+            })
         } else {
-            openvmm_hcl_bin.write_into(ctx, built_openvmm_hcl, |x| x)
+            openvmm_hcl_bin
         };
+
+        // report the built openvmm_hcl
+        openvmm_hcl_bin.write_into(ctx, built_openvmm_hcl, |x| x);
 
         let initrd = {
             let rootfs_config = openvmm_repo_path.map(ctx, |p| p.join("openhcl/rootfs.config"));

@@ -56,8 +56,8 @@ impl FlowNode for Node {
 
         for (arch, out_vars) in reqs {
             let file_name = match arch {
-                MuMsvmArch::X86_64 => "hyperv.uefi.mscoreuefi.x64.RELEASE.zip",
-                MuMsvmArch::Aarch64 => "hyperv.uefi.mscoreuefi.AARCH64.RELEASE.zip",
+                MuMsvmArch::X86_64 => "RELEASE-X64-artifacts.zip",
+                MuMsvmArch::Aarch64 => "RELEASE-AARCH64-artifacts.zip",
             };
 
             let mu_msvm_zip = ctx.reqv(|v| flowey_lib_common::download_gh_release::Request {
@@ -94,22 +94,7 @@ impl FlowNode for Node {
                             &zip_file_version,
                         )?;
 
-                        let msvm_fd = extract_dir
-                            .join(format!(
-                                "hyperv.uefi.mscoreuefi.{}.RELEASE",
-                                match arch {
-                                    MuMsvmArch::X86_64 => "x64",
-                                    MuMsvmArch::Aarch64 => "AARCH64",
-                                }
-                            ))
-                            .join(format!(
-                                "Msvm{}",
-                                match arch {
-                                    MuMsvmArch::X86_64 => "X64",
-                                    MuMsvmArch::Aarch64 => "AARCH64",
-                                }
-                            ))
-                            .join("RELEASE_VS2022/FV/MSVM.fd");
+                        let msvm_fd = extract_dir.join("FV/MSVM.fd");
 
                         for var in out_vars {
                             rt.write(var, &msvm_fd)
