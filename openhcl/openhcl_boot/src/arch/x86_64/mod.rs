@@ -17,9 +17,6 @@ pub use memory::verify_imported_regions_hash;
 pub use vp::setup_vtl2_vp;
 pub use vsm::get_isolation_type;
 
-use crate::rt::STACK_COOKIE;
-use crate::rt::STACK_SIZE;
-
 pub fn physical_address_bits() -> u8 {
     unimplemented!("physical_address_bits not implemented on x64")
 }
@@ -31,6 +28,6 @@ core::arch::global_asm! {
     relocate = sym minimal_rt::reloc::relocate,
     start = sym crate::rt::start,
     stack = sym crate::rt::STACK,
-    STACK_COOKIE = const STACK_COOKIE,
-    STACK_SIZE = const STACK_SIZE,
+    STACK_COOKIE = const crate::rt::STACK_COOKIE,
+    STACK_SIZE = const crate::rt::STACK_SIZE,
 }
