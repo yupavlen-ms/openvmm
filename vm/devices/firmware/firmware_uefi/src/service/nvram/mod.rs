@@ -348,8 +348,17 @@ impl NvramServices {
             use uefi_specs::uefi::nvram::vars::SECURE_BOOT;
 
             let (vendor, name) = SECURE_BOOT();
-            let attr = EfiVariableAttributes::DEFAULT_ATTRIBUTES_VOLATILE;
 
+            // Older versions of OpenHCL (and Hyper-V, closed-source HCL, etc. ) may have created
+            // a SecureBoot variable with the NV attribute, which doesn't match the UEFI spec.
+            // Delete this variable (if it exists).
+            let delete_attr = EfiVariableAttributes::new();
+            let _ = self
+                .services
+                .set_variable_ucs2(vendor, name, delete_attr.into(), data.to_vec())
+                .await;
+
+            let attr = EfiVariableAttributes::DEFAULT_ATTRIBUTES_VOLATILE;
             self.services
                 .set_variable_ucs2(vendor, name, attr.into(), data.to_vec())
                 .await
