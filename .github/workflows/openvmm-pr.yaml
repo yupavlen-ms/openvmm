@@ -33,7 +33,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -57,12 +61,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -248,7 +246,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -272,12 +274,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -490,7 +486,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -514,12 +514,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -932,7 +926,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -956,12 +954,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -1374,7 +1366,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -1398,12 +1394,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -1978,7 +1968,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -2002,12 +1996,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -2321,7 +2309,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -2345,12 +2337,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -2709,7 +2695,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -2733,12 +2723,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -3097,7 +3081,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -3121,12 +3109,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -3291,7 +3273,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -3315,12 +3301,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -3539,7 +3519,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -3563,12 +3547,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -3765,7 +3743,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -3789,12 +3771,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -4003,7 +3979,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -4027,12 +4007,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -4306,7 +4280,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -4330,12 +4308,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -4624,7 +4596,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -4648,12 +4624,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -4930,7 +4900,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -4954,12 +4928,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-pc-windows-msvc --profile flowey-ci
       working-directory: flowey_bootstrap
@@ -5248,7 +5216,11 @@ jobs:
       shell: bash
     - run: |
         set -x
+        i=0; while [ $i -lt 5 ] && ! sudo apt-get update; do let "i=i+1"; sleep 1; done;
+        sudo apt-get -o DPkg::Lock::Timeout=60 install gcc -y
         curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+        . "$HOME/.cargo/env"
+        echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
         rustup show
       if: runner.os == 'Linux'
       name: rustup (Linux)
@@ -5272,12 +5244,6 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: flowey_bootstrap
-    - name: Update Index
-      run: |
-        rustc -vV
-        cargo update --dry-run
-      working-directory: flowey_bootstrap
-      shell: bash
     - name: Build flowey
       run: CARGO_INCREMENTAL=0 RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Z threads=8" cargo build -p flowey_hvlite --target x86_64-unknown-linux-gnu --profile flowey-ci
       working-directory: flowey_bootstrap
