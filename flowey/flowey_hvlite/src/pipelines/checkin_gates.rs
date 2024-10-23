@@ -844,13 +844,6 @@ impl IntoPipeline for CheckinGatesCli {
                 resolve_vmm_tests_artifacts: vmm_tests_artifacts_linux_x86,
             },
         ] {
-            // TODO: Enable VMM tests for pull requests once the issues around
-            // using secret variables are resolved.
-            // This is tracked by https://github.com/microsoft/openvmm/issues/137.
-            if matches!(config, PipelineConfig::Pr) {
-                break;
-            }
-
             let pub_vmm_tests_junit_xml = if matches!(backend_hint, PipelineBackendHint::Local) {
                 Some(pipeline.new_artifact(format!("{label}-vmm-tests")).0)
             } else {
@@ -880,16 +873,6 @@ impl IntoPipeline for CheckinGatesCli {
                 _ => unreachable!(),
             };
 
-            // These secrets describe the HvLite-GitHub service principal and associated Azure subscription,
-            // which, along with the GITHUB_TOKEN, are used to authenticate GitHub Actions to Azure with OpenID Connect.
-            // The service principal has federated identity credentials configured describing which branches and
-            // scenarios can be authenticated.
-            // To learn more about these secrets and using OIDC, see
-            // <https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#use-the-azure-login-action-with-openid-connect>
-            let client_id = pipeline.gh_use_secret("OPENVMM_CLIENT_ID");
-            let tenant_id = pipeline.gh_use_secret("OPENVMM_TENANT_ID");
-            let subscription_id = pipeline.gh_use_secret("OPENVMM_SUBSCRIPTION_ID");
-
             let mut vmm_tests_run_job = pipeline
                 .new_job(platform, arch, format!("run vmm-tests [{label}]"))
                 .gh_set_pool(gh_pool)
@@ -905,11 +888,6 @@ impl IntoPipeline for CheckinGatesCli {
                         fail_job_on_test_fail: true,
                         done: ctx.new_done_handle(),
                     }
-                })
-                .dep_on(|_| flowey_lib_hvlite::_jobs::cfg_gh_azure_login::Params {
-                    client_id: client_id.clone(),
-                    tenant_id: tenant_id.clone(),
-                    subscription_id: subscription_id.clone(),
                 });
 
             if let Some(pub_vmm_tests_junit_xml) = pub_vmm_tests_junit_xml {

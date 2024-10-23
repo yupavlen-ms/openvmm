@@ -71,10 +71,6 @@ fn run_azcopy_command(args: &[&str]) -> anyhow::Result<Option<String>> {
 
     let mut cmd = Command::new(azcopy_cmd);
     cmd.args(args);
-    cmd.env(
-        "AZCOPY_AUTO_LOGIN_TYPE",
-        std::env::var("AZCOPY_AUTO_LOGIN_TYPE").unwrap_or("DEVICE".into()),
-    );
 
     let mut child = cmd.spawn().context("Failed to run `azcopy` command.")?;
     let exit = child
