@@ -479,9 +479,9 @@ impl LoadedVm {
         let nvme_keepalive = !capabilities_flags.disable_nvme_keepalive();
         // YSP: FIXME: Check if RuntimeServicing is still delivered after recent changes.
         tracing::info!("YSP: handle_servicing_inner override --> {}", capabilities_flags.disable_nvme_keepalive());
-        self.nvme_manager.as_mut().map(|m| {
+        if let Some(m) = self.nvme_manager.as_mut() {
             m.set_nvme_keepalive(nvme_keepalive);
-        });
+        }
 
         // Do everything before the log flush under a span.
         let mut state = async {

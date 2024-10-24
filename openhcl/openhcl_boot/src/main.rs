@@ -330,7 +330,7 @@ fn reserved_memory_regions(
     flattened.extend(flatten_equivalent_ranges(reserved.iter().copied()));
 
     // YSP: FIXME: Debug
-    for rng in flattened.as_ref().into_iter() {
+    for rng in flattened.as_ref().iter() {
         match rng.1 {
             ReservedMemoryType::Vtl2Config => {
                 log!("YSP: reserved {:X}-{:X} vtl2config", rng.0.start(), rng.0.end());

@@ -18,7 +18,6 @@ use anyhow::Context;
 use hvdef::HV_PAGE_SIZE;
 use inspect::Inspect;
 use parking_lot::Mutex;
-use std::io;
 use std::ffi::c_void;
 use std::num::NonZeroU64;
 use std::os::fd::AsRawFd;

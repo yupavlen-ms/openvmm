@@ -5,18 +5,15 @@
 
 use crate::memory::MappedDmaTarget;
 use anyhow::Context;
-use inspect::Inspect;   // YSP
 use std::ffi::c_void;
 use std::fs::File;
 use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
-use std::sync::atomic::AtomicU64;
 use zerocopy::AsBytes;
 
 const PAGE_SIZE: usize = 4096;
 
-#[cfg_attr(feature = "inspect", derive(inspect::Inspect))]
 pub struct LockedMemory {
     mapping: Mapping,
     pfns: Vec<u64>,

@@ -1825,9 +1825,6 @@ async fn new_underhill_vm(
             .as_ref()
             .and_then(|n| {
                 n.nvme_state.mem_buffer.as_ref()
-                .and_then(|m| {
-                    Some(m)
-                })
             });
         let dma_buffer = vfio_dma_buffer(&shared_vis_pages_pool, true);
         let nvme_dma_memory = vfio_prealloc_or_restore(
