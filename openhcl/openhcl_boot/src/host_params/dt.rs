@@ -329,12 +329,6 @@ impl PartitionInfo {
 
         let command_line = params.command_line();
 
-        if parsed.preserve_dma_devices.is_some() {
-            log!("YSP: Hooray1 {}", parsed.preserve_dma_devices.unwrap());
-        }
-        else {
-            log!("YSP: Oopsie1");
-        }
         if parsed.preserve_dma_mem_pages.is_some() {
             log!("YSP: Hooray2 {}", parsed.preserve_dma_mem_pages.unwrap());
         }
