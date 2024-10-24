@@ -262,13 +262,9 @@ impl UhApicState {
 
 impl UhProcessor<'_, HypervisorBackedX86> {
     /// Returns true if the VP is ready to run, false if it is halted.
-    pub(super) fn poll_apic(
-        &mut self,
-        vtl: GuestVtl,
-        scan_irr: bool,
-    ) -> Result<bool, UhRunVpError> {
+    pub(super) fn poll_apic(&mut self, vtl: GuestVtl, scan_irr: bool) -> Result<(), UhRunVpError> {
         let Some(lapics) = self.backing.lapics.as_mut() else {
-            return Ok(true);
+            return Ok(());
         };
 
         let lapic = &mut lapics[vtl];
@@ -309,12 +305,7 @@ impl UhProcessor<'_, HypervisorBackedX86> {
             self.handle_sipi(vtl, vector)?;
         }
 
-        let lapic = &self.backing.lapics.as_ref().unwrap()[vtl];
-        if lapic.halted || lapic.startup_suspend {
-            return Ok(false);
-        }
-
-        Ok(true)
+        Ok(())
     }
 
     fn handle_init(&mut self, vtl: GuestVtl) -> Result<(), UhRunVpError> {
