@@ -169,7 +169,7 @@ impl NvmeManager {
             // If nvme_keepalive was explicitly disabled,
             // return an error which is non-fatal indication
             // that there is no save data.
-            return Err(anyhow::Error::from(SaveRestoreError::ExplicitlyDisabled {}));
+            Err(anyhow::Error::from(SaveRestoreError::ExplicitlyDisabled {}))
         }
     }
 
