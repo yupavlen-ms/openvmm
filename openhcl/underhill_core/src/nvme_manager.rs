@@ -172,7 +172,7 @@ impl NvmeManager {
     }
 
     /// Restore NVMe manager's state after servicing.
-    pub(crate) async fn restore(
+    async fn restore(
         worker: &mut NvmeManagerWorker,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         saved_state: &NvmeSavedState,

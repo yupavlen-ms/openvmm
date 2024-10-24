@@ -1108,17 +1108,6 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
 
         Ok(save_state)
     }
-
-    /// Restore NVMe driver state after servicing.
-    pub fn restore(
-        &mut self,
-        _saved_state: &NvmeDriverSavedState
-    ) -> anyhow::Result<()> {
-        tracing::info!("YSP: NvmeDriverWorkerTask::restore");
-        // TODO: Looks like we can restore everything in the caller.
-
-        Ok(())
-    }
 }
 
 impl<T: DeviceBacking> InspectTask<WorkerState> for DriverWorkerTask<T> {
