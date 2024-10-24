@@ -247,10 +247,9 @@ mod private {
 }
 
 pub struct BackingSharedParams<'a> {
+    pub(crate) _partition: &'a UhPartitionInner,
     #[cfg(guest_arch = "x86_64")]
-    pub(crate) cvm_state: Option<&'a crate::UhCvmPartitionState>,
-    #[cfg(not(guest_arch = "x86_64"))]
-    pub(crate) _phantom: &'a (),
+    pub(crate) cvm_state: Option<crate::UhCvmPartitionState>,
 }
 
 /// Processor backing.
@@ -263,8 +262,12 @@ pub trait Backing: BackingPrivate {
 
 impl<T: BackingPrivate> Backing for T {}
 
-/// Marker trait for processor backings that have hardware isolation support.
-pub trait HardwareIsolatedBacking: Backing {}
+/// Trait for processor backings that have hardware isolation support.
+pub trait HardwareIsolatedBacking: Backing {
+    #[cfg(guest_arch = "x86_64")]
+    /// Gets CVM specific partition state.
+    fn cvm_state(&self) -> &crate::UhCvmPartitionState;
+}
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
 #[derive(Inspect, Debug)]
