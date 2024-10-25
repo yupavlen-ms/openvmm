@@ -145,7 +145,7 @@ impl SparseMapping {
                 )
             })?;
 
-        let libc_addr = fixed_addr.map_or(null_mut(), |a|{a as *mut c_void});
+        let libc_addr = fixed_addr.map_or(null_mut(), |a| a as *mut c_void);
         tracing::info!("YSP: SparseMapping::new_at {:X} len={}", libc_addr as usize, len);
         // SAFETY: calling mmap to allocate a new range.
         let address = unsafe {
@@ -236,7 +236,7 @@ impl SparseMapping {
         };
 
         tracing::info!("YSP: SparseMapping::map_file (shared) {:X} offset={} len={}", self.address as usize, offset, len);
-        // SAFETY: The flags passed in are guaranteed to be valid
+        // SAFETY: The flags passed in are guaranteed to be valid. MAP_SHARED is required.
         unsafe {
             self.mmap(
                 offset,
