@@ -5,8 +5,7 @@
 #![cfg(unix)]
 #![warn(missing_docs)]
 
-// SAFETY: Send, Sync, and *nix calls mmap() mmunmap()
-//         all require unsafe keyword.
+// SAFETY: Send, Sync, and *nix calls mmap() munmap() require unsafe keyword.
 #![allow(unsafe_code)]
 
 mod mapped_dma;
@@ -51,9 +50,9 @@ enum State {
     },
 }
 
-// SAFETY: YSP: FIXME: add comment.
+// SAFETY: The result of mmap call is safe to share between threads.
 unsafe impl Send for FixedMapping {}
-// SAFETY: YSP: FIXME: add comment.
+// SAFETY: The result of mmap call is safe to share between threads.
 unsafe impl Sync for FixedMapping {}
 
 struct FixedMapping {
@@ -63,7 +62,7 @@ struct FixedMapping {
 
 impl FixedMapping {
     fn new(len: usize) -> std::io::Result<Self> {
-        // SAFETY: YSP: FIXME: add description.
+        // SAFETY: calling mmap as documented to create a new mapping.
         let addr = unsafe {
             libc::mmap(
                 std::ptr::null_mut(),
@@ -86,10 +85,10 @@ impl FixedMapping {
         len: usize,
         file_mapping: impl AsRawFd
     ) -> std::io::Result<Self> {
-        // SAFETY: YSP: FIXME: add description.
+        // SAFETY: addr_fixed and len are restored after servicing.
         let addr = unsafe {
             // MAP_UNINITIALIZED is documented but not defined in MapFlags.
-            // MAP_ANONYMOUS is documented as performing zeroinit. To remove it, fd must be set.
+            // MAP_ANONYMOUS is documented as performing zeroinit. Otherwise, fd must be set.
             // TODO: Check if MAP_UNINITIALIZED is needed.
             libc::mmap(
                 addr_fixed as *mut c_void,
@@ -108,7 +107,7 @@ impl FixedMapping {
     }
 
     fn lock(&self) -> std::io::Result<()> {
-        // SAFETY: self contains a valid mmap result.
+        // SAFETY: calling mlock with a validated result of mmap.
         if unsafe { libc::mlock(self.addr, self.len) } < 0 {
             return Err(std::io::Error::last_os_error());
         }
@@ -119,7 +118,7 @@ impl FixedMapping {
 impl Drop for FixedMapping {
     fn drop(&mut self) {
         if !self.addr.is_null() {
-            // SAFETY: YSP: FIXME: add comment.
+            // SAFETY: The address and length are a valid mmap result.
             unsafe {
                 libc::munmap(self.addr, self.len);
             }
@@ -197,8 +196,6 @@ impl Drop for FixedPoolHandle {
 ///
 /// This struct is considered the "owner" of the pool allowing for save/restore.
 ///
-// TODO SNP: Implement save restore. This means additionally having some sort of
-// restore_alloc method that maps to an existing allocation.
 #[derive(Inspect)]
 pub struct FixedPool {
     #[inspect(flatten)]
@@ -266,7 +263,7 @@ impl FixedPoolAllocator {
                 tag: tag.clone(),
             })?;
 
-        let base_pfn= match inner.state.swap_remove(index) {
+        let base_pfn = match inner.state.swap_remove(index) {
             State::Free {
                 base_pfn: base,
                 size_pages: len,
@@ -335,7 +332,7 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         let alloc = self
             .alloc(
                 size_pages.try_into().expect("already checked nonzero"),
-                "vfio dma".into(),
+                "mshv dma".into(),
             )
             .context("failed to allocate fixed mem")?;
 
@@ -351,7 +348,7 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         tracing::trace!(gpa, file_offset, len, "mapping dma buffer");
         mapping
             .map_file(0, len, gpa_fd.get(), file_offset, true)
-            .context("unable to map allocation")?;
+            .context("sparse mapping failed")?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
 
@@ -388,13 +385,13 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         let alloc = self
             .alloc(
                 size_pages.try_into().expect("already checked nonzero"),
-                "vfio dma".into(),
+                "mshv dma".into(),
             )
             .context("failed to allocate fixed mem")?;
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
-        let mapping = sparse_mmap::SparseMapping::new_at(len, Some(addr)).context("failed to create mapping")?;
-
+        let mapping = sparse_mmap::SparseMapping::new_at(len, Some(addr))
+            .context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
@@ -436,7 +433,7 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_basic_alloc() {
+    fn test_fixed_alloc() {
         let state = vec![State::Free {
             base_pfn: 10,
             size_pages: 20,
@@ -462,5 +459,61 @@ mod test {
 
         let inner = alloc.inner.lock();
         assert_eq!(inner.state.len(), 2);
+    }
+
+    #[test]
+    fn test_fixed_restore() {
+        let state = vec![State::Free {
+            base_pfn: 10,
+            size_pages: 12,
+        }];
+        let alloc = FixedPoolAllocator {
+            inner: Arc::new(Mutex::new(FixedPoolInner { state })),
+        };
+
+        let r1 = alloc
+            .restore(13.try_into().unwrap(), 1.try_into().unwrap(), "restore1".into())
+            .unwrap();
+        assert_eq!(r1.base_pfn, 13);
+        assert_eq!(r1.size_pages, 1);
+
+        let r2 = alloc
+            .restore(15.try_into().unwrap(), 2.try_into().unwrap(), "restore2".into())
+            .unwrap();
+        assert_eq!(r2.base_pfn, 15);
+        assert_eq!(r2.size_pages, 2);
+
+        let r3 = alloc
+            .restore(18.try_into().unwrap(), 4.try_into().unwrap(), "restore2".into())
+            .unwrap();
+        assert_eq!(r3.base_pfn, 18);
+        assert_eq!(r3.size_pages, 4);
+
+        let r4 = alloc
+            .restore(10.try_into().unwrap(), 3.try_into().unwrap(), "restore2".into())
+            .unwrap();
+        assert_eq!(r4.base_pfn, 10);
+        assert_eq!(r4.size_pages, 3);
+
+        let r5 = alloc
+            .restore(14.try_into().unwrap(), 1.try_into().unwrap(), "restore2".into())
+            .unwrap();
+        assert_eq!(r5.base_pfn, 14);
+        assert_eq!(r5.size_pages, 1);
+
+        assert!(alloc.restore(5.try_into().unwrap(), 3.try_into().unwrap(), "failed".into()).is_err());
+        assert!(alloc.restore(100.try_into().unwrap(), 10.try_into().unwrap(), "failed".into()).is_err());
+        assert!(alloc.restore(12.try_into().unwrap(), 4.try_into().unwrap(), "failed".into()).is_err());
+
+        let inner = alloc.inner.lock();
+        assert_eq!(inner.state.len(), 6);
+        // Must be dropped to avoid deadlock after.
+        drop(inner);
+
+        drop(r1);
+        drop(r2);
+        drop(r3);
+        drop(r4);
+        drop(r5);
     }
 }
