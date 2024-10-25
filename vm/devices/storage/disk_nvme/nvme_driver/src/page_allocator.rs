@@ -77,7 +77,7 @@ impl PageAllocator {
                 }
             })
             .collect();
-        tracing::info!("YSP: alloc_pages n={} pfns[0]={}", n, pfn0);
+        tracing::info!("YSP: alloc_pages n={} pfns[0]={:X}", n, pfn0);
         Some(ScopedPages { alloc: self, pages })
     }
 

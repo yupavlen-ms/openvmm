@@ -96,7 +96,7 @@ impl LockedMemory {
         let mapping = Mapping::new(len).context("failed to create mapping")?;
         mapping.lock().context("failed to lock mapping")?;
         let pages = mapping.pages()?;
-        tracing::info!("YSP: WRONG-1 --> pfn[0]={} {len:X}", pages[0]);
+        tracing::info!("YSP: WRONG-1 --> pfn[0]={:X} {len:X}", pages[0]);
         Ok(Self {
             mapping,
             pfns: pages,
