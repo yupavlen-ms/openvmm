@@ -67,6 +67,7 @@ impl PageAllocator {
         };
 
         let pfns = self.mem.pfns();
+        let pfn0 = pfns[0]; // YSP
         let pages = (0..n)
             .map(|_| {
                 let n = core.alloc().unwrap();
@@ -76,10 +77,12 @@ impl PageAllocator {
                 }
             })
             .collect();
+        tracing::info!("YSP: alloc_pages n={} pfns[0]={}", n, pfn0);
         Some(ScopedPages { alloc: self, pages })
     }
 
     pub async fn alloc_bytes(&self, n: usize) -> Option<ScopedPages<'_>> {
+        tracing::info!("YSP: alloc_bytes n={}", n);
         self.alloc_pages((n + PAGE_SIZE - 1) / PAGE_SIZE).await
     }
 }

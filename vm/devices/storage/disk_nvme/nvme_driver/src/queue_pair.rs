@@ -20,6 +20,7 @@ use mesh::rpc::Rpc;
 use mesh::rpc::RpcSend;
 use mesh::Cancel;
 use mesh::CancelContext;
+use mesh::OneshotSender; // YSP
 use pal_async::driver::SpawnDriver;
 use pal_async::task::Task;
 use safeatomic::AtomicSliceOps;
@@ -199,6 +200,7 @@ impl Issuer {
         &self,
         command: spec::Command,
     ) -> Result<spec::Completion, RequestError> {
+        tracing::info!("YSP: issue_raw");
         match self.send.call(Req::Command, command).await {
             Ok(completion) if completion.status.status() == 0 => Ok(completion),
             Ok(completion) => Err(RequestError::Nvme(NvmeError(spec::Status(
@@ -350,6 +352,7 @@ impl Issuer {
 
         let prp = mem.prp();
         command.dptr = prp.dptr;
+        tracing::info!("YSP: issue_out");
         let completion = self.issue_raw(command).await;
         mem.read(data);
         completion
@@ -413,6 +416,19 @@ impl QueueHandler {
         mut recv: mesh::Receiver<Req>,
         interrupt: &mut DeviceInterrupt,
     ) {
+        tracing::info!("YSP: inserting stuff ---->");
+        let (respond1, _) = mesh::oneshot();
+        let (respond2, _) = mesh::oneshot();
+        let ysp1 = self.commands.vacant_entry();
+        let mut command1 = spec::Command::new_zeroed();
+        command1.cdw0.set_cid(ysp1.key() as u16);
+        ysp1.insert(PendingCommand { command: command1, respond: respond1 });
+        let ysp2 = self.commands.vacant_entry();
+        let mut command2 = spec::Command::new_zeroed();
+        command2.cdw0.set_cid(ysp2.key() as u16);
+        ysp2.insert(PendingCommand { command: command2, respond: respond2 });
+        tracing::info!("YSP: <---- inserting stuff");
+
         loop {
             enum Event {
                 Request(Req),
@@ -422,12 +438,14 @@ impl QueueHandler {
             let event = poll_fn(|cx| {
                 if !self.sq.is_full() && self.commands.len() < self.max_cids {
                     if let Poll::Ready(Some(req)) = recv.poll_next_unpin(cx) {
+                        tracing::info!("YSP: poll ready");
                         return Event::Request(req).into();
                     }
                 }
                 while !self.commands.is_empty() {
                     tracing::info!("YSP: slab remaining len={}", self.commands.len());
                     if let Some(completion) = self.cq.read() {
+                        tracing::info!("YSP: completion ready");
                         return Event::Completion(completion).into();
                     }
                     if interrupt.poll(cx).is_pending() {
@@ -447,6 +465,7 @@ impl QueueHandler {
                         let entry = self.commands.vacant_entry();
                         command.cdw0.set_cid(entry.key() as u16);
                         entry.insert(PendingCommand { command, respond });
+                        tracing::info!("YSP: writing cmd sq {} cid {}", self.sq.id(), command.cdw0.cid());
                         self.sq.write(command).unwrap();
                         self.stats.issued.increment();
                     }
@@ -458,11 +477,12 @@ impl QueueHandler {
                         Some(command) => {
                             assert_eq!(completion.sqid, self.sq.id());
                             self.sq.update_head(completion.sqhd);
+                            tracing::info!("YSP: GOOD completion cq {} cid {}", self.cq._id(), completion.cid);
                             command.respond.send(completion);
                             self.stats.completed.increment();
                         }
                         None => {
-                            tracing::info!("unexpected completion cq {} cid {}", self.cq._id(), completion.cid);
+                            tracing::info!("YSP: unexpected completion cq {} cid {}", self.cq._id(), completion.cid);
                         }
                     };
                 }

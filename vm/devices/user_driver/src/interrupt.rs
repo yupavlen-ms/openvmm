@@ -71,6 +71,7 @@ impl DeviceInterruptSlot {
     fn poll(&self, cx: &mut Context<'_>) -> Poll<()> {
         if self.signaled.load(Acquire) {
             self.signaled.store(false, Release);
+            tracing::info!("YSP: INTR1");
             Poll::Ready(())
         } else {
             let _old_waker;
@@ -78,6 +79,7 @@ impl DeviceInterruptSlot {
             // Check again under the lock.
             if self.signaled.load(Acquire) {
                 self.signaled.store(false, Release);
+                tracing::info!("YSP: INTR2");
                 return Poll::Ready(());
             }
             if waker.as_ref().map_or(true, |w| !w.will_wake(cx.waker())) {
