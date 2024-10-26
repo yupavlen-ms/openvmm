@@ -303,7 +303,6 @@ fn reserved_memory_regions(
             .map(|r| (r, ReservedMemoryType::Vtl2Config)),
     );
     if let Some(sidecar) = sidecar {
-        log!("-YSP: sidecar {:X}-{:X}", sidecar.image.start(), sidecar.image.end());
         reserved.push((sidecar.image, ReservedMemoryType::SidecarImage));
         reserved.extend(sidecar.node_params.iter().map(|x| {
             (

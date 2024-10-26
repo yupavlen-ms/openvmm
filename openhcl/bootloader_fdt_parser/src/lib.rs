@@ -151,6 +151,9 @@ pub struct ParsedBootDtInfo {
     pub gic: Option<GicInfo>,
     /// The memory allocation mode the bootloader decided to use.
     pub memory_allocation_mode: MemoryAllocationMode,
+    /// Parts of VTL2 memory to preserve during servicing.
+    #[inspect(iter_by_index)]
+    pub dma_preserve_ranges: Vec<MemoryRange>,
 }
 
 fn err_to_owned(e: fdt::parser::Error<'_>) -> anyhow::Error {
@@ -185,6 +188,7 @@ struct OpenhclInfo {
     partition_memory_map: Vec<AddressRange>,
     accepted_memory: Vec<MemoryRange>,
     memory_allocation_mode: MemoryAllocationMode,
+    dma_preserve_ranges: Vec<MemoryRange>,
 }
 
 fn parse_memory_openhcl(node: &Node<'_>) -> anyhow::Result<AddressRange> {
@@ -192,6 +196,8 @@ fn parse_memory_openhcl(node: &Node<'_>) -> anyhow::Result<AddressRange> {
         let prop = try_find_property(node, "openhcl,memory-type")
             .context(format!("missing openhcl,memory-type on node {}", node.name))?;
 
+        let zzz = prop.read_u32(0).unwrap();
+        tracing::info!("YSP: vtl_usage {}", zzz);
         MemoryVtlType(prop.read_u32(0).map_err(err_to_owned).context(format!(
             "openhcl memory node {} openhcl,memory-type invalid",
             node.name
@@ -209,6 +215,7 @@ fn parse_memory_openhcl(node: &Node<'_>) -> anyhow::Result<AddressRange> {
                 .read_u32(0)
                 .map_err(err_to_owned)
                 .context(format!("memory node {} invalid igvm type", node.name))?;
+            tracing::info!("YSP: igvm_type {}", value);
             MemoryMapEntryType(value as u16)
         };
 
@@ -321,7 +328,19 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         })
         .collect();
 
-    // Extract vmbus mmio information from the overall memory map.
+    // Report config ranges in a separate vec as well, for convenience.
+    let dma_preserve_ranges = memory
+        .iter()
+        .filter_map(|entry| {
+            if entry.vtl_usage() == MemoryVtlType::VTL2_PRESERVED {
+                Some(*entry.range())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+        // Extract vmbus mmio information from the overall memory map.
     let vtl0_mmio = memory
         .iter()
         .filter_map(|range| match range {
@@ -339,6 +358,7 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         partition_memory_map: memory,
         accepted_memory,
         memory_allocation_mode,
+        dma_preserve_ranges,
     })
 }
 
@@ -429,6 +449,7 @@ impl ParsedBootDtInfo {
         let mut partition_memory_map = Vec::new();
         let mut accepted_ranges = Vec::new();
         let mut memory_allocation_mode = MemoryAllocationMode::Host;
+        let mut dma_preserve_ranges = Vec::new();
 
         let parser = Parser::new(raw)
             .map_err(err_to_owned)
@@ -459,6 +480,7 @@ impl ParsedBootDtInfo {
                     partition_memory_map = info.partition_memory_map;
                     accepted_ranges = info.accepted_memory;
                     memory_allocation_mode = info.memory_allocation_mode;
+                    dma_preserve_ranges = info.dma_preserve_ranges;
                 }
 
                 _ if child.name.starts_with("memory@") => {
@@ -488,6 +510,7 @@ impl ParsedBootDtInfo {
             accepted_ranges,
             gic,
             memory_allocation_mode,
+            dma_preserve_ranges,
         })
     }
 }
