@@ -522,6 +522,7 @@ pub fn write_dt(
             RangeWalkResult::Left(typ) | RangeWalkResult::Both(_, typ) => {
                 // This range is for VTL2. If only in Left, it's ram, but if in
                 // Both, it's the reserve type indicated in right.
+                log!("YSP: push {:X}-{:X}", range.start(), range.end());
                 vtl2_memory_map.push(Vtl2MemoryEntry {
                     range,
                     memory_type: typ,
@@ -559,6 +560,7 @@ pub fn write_dt(
             }
             RangeWalkResult::Both(partition_entry, vtl2_entry) => {
                 // This range is in use by VTL2. Indicate that.
+                log!("YSP: memory@ {:X}-{:X} {}", range.start(), range.end(), vtl2_entry.memory_type.0);
                 let name = format_fixed!(64, "memory@{:x}", range.start());
                 openhcl_builder = openhcl_builder
                     .start_node(&name)?
@@ -600,6 +602,7 @@ pub fn write_dt(
 
     // Report accepted ranges underhil openhcl node.
     for range in accepted_ranges {
+        log!("YSP: accepted {:X}-{:X}", range.start(), range.end());
         let name = format_fixed!(64, "accepted-memory@{:x}", range.start());
         openhcl_builder = openhcl_builder
             .start_node(&name)?

@@ -339,6 +339,7 @@ dependencies = [
  "inspect",
  "loader_defs",
  "memory_range",
+ "tracing",
  "vm_topology",
 ]
 
