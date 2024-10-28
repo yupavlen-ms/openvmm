@@ -164,39 +164,38 @@ impl IntoPipeline for CheckinGatesCli {
         let mut all_jobs = Vec::new();
 
         // emit mdbook guide build job
-        let (pub_guide, _use_guide) = pipeline.new_artifact("guide");
+        let (pub_guide, use_guide) = pipeline.new_artifact("guide");
         let job = pipeline
-            .new_job(
-                FlowPlatform::Windows,
-                FlowArch::X86_64,
-                "build mdbook guide [x64-windows]",
-            )
-            .gh_set_pool(crate::pipelines_shared::gh_pools::default_x86_pool(
-                FlowPlatform::Windows,
+            .new_job(FlowPlatform::Linux, FlowArch::X86_64, "build mdbook guide")
+            .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
+                FlowPlatform::Linux,
             ))
             .dep_on(
                 |ctx| flowey_lib_hvlite::_jobs::build_and_publish_guide::Params {
                     artifact_dir: ctx.publish_artifact(pub_guide),
                     done: ctx.new_done_handle(),
-                    deploy_github_pages: matches!(config, PipelineConfig::Ci),
                 },
             )
-            .gh_grant_permissions::<flowey_lib_hvlite::_jobs::build_and_publish_guide::Node>([(
-                GhPermission::Pages,
-                GhPermissionValue::Write,
-            )])
             .finish();
 
         all_jobs.push(job);
 
         // emit rustdoc jobs
-        for (target, platform) in [
-            (CommonTriple::X86_64_WINDOWS_MSVC, FlowPlatform::Windows),
-            (CommonTriple::X86_64_LINUX_GNU, FlowPlatform::Linux),
+        let (pub_rustdoc_linux, use_rustdoc_linux) = pipeline.new_artifact("x64-linux-rustdoc");
+        let (pub_rustdoc_win, use_rustdoc_win) = pipeline.new_artifact("x64-windows-rustdoc");
+        for (target, platform, pub_rustdoc) in [
+            (
+                CommonTriple::X86_64_WINDOWS_MSVC,
+                FlowPlatform::Windows,
+                pub_rustdoc_win,
+            ),
+            (
+                CommonTriple::X86_64_LINUX_GNU,
+                FlowPlatform::Linux,
+                pub_rustdoc_linux,
+            ),
         ] {
             let deny_warnings = !matches!(backend_hint, PipelineBackendHint::Local);
-            let (pub_rustdoc, _use_rustdoc) =
-                pipeline.new_artifact(format!("x64-{platform}-rustdoc"));
             let job = pipeline
                 .new_job(
                     platform,
@@ -216,6 +215,38 @@ impl IntoPipeline for CheckinGatesCli {
                         done: ctx.new_done_handle(),
                     },
                 )
+                .finish();
+
+            all_jobs.push(job);
+        }
+
+        // emit consolidated gh pages publish job
+        if matches!(config, PipelineConfig::Ci) {
+            let artifact_dir = if matches!(backend_hint, PipelineBackendHint::Local) {
+                let (publish, _use) = pipeline.new_artifact("gh-pages");
+                Some(publish)
+            } else {
+                None
+            };
+
+            let job = pipeline
+                .new_job(FlowPlatform::Linux, FlowArch::X86_64, "publish openvmm.dev")
+                .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
+                    FlowPlatform::Linux,
+                ))
+                .dep_on(
+                    |ctx| flowey_lib_hvlite::_jobs::consolidate_and_publish_gh_pages::Params {
+                        rustdoc_linux: ctx.use_artifact(&use_rustdoc_linux),
+                        rustdoc_windows: ctx.use_artifact(&use_rustdoc_win),
+                        guide: ctx.use_artifact(&use_guide),
+                        artifact_dir: artifact_dir.map(|x| ctx.publish_artifact(x)),
+                        done: ctx.new_done_handle(),
+                    },
+                )
+                .gh_grant_permissions::<flowey_lib_hvlite::_jobs::consolidate_and_publish_gh_pages::Node>([
+                    (GhPermission::IdToken, GhPermissionValue::Write),
+                    (GhPermission::Pages, GhPermissionValue::Write),
+                ])
                 .finish();
 
             all_jobs.push(job);
