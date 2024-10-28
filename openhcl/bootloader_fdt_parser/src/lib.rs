@@ -328,7 +328,7 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         })
         .collect();
 
-    // Report config ranges in a separate vec as well, for convenience.
+    // Report DMA preserve ranges in a separate vec, for convenience.
     let dma_preserve_ranges = memory
         .iter()
         .filter_map(|entry| {
@@ -340,7 +340,7 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         })
         .collect();
 
-        // Extract vmbus mmio information from the overall memory map.
+    // Extract vmbus mmio information from the overall memory map.
     let vtl0_mmio = memory
         .iter()
         .filter_map(|range| match range {

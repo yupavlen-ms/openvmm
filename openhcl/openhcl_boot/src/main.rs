@@ -321,17 +321,16 @@ fn reserved_memory_regions(
         log!("YSP: vtl2_ram {:X}-{:X}", ra.range.start(), ra.range.end());
     }
 
-    let mut my_people_go = partition_info.preserve_dma_4k_pages.unwrap_or(0);
-    log!("YSP: let_my_people_go {}", my_people_go);
-    my_people_go = my_people_go.min(8192);
+    let dma_4k_pages = partition_info.preserve_dma_4k_pages.unwrap_or(0);
+    log!("YSP: let_my_people_go {}", dma_4k_pages);
     // If DMA reserved hint was provided by Host, allocate top of VTL2 memory range
     // for that purpose.
     // TODO: NUMAs.
-    if !partition_info.vtl2_ram.is_empty() {
+    if !partition_info.vtl2_ram.is_empty() && (dma_4k_pages > 0) {
         let last_mem_entry = &partition_info.vtl2_ram[partition_info.vtl2_ram.len() - 1];
-        if last_mem_entry.range.page_count_4k() > my_people_go {
+        if last_mem_entry.range.page_count_4k() > dma_4k_pages {
             let reserved_dma = MemoryRange::from_4k_gpn_range(ops::Range {
-                start: last_mem_entry.range.end_4k_gpn() - my_people_go,
+                start: last_mem_entry.range.end_4k_gpn() - dma_4k_pages,
                 end: last_mem_entry.range.end_4k_gpn(),
             });
             reserved.push((reserved_dma, ReservedMemoryType::DmaBuffers));
