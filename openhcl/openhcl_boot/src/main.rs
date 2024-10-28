@@ -30,6 +30,7 @@ use arrayvec::ArrayString;
 use arrayvec::ArrayVec;
 use boot_logger::LoggerType;
 use core::fmt::Write;
+use core::ops;
 use dt::write_dt;
 use dt::BootTimes;
 use host_params::shim_params::IsolationType;
@@ -313,7 +314,29 @@ fn reserved_memory_regions(
     }
 
     // YSP: FIXME: Test
-    reserved.push((MemoryRange::new(0x126000000..0x128000000), ReservedMemoryType::DmaBuffers));
+    //reserved.push((MemoryRange::new(0x126000000..0x128000000), ReservedMemoryType::DmaBuffers));
+
+    // YSP: FIXME: Debug
+    for ra in &partition_info.vtl2_ram {
+        log!("YSP: vtl2_ram {:X}-{:X}", ra.range.start(), ra.range.end());
+    }
+
+    let mut my_people_go = partition_info.dma_reserved_4k_pages.unwrap_or(0);
+    log!("YSP: let_my_people_go {}", my_people_go);
+    my_people_go = my_people_go.min(8192);
+    // If DMA reserved hint was provided by Host, allocate top of VTL2 memory range
+    // for that purpose.
+    // TODO: NUMAs.
+    if !partition_info.vtl2_ram.is_empty() {
+        let last_mem_entry = &partition_info.vtl2_ram[partition_info.vtl2_ram.len() - 1];
+        if last_mem_entry.range.page_count_4k() > my_people_go {
+            let reserved_dma = MemoryRange::from_4k_gpn_range(ops::Range {
+                start: last_mem_entry.range.end_4k_gpn() - my_people_go,
+                end: last_mem_entry.range.end_4k_gpn(),
+            });
+            reserved.push((reserved_dma, ReservedMemoryType::DmaBuffers));
+        }
+    }
 
     reserved
         .as_mut()
@@ -585,7 +608,7 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
         panic!("no cpus");
     }
 
-    log!("YSP: cpus3 {}", partition_info.cpus.len());
+    log!("YSP: unwrapped: {}", partition_info.dma_reserved_4k_pages.unwrap_or(0));
 
     setup_vtl2_vp(partition_info);
     setup_vtl2_memory(&p, partition_info);
