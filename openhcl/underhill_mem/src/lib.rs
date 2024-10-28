@@ -450,6 +450,7 @@ mod mapping {
     impl GpaVtlPermissions {
         fn new(isolation: IsolationType, vtl: Vtl, protections: HvMapGpaFlags) -> Self {
             match isolation {
+                IsolationType::None => unreachable!(),
                 IsolationType::Vbs => GpaVtlPermissions::Vbs(protections),
                 IsolationType::Snp => {
                     let mut vtl_permissions = GpaVtlPermissions::Snp(SevRmpAdjust::new());
@@ -547,6 +548,7 @@ mod mapping {
         /// Accept pages for VTL0.
         pub fn accept_vtl0_pages(&self, range: MemoryRange) -> Result<(), AcceptPagesError> {
             match self.isolation {
+                IsolationType::None => unreachable!(),
                 IsolationType::Vbs => self
                     .mshv_hvcall
                     .accept_gpa_pages(range, AcceptMemoryType::RAM),
@@ -574,6 +576,7 @@ mod mapping {
 
         fn unaccept_vtl0_pages(&self, range: MemoryRange) {
             match self.isolation {
+                IsolationType::None => unreachable!(),
                 IsolationType::Vbs => {
                     // TODO VBS: is there something to do here?
                 }
@@ -610,7 +613,7 @@ mod mapping {
         /// Query the current permissions for a vtl on a page.
         fn vtl_permissions(&self, vtl: Vtl, gpa: u64) -> GpaVtlPermissions {
             match self.isolation {
-                IsolationType::Vbs => unimplemented!(),
+                IsolationType::None | IsolationType::Vbs => unimplemented!(),
                 IsolationType::Snp => {
                     // TODO CVM GUEST VSM: track the permissions directly in
                     // underhill. For now, use rmpquery.
@@ -1108,7 +1111,7 @@ mod mapping {
             }
 
             let current_permissions = match self.acceptor.isolation {
-                IsolationType::Vbs => unreachable!(),
+                IsolationType::None | IsolationType::Vbs => unreachable!(),
                 IsolationType::Snp => self
                     .acceptor
                     .vtl_permissions(vtl.into(), gpn * HV_PAGE_SIZE),

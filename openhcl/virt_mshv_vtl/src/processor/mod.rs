@@ -733,7 +733,7 @@ impl<'p, T: Backing> Processor for UhProcessor<'p, T> {
         match vtl {
             Vtl::Vtl0 => true,
             Vtl::Vtl1 => {
-                if self.partition.is_hardware_isolated() {
+                if self.partition.isolation.is_hardware_isolated() {
                     *self.inner.hcvm_vtl1_enabled.lock()
                 } else {
                     // TODO: when there's support for returning VTL 1 registers,
@@ -878,7 +878,7 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
                     .map_err(UhRunVpError::State)?;
 
                     if vtl == GuestVtl::Vtl1 {
-                        assert!(self.partition.is_hardware_isolated());
+                        assert!(self.partition.isolation.is_hardware_isolated());
                         // Should not have already initialized the hv emulator for this vtl
                         assert!(self.hv(vtl).is_none());
 
@@ -1408,7 +1408,7 @@ impl<T: CpuIo, B: Backing> hv1_hypercall::ModifyVtlProtectionMask
             }
         }
 
-        if self.vp.partition.is_hardware_isolated() {
+        if self.vp.partition.isolation.is_hardware_isolated() {
             // VTL 1 mut be enabled already.
             let mut guest_vsm_lock = self.vp.partition.guest_vsm.write();
             let guest_vsm = guest_vsm_lock
@@ -1441,7 +1441,7 @@ impl<T: CpuIo, B: Backing> hv1_hypercall::ModifyVtlProtectionMask
             // protections mask changes
             // Can receive an intercept on adjust permissions, and for isolated
             // VMs if the page is unaccepted
-            if self.vp.partition.isolation.is_some() {
+            if self.vp.partition.isolation.is_isolated() {
                 return Err((HvError::OperationDenied, 0));
             } else {
                 if !gpa_pages.is_empty() && !self.vp.partition.is_gpa_lower_vtl_ram(gpa_pages[0]) {
