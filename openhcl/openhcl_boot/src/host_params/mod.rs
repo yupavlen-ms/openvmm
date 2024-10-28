@@ -82,7 +82,7 @@ pub struct PartitionInfo {
     /// The VTL0 alias map physical address.
     pub vtl0_alias_map: Option<u64>,
     /// Hint from Host on how many pages to preserve during servicing.
-    pub dma_reserved_4k_pages: Option<u64>,
+    pub preserve_dma_4k_pages: Option<u64>,
 }
 
 impl PartitionInfo {
@@ -111,7 +111,7 @@ impl PartitionInfo {
             memory_allocation_mode: MemoryAllocationMode::Host,
             entropy: None,
             vtl0_alias_map: None,
-            dma_reserved_4k_pages: None,
+            preserve_dma_4k_pages: None,
         }
     }
 

@@ -343,7 +343,7 @@ fn reserved_memory_regions(
         log!("YSP: vtl2_ram {:X}-{:X}", ra.range.start(), ra.range.end());
     }
 
-    let mut my_people_go = partition_info.dma_reserved_4k_pages.unwrap_or(0);
+    let mut my_people_go = partition_info.preserve_dma_4k_pages.unwrap_or(0);
     log!("YSP: let_my_people_go {}", my_people_go);
     my_people_go = my_people_go.min(8192);
     // If DMA reserved hint was provided by Host, allocate top of VTL2 memory range
@@ -637,7 +637,7 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
     }
 
     validate_vp_hw_ids(partition_info);
-    log!("YSP: unwrapped: {}", partition_info.dma_reserved_4k_pages.unwrap_or(0));
+    log!("YSP: unwrapped: {}", partition_info.preserve_dma_4k_pages.unwrap_or(0));
 
     setup_vtl2_vp(partition_info);
     setup_vtl2_memory(&p, partition_info);

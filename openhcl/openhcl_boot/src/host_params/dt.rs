@@ -467,7 +467,7 @@ impl PartitionInfo {
             memory_allocation_mode: _,
             entropy,
             vtl0_alias_map: _,
-            dma_reserved_4k_pages,
+            preserve_dma_4k_pages,
         } = storage;
 
         *isolation = params.isolation_type;
@@ -487,7 +487,7 @@ impl PartitionInfo {
         *com3_serial = parsed.com3_serial;
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
-        *dma_reserved_4k_pages = parsed.preserve_dma_4k_pages;
+        *preserve_dma_4k_pages = parsed.preserve_dma_4k_pages;
 
         Ok(Some(storage))
     }
