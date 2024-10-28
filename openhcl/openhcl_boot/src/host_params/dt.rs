@@ -332,8 +332,8 @@ impl PartitionInfo {
 
         let command_line = params.command_line();
 
-        if parsed.preserve_dma_mem_pages.is_some() {
-            log!("YSP: Hooray2 {}", parsed.preserve_dma_mem_pages.unwrap());
+        if parsed.preserve_dma_4k_pages.is_some() {
+            log!("YSP: Hooray2 {}", parsed.preserve_dma_4k_pages.unwrap());
         }
         else {
             log!("YSP: Oopsie2");
@@ -447,7 +447,7 @@ impl PartitionInfo {
         for entry in &parsed.memory {
             storage.partition_ram.push(*entry);
         }
-        log!("YSP: partition_ram len={}", storage.partition_ram.len());
+        log!("YSP: Hooray3? {}", parsed.preserve_dma_4k_pages.unwrap_or(0));
 
         // Set remaining struct fields before returning.
         let Self {
@@ -467,6 +467,7 @@ impl PartitionInfo {
             memory_allocation_mode: _,
             entropy,
             vtl0_alias_map: _,
+            dma_reserved_4k_pages,
         } = storage;
 
         *isolation = params.isolation_type;
@@ -486,6 +487,7 @@ impl PartitionInfo {
         *com3_serial = parsed.com3_serial;
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
+        *dma_reserved_4k_pages = parsed.preserve_dma_4k_pages;
 
         Ok(Some(storage))
     }
