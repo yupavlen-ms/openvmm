@@ -461,7 +461,7 @@ impl PartitionInfo {
             gic,
             memory_allocation_mode: _,
             entropy,
-            dma_reserved_4k_pages,
+            preserve_dma_4k_pages,
         } = storage;
 
         *vtl2_config_region = MemoryRange::new(
@@ -475,7 +475,7 @@ impl PartitionInfo {
         *com3_serial = parsed.com3_serial;
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
-        *dma_reserved_4k_pages = parsed.preserve_dma_4k_pages;
+        *preserve_dma_4k_pages = parsed.preserve_dma_4k_pages;
 
         Ok(Some(storage))
     }

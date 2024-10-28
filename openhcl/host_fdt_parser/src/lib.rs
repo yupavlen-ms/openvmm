@@ -720,12 +720,11 @@ impl<
             gic: _,
             memory_allocation_mode: _,
             entropy: _,
-            preserve_dma_4k_pages,
+            preserve_dma_4k_pages: _,
         } = storage;
 
         *device_tree_size = parser.total_size;
         *boot_cpuid_phys = parser.boot_cpuid_phys;
-        //tracing::info!("YSP: parse_inner {}", storage.preserve_dma_4k_pages);
 
         Ok(storage)
     }

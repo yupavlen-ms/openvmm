@@ -74,7 +74,7 @@ pub struct PartitionInfo {
     /// Entropy from the host to be used by the OpenHCL kernel
     pub entropy: Option<ArrayVec<u8, MAX_ENTROPY_SIZE>>,
     /// Hint from Host on how many pages to preserve during servicing.
-    pub dma_reserved_4k_pages: Option<u64>,
+    pub preserve_dma_4k_pages: Option<u64>,
 }
 
 impl PartitionInfo {
@@ -100,7 +100,7 @@ impl PartitionInfo {
             gic: None,
             memory_allocation_mode: MemoryAllocationMode::Host,
             entropy: None,
-            dma_reserved_4k_pages: None,
+            preserve_dma_4k_pages: None,
         }
     }
 
