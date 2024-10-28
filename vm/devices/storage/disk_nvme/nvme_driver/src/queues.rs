@@ -58,7 +58,7 @@ impl SubmissionQueue {
             .write_obj(self.tail as usize * size_of_val(&command), &command);
         tracing::info!(
             "YSP: Wrote to base={:X} off={} pfn[0]={:X}",
-            self.mem.base(),
+            self.mem.base_va(),
             self.tail,
             self.mem.pfns()[0]
         );
@@ -108,7 +108,7 @@ impl CompletionQueue {
         tracing::info!(
             "YSP: reading offset={} mem={:X} pfn[0]={:X}",
             self.head,
-            self.mem.base(),
+            self.mem.base_va(),
             self.mem.pfns()[0]
         );
         if completion.status.phase() != self.phase {

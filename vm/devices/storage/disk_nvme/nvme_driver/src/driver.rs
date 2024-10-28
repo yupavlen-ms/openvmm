@@ -587,7 +587,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
 
         tracing::debug!(cpu, qid, "creating io queue");
 
-        // Share IO queue 0's interrupt with the admin queue.
+        // Share IO queue 1's interrupt with the admin queue.
         let iv = self.io.len() as u16;
         let interrupt = self
             .device

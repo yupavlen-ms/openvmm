@@ -430,7 +430,7 @@ impl PartitionInfo {
         let vtl2_config_region_reclaim =
             MemoryRange::try_new(reclaim_base..reclaim_end).expect("range is valid");
 
-        log!("reclaim aligned base {reclaim_base:x}, reclaim end {reclaim_end:x}");
+        log!("reclaim device tree memory {reclaim_base:x}-{reclaim_end:x}");
 
         for entry in &parsed.memory {
             storage.partition_ram.push(*entry);
@@ -451,6 +451,7 @@ impl PartitionInfo {
             gic,
             memory_allocation_mode: _,
             entropy,
+            preserve_dma_4k_pages,
         } = storage;
 
         *vtl2_config_region = MemoryRange::new(
@@ -464,6 +465,7 @@ impl PartitionInfo {
         *com3_serial = parsed.com3_serial;
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
+        *preserve_dma_4k_pages = parsed.preserve_dma_4k_pages;
 
         Ok(Some(storage))
     }

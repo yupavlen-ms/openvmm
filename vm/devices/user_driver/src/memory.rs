@@ -158,7 +158,7 @@ impl MemoryBlock {
     }
 
     /// YSP: TODO: Not sure if ok to keep or only needed here
-    pub fn base(&self) -> u64 {
+    pub fn base_va(&self) -> u64 {
         self.base as u64
     }
 }

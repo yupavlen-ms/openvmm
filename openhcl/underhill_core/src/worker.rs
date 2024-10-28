@@ -1760,10 +1760,12 @@ async fn new_underhill_vm(
         crate::inspect_proc::periodic_telemetry_task(driver_source.simple()),
     );
 
-    // YSP: FIXME: Test code - DO NOT MERGE!
-    let fixed_mem_range = MemoryRange::from_4k_gpn_range(0x126000..0x128000);
-    let fixed_mem_pool = if !fixed_mem_range.is_empty() {
-        Some(FixedPool::new(fixed_mem_range)?)
+    // Allocate fixed pool for DMA-capable devices if size hint was provided by host,
+    // otherwise use default heap allocator.
+    // Contents of fixed pool will be preserved during servicing.
+    let fixed_mem_pool = if !runtime_params.dma_preserve_memory_map().is_empty() {
+        let pools = runtime_params.dma_preserve_memory_map().to_vec();
+        Some(FixedPool::new(pools)?)
     } else {
         None
     };
