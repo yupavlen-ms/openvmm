@@ -1,10 +1,12 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Copyright (C) Microsoft Corporation. All rights reserved.
 
 //! This module implements a fixed memory allocator for allocating pages at specific location.
 
 #![cfg(unix)]
 #![warn(missing_docs)]
-
 // SAFETY: Send, Sync, and *nix calls mmap() munmap() require unsafe keyword.
 #![allow(unsafe_code)]
 
@@ -23,9 +25,9 @@ use std::num::NonZeroU64;
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use thiserror::Error;
-use user_driver::HostDmaAllocator;
 use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDmaBuffer;
+use user_driver::HostDmaAllocator;
 
 /// Error returned when unable to allocate memory.
 #[derive(Debug, Error)]
@@ -319,8 +321,10 @@ impl FixedPoolAllocator {
                     base_pfn: avail_pfn,
                     size_pages: avail_pages,
                 } => {
-                    *avail_pages >= req_pages && *avail_pfn <= req_pfn && *avail_pfn + *avail_pages >= req_pfn + req_pages
-                },
+                    *avail_pages >= req_pages
+                        && *avail_pfn <= req_pfn
+                        && *avail_pfn + *avail_pages >= req_pfn + req_pages
+                }
                 State::Allocated { .. } => false,
             })
             .ok_or(FixedPoolOutOfMemory {
@@ -402,7 +406,12 @@ impl VfioDmaBuffer for FixedPoolAllocator {
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
 
-        tracing::info!("YSP: CORRECT --> pfn[0]={:X} pages={} GPA={:X}", pfns[0], pfns.len(), gpa);
+        tracing::info!(
+            "YSP: CORRECT --> pfn[0]={:X} pages={} GPA={:X}",
+            pfns[0],
+            pfns.len(),
+            gpa
+        );
         Ok(MemoryBlock::new(FixedDmaBuffer {
             mapping,
             _alloc: alloc,
@@ -444,8 +453,8 @@ impl HostDmaAllocator for FixedPoolAllocator {
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
         let addr = _base_pfn.map(|a| a * HV_PAGE_SIZE); // YSP: FIXME: check this
-        let mapping = sparse_mmap::SparseMapping::new_at(len, addr)
-            .context("failed to create mapping")?;
+        let mapping =
+            sparse_mmap::SparseMapping::new_at(len, addr).context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
         // No need to set bit 63 because this buffer is visible to VTL2 only.
         let file_offset = gpa;
@@ -509,38 +518,76 @@ mod test {
         };
 
         let r1 = alloc
-            .restore(13.try_into().unwrap(), 1.try_into().unwrap(), "restore1".into())
+            .restore(
+                13.try_into().unwrap(),
+                1.try_into().unwrap(),
+                "restore1".into(),
+            )
             .unwrap();
         assert_eq!(r1.base_pfn, 13);
         assert_eq!(r1.size_pages, 1);
 
         let r2 = alloc
-            .restore(15.try_into().unwrap(), 2.try_into().unwrap(), "restore2".into())
+            .restore(
+                15.try_into().unwrap(),
+                2.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r2.base_pfn, 15);
         assert_eq!(r2.size_pages, 2);
 
         let r3 = alloc
-            .restore(18.try_into().unwrap(), 4.try_into().unwrap(), "restore2".into())
+            .restore(
+                18.try_into().unwrap(),
+                4.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r3.base_pfn, 18);
         assert_eq!(r3.size_pages, 4);
 
         let r4 = alloc
-            .restore(10.try_into().unwrap(), 3.try_into().unwrap(), "restore2".into())
+            .restore(
+                10.try_into().unwrap(),
+                3.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r4.base_pfn, 10);
         assert_eq!(r4.size_pages, 3);
 
         let r5 = alloc
-            .restore(14.try_into().unwrap(), 1.try_into().unwrap(), "restore2".into())
+            .restore(
+                14.try_into().unwrap(),
+                1.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r5.base_pfn, 14);
         assert_eq!(r5.size_pages, 1);
 
-        assert!(alloc.restore(5.try_into().unwrap(), 3.try_into().unwrap(), "failed".into()).is_err());
-        assert!(alloc.restore(100.try_into().unwrap(), 10.try_into().unwrap(), "failed".into()).is_err());
-        assert!(alloc.restore(12.try_into().unwrap(), 4.try_into().unwrap(), "failed".into()).is_err());
+        assert!(alloc
+            .restore(
+                5.try_into().unwrap(),
+                3.try_into().unwrap(),
+                "failed".into()
+            )
+            .is_err());
+        assert!(alloc
+            .restore(
+                100.try_into().unwrap(),
+                10.try_into().unwrap(),
+                "failed".into()
+            )
+            .is_err());
+        assert!(alloc
+            .restore(
+                12.try_into().unwrap(),
+                4.try_into().unwrap(),
+                "failed".into()
+            )
+            .is_err());
 
         let inner = alloc.inner.lock();
         assert_eq!(inner.state.len(), 6);

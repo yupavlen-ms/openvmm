@@ -422,11 +422,17 @@ impl QueueHandler {
         let ysp1 = self.commands.vacant_entry();
         let mut command1 = spec::Command::new_zeroed();
         command1.cdw0.set_cid(ysp1.key() as u16);
-        ysp1.insert(PendingCommand { command: command1, respond: respond1 });
+        ysp1.insert(PendingCommand {
+            command: command1,
+            respond: respond1,
+        });
         let ysp2 = self.commands.vacant_entry();
         let mut command2 = spec::Command::new_zeroed();
         command2.cdw0.set_cid(ysp2.key() as u16);
-        ysp2.insert(PendingCommand { command: command2, respond: respond2 });
+        ysp2.insert(PendingCommand {
+            command: command2,
+            respond: respond2,
+        });
         tracing::info!("YSP: <---- inserting stuff");
 
         loop {
@@ -465,7 +471,11 @@ impl QueueHandler {
                         let entry = self.commands.vacant_entry();
                         command.cdw0.set_cid(entry.key() as u16);
                         entry.insert(PendingCommand { command, respond });
-                        tracing::info!("YSP: writing cmd sq {} cid {}", self.sq.id(), command.cdw0.cid());
+                        tracing::info!(
+                            "YSP: writing cmd sq {} cid {}",
+                            self.sq.id(),
+                            command.cdw0.cid()
+                        );
                         self.sq.write(command).unwrap();
                         self.stats.issued.increment();
                     }
@@ -477,12 +487,20 @@ impl QueueHandler {
                         Some(command) => {
                             assert_eq!(completion.sqid, self.sq.id());
                             self.sq.update_head(completion.sqhd);
-                            tracing::info!("YSP: GOOD completion cq {} cid {}", self.cq._id(), completion.cid);
+                            tracing::info!(
+                                "YSP: GOOD completion cq {} cid {}",
+                                self.cq._id(),
+                                completion.cid
+                            );
                             command.respond.send(completion);
                             self.stats.completed.increment();
                         }
                         None => {
-                            tracing::info!("YSP: unexpected completion cq {} cid {}", self.cq._id(), completion.cid);
+                            tracing::info!(
+                                "YSP: unexpected completion cq {} cid {}",
+                                self.cq._id(),
+                                completion.cid
+                            );
                         }
                     };
                 }
