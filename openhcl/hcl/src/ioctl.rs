@@ -135,6 +135,11 @@ pub enum Error {
     Sidecar(#[source] sidecar_client::SidecarError),
     #[error("failed to open sidecar")]
     OpenSidecar(#[source] NewSidecarClientError),
+    #[error("mismatch between requested isolation type {requested:?} and supported isolation type {supported:?}")]
+    MismatchedIsolation {
+        supported: IsolationType,
+        requested: IsolationType,
+    },
 }
 
 /// Error for IOCTL errors specifically.
@@ -1933,7 +1938,7 @@ thread_local! {
 
 impl Hcl {
     /// Returns a new HCL instance.
-    pub fn new(sidecar: Option<SidecarClient>) -> Result<Hcl, Error> {
+    pub fn new(isolation: IsolationType, sidecar: Option<SidecarClient>) -> Result<Hcl, Error> {
         static SIGNAL_HANDLER_INIT: Once = Once::new();
         // SAFETY: The signal handler does not perform any actions that are forbidden
         // for signal handlers to perform, as it performs nothing.
@@ -1947,23 +1952,13 @@ impl Hcl {
         // Open both mshv fds
         let mshv_fd = Mshv::new()?;
 
-        let supports_vtl_ret_action = mshv_fd.check_extension(HCL_CAP_VTL_RETURN_ACTION)?;
-        let supports_register_page = mshv_fd.check_extension(HCL_CAP_REGISTER_PAGE)?;
-        let dr6_shared = mshv_fd.check_extension(HCL_CAP_DR6_SHARED)?;
-        tracing::debug!(
-            supports_vtl_ret_action,
-            supports_register_page,
-            "HCL capabilities",
-        );
-
-        let vtl_fd = mshv_fd.create_vtl()?;
-
-        // Open the hypercall pseudo-device
-        let mshv_hvcall = MshvHvcall::new()?;
-
-        // TODO SNP: When it's checked in, the isolation type should instead be queried
-        // from the kernel.
-        let isolation = if cfg!(guest_arch = "x86_64") {
+        // Validate the hypervisor's advertised isolation type matches the
+        // requested isolation type. In CVM scenarios, this is not trusted, so
+        // we still need the isolation type from the caller.
+        //
+        // FUTURE: the kernel driver should probably tell us this, especially
+        // since the kernel ABI is different for different isolation types.
+        let supported_isolation = if cfg!(guest_arch = "x86_64") {
             // xtask-fmt allow-target-arch cpu-intrinsic
             #[cfg(target_arch = "x86_64")]
             {
@@ -1987,6 +1982,27 @@ impl Hcl {
         } else {
             IsolationType::None
         };
+
+        if isolation != supported_isolation {
+            return Err(Error::MismatchedIsolation {
+                supported: supported_isolation,
+                requested: isolation,
+            });
+        }
+
+        let supports_vtl_ret_action = mshv_fd.check_extension(HCL_CAP_VTL_RETURN_ACTION)?;
+        let supports_register_page = mshv_fd.check_extension(HCL_CAP_REGISTER_PAGE)?;
+        let dr6_shared = mshv_fd.check_extension(HCL_CAP_DR6_SHARED)?;
+        tracing::debug!(
+            supports_vtl_ret_action,
+            supports_register_page,
+            "HCL capabilities",
+        );
+
+        let vtl_fd = mshv_fd.create_vtl()?;
+
+        // Open the hypercall pseudo-device
+        let mshv_hvcall = MshvHvcall::new()?;
 
         // Override certain features for hardware isolated VMs.
         // TODO: vtl return actions are inhibited for hardware isolated VMs because they currently
