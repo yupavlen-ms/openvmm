@@ -354,10 +354,18 @@ fn reserved_memory_regions(
     for rng in flattened.as_ref().iter() {
         match rng.1 {
             ReservedMemoryType::Vtl2Config => {
-                log!("YSP: reserved {:X}-{:X} vtl2config", rng.0.start(), rng.0.end());
+                log!(
+                    "YSP: reserved {:X}-{:X} vtl2config",
+                    rng.0.start(),
+                    rng.0.end()
+                );
             }
             ReservedMemoryType::SidecarImage | ReservedMemoryType::SidecarNode => {
-                log!("YSP: reserved {:X}-{:X} sidecar", rng.0.start(), rng.0.end());
+                log!(
+                    "YSP: reserved {:X}-{:X} sidecar",
+                    rng.0.start(),
+                    rng.0.end()
+                );
             }
             ReservedMemoryType::DmaBuffers => {
                 log!("YSP: reserved {:X}-{:X} DMA", rng.0.start(), rng.0.end());
@@ -448,7 +456,11 @@ mod x86_boot {
                 }
                 RangeWalkResult::Both(_, _) => {
                     add_e820_entry(entries.next(), range, E820_RESERVED)?;
-                    log!("YSP: added E820_RESERVED {:X} {}", range.start(), range.len());
+                    log!(
+                        "YSP: added E820_RESERVED {:X} {}",
+                        range.start(),
+                        range.len()
+                    );
                     n += 1;
                 }
             }
@@ -607,7 +619,10 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
         panic!("no cpus");
     }
 
-    log!("YSP: unwrapped: {}", partition_info.preserve_dma_4k_pages.unwrap_or(0));
+    log!(
+        "YSP: unwrapped: {}",
+        partition_info.preserve_dma_4k_pages.unwrap_or(0)
+    );
 
     setup_vtl2_vp(partition_info);
     setup_vtl2_memory(&p, partition_info);

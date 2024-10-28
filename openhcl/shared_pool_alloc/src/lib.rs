@@ -281,7 +281,7 @@ impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
         &self,
         _addr: u64,
         len: usize,
-        _pfns: &[u64]
+        _pfns: &[u64],
     ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
         tracing::info!("YSP: unsupported restore_dma_buffer");
         // Restore is not yet supported for shared pool, just call regular create.

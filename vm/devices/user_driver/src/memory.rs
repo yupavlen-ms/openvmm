@@ -3,7 +3,7 @@
 
 //! Traits and types for sharing host memory with the device.
 
-use inspect::Inspect;   // YSP
+use inspect::Inspect; // YSP
 use safeatomic::AtomicSliceOps;
 use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
@@ -51,7 +51,12 @@ struct RestrictedView {
 impl RestrictedView {
     /// Wraps `mem` and provides a restricted view of it.
     fn new(mem: Arc<dyn MappedDmaTarget>, offset: usize, len: usize) -> Self {
-        tracing::info!("YSP: RestrictedView::new {:X} +{:X} len={}", mem.base() as usize, offset, len);
+        tracing::info!(
+            "YSP: RestrictedView::new {:X} +{:X} len={}",
+            mem.base() as usize,
+            offset,
+            len
+        );
         let mem_len = mem.len();
         assert!(mem_len >= offset && mem_len - offset >= len);
         Self { len, offset, mem }
@@ -102,7 +107,11 @@ unsafe impl Sync for MemoryBlock {}
 impl MemoryBlock {
     /// Creates a new memory block backed by `mem`.
     pub fn new<T: 'static + MappedDmaTarget>(mem: T) -> Self {
-        tracing::info!("YSP: MemoryBlock::new {:X} len={}", mem.base() as u64, mem.len());
+        tracing::info!(
+            "YSP: MemoryBlock::new {:X} len={}",
+            mem.base() as u64,
+            mem.len()
+        );
         Self {
             base: mem.base(),
             len: mem.len(),
@@ -112,7 +121,12 @@ impl MemoryBlock {
 
     /// Returns a view of a subset of the buffer.
     pub fn subblock(&self, offset: usize, len: usize) -> Self {
-        tracing::info!("YSP: MemoryBlock::subblock {:X} +{:X} len={}", self.base as usize, offset, len);
+        tracing::info!(
+            "YSP: MemoryBlock::subblock {:X} +{:X} len={}",
+            self.base as usize,
+            offset,
+            len
+        );
         match self.mem.view(offset, len) {
             Some(view) => view,
             None => Self::new(RestrictedView::new(self.mem.clone(), offset, len)),
@@ -177,14 +191,17 @@ impl Inspect for MemoryBlock {
             .field_with("contents", || {
                 // SAFETY: Reading from valid const pointer not exceeding the block size.
                 let slice = unsafe {
-                    std::slice::from_raw_parts(self.mem.base().cast::<u32>(), std::cmp::min(self.mem.len()/4, 256))
+                    std::slice::from_raw_parts(
+                        self.mem.base().cast::<u32>(),
+                        std::cmp::min(self.mem.len() / 4, 256),
+                    )
                 };
                 slice
-                .to_vec()
-                .iter()
-                .map(|b| format!("{:08x}", b))
-                .collect::<Vec<String>>()
-                .join(" ")
+                    .to_vec()
+                    .iter()
+                    .map(|b| format!("{:08x}", b))
+                    .collect::<Vec<String>>()
+                    .join(" ")
             });
     }
 }

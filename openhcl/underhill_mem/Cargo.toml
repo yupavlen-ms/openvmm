@@ -26,9 +26,6 @@ parking_lot.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-# YSP
-zerocopy.workspace = true
-
 [build-dependencies]
 build_rs_guest_arch.workspace = true
 

@@ -293,7 +293,7 @@ impl NvmeController {
             spec::Register::CC => {
                 tracing::info!("YSP: writing CC");
                 self.set_cc(data.into())
-            },
+            }
             spec::Register::AQA => self.registers.aqa = data.into(),
             _ => return IoResult::Err(InvalidRegister),
         }

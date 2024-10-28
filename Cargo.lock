@@ -6582,7 +6582,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "tracing",
  "vtl2_settings_proto",
 ]
 
@@ -6811,7 +6810,6 @@ dependencies = [
  "virt_mshv_vtl",
  "vm_topology",
  "x86defs",
- "zerocopy",
 ]
 
 [[package]]

@@ -431,7 +431,10 @@ impl LoadedVm {
         deadline: std::time::Instant,
         capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<bool> {
-        tracing::info!("YSP: capabilities_flags: {}", capabilities_flags.disable_nvme_keepalive());
+        tracing::info!(
+            "YSP: capabilities_flags: {}",
+            capabilities_flags.disable_nvme_keepalive()
+        );
         let running = self.state_units.is_running();
         let success = match self
             .handle_servicing_inner(correlation_id, deadline, capabilities_flags)
@@ -478,7 +481,10 @@ impl LoadedVm {
         // which is enabled by default.
         let nvme_keepalive = !capabilities_flags.disable_nvme_keepalive();
         // YSP: FIXME: Check if RuntimeServicing is still delivered after recent changes.
-        tracing::info!("YSP: handle_servicing_inner override --> {}", capabilities_flags.disable_nvme_keepalive());
+        tracing::info!(
+            "YSP: handle_servicing_inner override --> {}",
+            capabilities_flags.disable_nvme_keepalive()
+        );
         if let Some(m) = self.nvme_manager.as_mut() {
             m.set_nvme_keepalive(nvme_keepalive);
         }

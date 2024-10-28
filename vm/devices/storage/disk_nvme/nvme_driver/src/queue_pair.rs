@@ -105,21 +105,9 @@ impl QueuePair {
         tracing::info!("YSP: QueuePair::new qid={}", qid);
         assert!(mem_block.len() >= Self::required_dma_size());
 
-        let (queue_handler, alloc, mem) = QueuePair::allocate(
-            qid,
-            sq_size,
-            cq_size,
-            mem_block,
-        )?;
+        let (queue_handler, alloc, mem) = QueuePair::allocate(qid, sq_size, cq_size, mem_block)?;
 
-        QueuePair::resume(
-            spawner,
-            interrupt,
-            registers,
-            mem,
-            alloc,
-            queue_handler
-        )
+        QueuePair::resume(spawner, interrupt, registers, mem, alloc, queue_handler)
     }
 
     /// Part of QueuePair initialization sequence which does memory allocations.
@@ -129,24 +117,23 @@ impl QueuePair {
         cq_size: u16,
         mem_block: MemoryBlock,
     ) -> anyhow::Result<(QueueHandler, PageAllocator, MemoryBlock)> {
-        tracing::info!("YSP: QueuePair::allocate {:X} qid={}", &mem_block.base_va(), qid);
+        tracing::info!(
+            "YSP: QueuePair::allocate {:X} qid={}",
+            &mem_block.base_va(),
+            qid
+        );
         assert!(sq_size <= Self::MAX_SQSIZE);
         assert!(cq_size <= Self::MAX_CQSIZE);
 
         // The memory block is split contiguously: SQ, CQ, Data.
-        let sq = SubmissionQueue::new(
-            qid,
-            sq_size,
-            mem_block.subblock(0, Self::sq_size())
-        );
+        let sq = SubmissionQueue::new(qid, sq_size, mem_block.subblock(0, Self::sq_size()));
         let cq = CompletionQueue::new(
             qid,
             cq_size,
-            mem_block.subblock(Self::sq_size(), Self::cq_size())
+            mem_block.subblock(Self::sq_size(), Self::cq_size()),
         );
         let alloc: PageAllocator = PageAllocator::new(
-            mem_block
-                .subblock(Self::sq_size() + Self::cq_size(), Self::dma_data_size())
+            mem_block.subblock(Self::sq_size() + Self::cq_size(), Self::dma_data_size()),
         );
 
         let queue_handler = QueueHandler {
@@ -186,9 +173,17 @@ impl QueuePair {
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem_block.read_at(0, checker.as_mut_slice());
-        tracing::info!("YSP: read [{} {} {} {} {} {} {} {}]",
-            checker[0], checker[1], checker[2], checker[3],
-            checker[4], checker[5], checker[6], checker[7],);
+        tracing::info!(
+            "YSP: read [{} {} {} {} {} {} {} {}]",
+            checker[0],
+            checker[1],
+            checker[2],
+            checker[3],
+            checker[4],
+            checker[5],
+            checker[6],
+            checker[7],
+        );
 
         Ok(Self {
             task,
@@ -217,7 +212,12 @@ impl QueuePair {
 
     /// Save queue pair state for servicing.
     pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
-        tracing::info!("YSP: QueuePair::save {:X} sq={:X} cq={:X}", self.mem.base_va(), self.sq_addr(), self.cq_addr());
+        tracing::info!(
+            "YSP: QueuePair::save {:X} sq={:X} cq={:X}",
+            self.mem.base_va(),
+            self.sq_addr(),
+            self.cq_addr()
+        );
         // Send an RPC request to QueueHandler thread to save its data.
         let queue_data = self.issuer.send.call(Req::Save, ()).await?;
 
@@ -241,7 +241,11 @@ impl QueuePair {
         mem_block: MemoryBlock,
         saved_state: &QueuePairSavedState,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: QueuePair::restore {}/{}", saved_state.sq_state.sqid, saved_state.cq_state.cqid);
+        tracing::info!(
+            "YSP: QueuePair::restore {}/{}",
+            saved_state.sq_state.sqid,
+            saved_state.cq_state.cqid
+        );
         let (mut queue_handler, alloc, mem) = QueuePair::allocate(
             saved_state.sq_state.sqid,
             saved_state.sq_state.len as u16,
@@ -251,14 +255,7 @@ impl QueuePair {
 
         queue_handler.restore(saved_state)?;
 
-        QueuePair::resume(
-            spawner,
-            interrupt,
-            registers,
-            mem,
-            alloc,
-            queue_handler
-        )
+        QueuePair::resume(spawner, interrupt, registers, mem, alloc, queue_handler)
     }
 }
 
@@ -558,7 +555,13 @@ impl QueueHandler {
                 }
                 while !self.commands.is_empty() {
                     if let Some(completion) = self.cq.read() {
-                        if self.cq._id() == 0 {tracing::info!("YSP: completion cid {} q {}", &completion.cid, &self.cq._id());}
+                        if self.cq._id() == 0 {
+                            tracing::info!(
+                                "YSP: completion cid {} q {}",
+                                &completion.cid,
+                                &self.cq._id()
+                            );
+                        }
                         return Event::Completion(completion).into();
                     }
                     if interrupt.poll(cx).is_pending() {
@@ -578,7 +581,14 @@ impl QueueHandler {
                     Req::Command(Rpc(mut command, respond)) => {
                         let entry = self.commands.vacant_entry();
                         command.cdw0.set_cid(entry.key() as u16);
-                        if self.sq.id() == 0 {tracing::info!("YSP: Req::Command {:X} cid {} q {}", &command.cdw0.opcode(), &command.cdw0.cid(), &self.sq.id());}
+                        if self.sq.id() == 0 {
+                            tracing::info!(
+                                "YSP: Req::Command {:X} cid {} q {}",
+                                &command.cdw0.opcode(),
+                                &command.cdw0.cid(),
+                                &self.sq.id()
+                            );
+                        }
                         entry.insert(PendingCommand { command, respond });
                         self.sq.write(command).unwrap();
                         self.stats.issued.increment();
@@ -598,7 +608,13 @@ impl QueueHandler {
                     // YSP: FIXME: restore the proper variable type. Crash here.
                     let command = command.unwrap();
                     if completion.sqid != self.sq.id() {
-                        tracing::info!("YSP: Req::Completion opc {} cid {} my-q {} target-q {}", command.opcode(), &completion.cid, &self.sq.id(), completion.sqid);
+                        tracing::info!(
+                            "YSP: Req::Completion opc {} cid {} my-q {} target-q {}",
+                            command.opcode(),
+                            &completion.cid,
+                            &self.sq.id(),
+                            completion.sqid
+                        );
                     }
                     assert_eq!(completion.sqid, self.sq.id());
                     self.sq.update_head(completion.sqhd);
@@ -611,7 +627,11 @@ impl QueueHandler {
 
     /// Save queue data for servicing.
     pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
-        tracing::info!("YSP: QueueHandler::save qid={}/{}", self.sq.id(), self.cq._id());
+        tracing::info!(
+            "YSP: QueueHandler::save qid={}/{}",
+            self.sq.id(),
+            self.cq._id()
+        );
         let mut pending_cmds: Vec<PendingCommandSavedState> = Vec::new();
         for cmd in &self.commands {
             let mut command: [u8; 64] = [0; 64];
@@ -642,11 +662,9 @@ impl QueueHandler {
     }
 
     /// Restore queue data after servicing.
-    pub fn restore(
-        &mut self,
-        saved_state: &QueuePairSavedState
-    ) -> anyhow::Result<()> {
-        tracing::info!("YSP: QueueHandler::restore {:X}? qid={}/{} cpu={} msi={}",
+    pub fn restore(&mut self, saved_state: &QueuePairSavedState) -> anyhow::Result<()> {
+        tracing::info!(
+            "YSP: QueueHandler::restore {:X}? qid={}/{} cpu={} msi={}",
             saved_state.base_mem.unwrap_or_default(),
             saved_state.sq_state.sqid,
             saved_state.cq_state.cqid,
@@ -658,8 +676,7 @@ impl QueueHandler {
         // Restore pending commands.
         let mut pending: Vec<(usize, PendingCommand)> = Vec::new();
         for cmd in &saved_state.pending_cmds {
-            let (send, mut _recv) =
-                mesh::oneshot::<nvme_spec::Completion>();
+            let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
             let pending_command = PendingCommand {
                 command: FromBytes::read_from_prefix(cmd.command.as_bytes()).unwrap(),
                 respond: send,
@@ -691,8 +708,8 @@ pub struct PendingCommandSavedState {
     #[mesh(2)]
     pub cid: u16,
     // TODO: Investigate
-//    #[inspect(skip)]
-//    respond: mesh::OneshotSender<spec::Completion>,
+    //    #[inspect(skip)]
+    //    respond: mesh::OneshotSender<spec::Completion>,
 }
 
 impl From<&[u8]> for PendingCommandSavedState {
@@ -724,11 +741,11 @@ pub struct QueuePairSavedState {
     #[mesh(7)]
     pub cq_addr: u64,
     #[mesh(8)]
-    pub base_mem: Option<u64>,          // TODO: Would it be better to store const u8* ?
+    pub base_mem: Option<u64>, // TODO: Would it be better to store const u8* ?
     #[mesh(9)]
-    pub mem_len: Option<usize>,         // TODO: Could be redundant with 'pfns'.
+    pub mem_len: Option<usize>, // TODO: Could be redundant with 'pfns'.
     #[mesh(10)]
-    pub pfns: Option<Vec<u64>>,         // This could be a duplicate of the queue saved state.
+    pub pfns: Option<Vec<u64>>, // This could be a duplicate of the queue saved state.
     #[mesh(11)]
     pub pending_cmds: Vec<PendingCommandSavedState>,
 }
