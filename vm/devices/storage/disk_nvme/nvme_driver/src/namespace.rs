@@ -83,14 +83,10 @@ impl Namespace {
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::new {}", nsid);
         let identify = match identify_ns {
-            Some(ns) => {
-                ns.clone()
-            },
-            None => {
-                identify_namespace(&admin, nsid)
-                    .await
-                    .map_err(NamespaceError::Request)?
-            }
+            Some(ns) => ns.clone(),
+            None => identify_namespace(&admin, nsid)
+                .await
+                .map_err(NamespaceError::Request)?,
         };
         //let identify = identify_namespace(&admin, nsid)
         //    .await
@@ -98,7 +94,11 @@ impl Namespace {
         if identify.nsze == 0 {
             return Err(NamespaceError::NotFound);
         }
-        tracing::info!("YSP: identify nsze={} ncap={}", identify.nsze, identify.ncap);
+        tracing::info!(
+            "YSP: identify nsze={} ncap={}",
+            identify.nsze,
+            identify.ncap
+        );
 
         let lba_format_index = identify.flbas.low_index();
         if lba_format_index > identify.nlbaf {
@@ -542,7 +542,7 @@ impl Namespace {
         device_id: &str,
         nsid: u32,
         identify_ns: &[u8; 4096],
-        _saved_state: &SavedNamespaceData
+        _saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::restore");
         let identify = nvm::IdentifyNamespace::read_from_prefix(identify_ns)

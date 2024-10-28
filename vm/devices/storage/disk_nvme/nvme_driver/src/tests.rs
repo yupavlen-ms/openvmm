@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+use crate::queue_pair::QueuePair;
 use crate::NvmeDriver;
 use chipset_device::mmio::ExternallyManagedMmioIntercepts;
 use disk_ramdisk::RamDisk;
@@ -15,6 +16,7 @@ use std::sync::Arc;
 use test_with_tracing::test;
 use user_driver::emulated::DeviceSharedMemory;
 use user_driver::emulated::EmulatedDevice;
+use user_driver::DeviceBacking;
 use user_driver::HostDmaAllocator;
 use vmcore::vm_task::SingleDriverBackend;
 use vmcore::vm_task::VmTaskDriverSource;
@@ -75,13 +77,9 @@ async fn test_nvme_driver(driver: DefaultDriver, allow_dma: bool) {
         .allocate_dma_buffer(payload_len)
         .unwrap();
 
-    let mut driver = NvmeDriver::new(
-        &driver_source,
-        CPU_COUNT,
-        mem_block,
-        device)
-    .await
-    .unwrap();
+    let mut driver = NvmeDriver::new(&driver_source, CPU_COUNT, mem_block, device)
+        .await
+        .unwrap();
 
     let namespace = driver.namespace(1).await.unwrap();
 
@@ -192,11 +190,7 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
         .allocate_dma_buffer(payload_len)
         .unwrap();
 
-    let mut nvme_driver = NvmeDriver::new(
-        &driver_source,
-        CPU_COUNT,
-        mem_block.clone(),
-        device)
+    let mut nvme_driver = NvmeDriver::new(&driver_source, CPU_COUNT, mem_block.clone(), device)
         .await
         .unwrap();
 
@@ -207,7 +201,7 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
     assert_eq!(saved_state.namespace.as_ref().unwrap().nsid, 1);
 
     // Create a second set of devices since the ownership has been moved.
-    let new_emu_mem = DeviceSharedMemory::new(64*1024*1024, payload_len);
+    let new_emu_mem = DeviceSharedMemory::new(64 * 1024 * 1024, payload_len);
     let mut new_msi_x = MsiInterruptSet::new();
     let new_nvme_ctrl = nvme::NvmeController::new(
         &driver_source,
@@ -229,7 +223,8 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
         CPU_COUNT,
         mem_block.clone(),
         new_device,
-        &saved_state)
-        .await
-        .unwrap();
+        &saved_state,
+    )
+    .await
+    .unwrap();
 }

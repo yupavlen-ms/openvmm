@@ -334,8 +334,7 @@ impl PartitionInfo {
 
         if parsed.preserve_dma_4k_pages.is_some() {
             log!("YSP: Hooray2 {}", parsed.preserve_dma_4k_pages.unwrap());
-        }
-        else {
+        } else {
             log!("YSP: Oopsie2");
         }
         // Always write the measured command line.
@@ -364,7 +363,10 @@ impl PartitionInfo {
                     .try_extend_from_slice(parse_host_vtl2_ram(params, &parsed.memory).as_ref())
                     .expect("vtl2 ram should only be 64 big");
                 storage.memory_allocation_mode = MemoryAllocationMode::Host;
-                log!("YSP: memory alloc mode: Host {} mems", storage.vtl2_ram.len());
+                log!(
+                    "YSP: memory alloc mode: Host {} mems",
+                    storage.vtl2_ram.len()
+                );
                 log!("YSP: cpus {}", storage.cpus.len());
             }
             MemoryAllocationMode::Vtl2 {
@@ -447,7 +449,10 @@ impl PartitionInfo {
         for entry in &parsed.memory {
             storage.partition_ram.push(*entry);
         }
-        log!("YSP: Hooray3? {}", parsed.preserve_dma_4k_pages.unwrap_or(0));
+        log!(
+            "YSP: Hooray3? {}",
+            parsed.preserve_dma_4k_pages.unwrap_or(0)
+        );
 
         // Set remaining struct fields before returning.
         let Self {

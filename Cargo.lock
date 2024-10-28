@@ -6772,12 +6772,7 @@ dependencies = [
  "prost",
  "serde",
  "serde_json",
-<<<<<<< HEAD
  "thiserror 2.0.0",
-=======
- "thiserror",
- "tracing",
->>>>>>> 798b61a (Initial port of the dev branch)
  "vtl2_settings_proto",
 ]
 
@@ -7008,7 +7003,6 @@ dependencies = [
  "vm_topology",
  "vtl_array",
  "x86defs",
- "zerocopy",
 ]
 
 [[package]]

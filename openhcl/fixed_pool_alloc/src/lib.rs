@@ -1,10 +1,12 @@
+// Copyright (c) Microsoft Corporation.
+// Licensed under the MIT License.
+
 // Copyright (C) Microsoft Corporation. All rights reserved.
 
 //! This module implements a fixed memory allocator for allocating pages at specific location.
 
 #![cfg(unix)]
 #![warn(missing_docs)]
-
 // SAFETY: Send, Sync, and *nix calls mmap() munmap() require unsafe keyword.
 #![allow(unsafe_code)]
 
@@ -80,11 +82,7 @@ impl FixedMapping {
     }
 
     #[cfg(feature = "nvme_keepalive")]
-    fn new_in(
-        addr_fixed: u64,
-        len: usize,
-        file_mapping: impl AsRawFd
-    ) -> std::io::Result<Self> {
+    fn new_in(addr_fixed: u64, len: usize, file_mapping: impl AsRawFd) -> std::io::Result<Self> {
         // SAFETY: addr_fixed and len are restored after servicing.
         let addr = unsafe {
             // MAP_UNINITIALIZED is documented but not defined in MapFlags.
@@ -99,7 +97,11 @@ impl FixedMapping {
                 0,
             )
         };
-        tracing::info!("YSP: requested: {:X} actual {:X}", addr_fixed, addr as usize);
+        tracing::info!(
+            "YSP: requested: {:X} actual {:X}",
+            addr_fixed,
+            addr as usize
+        );
         if addr == libc::MAP_FAILED {
             return Err(std::io::Error::last_os_error());
         }
@@ -285,7 +287,12 @@ impl FixedPoolAllocator {
             }
             State::Allocated { .. } => unreachable!(),
         };
-        tracing::info!("YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}", base_pfn, size_pages, index);
+        tracing::info!(
+            "YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}",
+            base_pfn,
+            size_pages,
+            index
+        );
 
         Ok(FixedPoolHandle {
             inner: self.inner.clone(),
@@ -297,11 +304,7 @@ impl FixedPoolAllocator {
     /// Allocate contiguous pool from starting PFN.
     /// This is still under research so mark it as a hack.
     /// YSP: FIXME: HACK:
-    pub fn prealloc_at(
-        &self,
-        base_pfn: u64,
-        size_pages: u64,
-    ) -> Result<(), FixedPoolOutOfMemory> {
+    pub fn prealloc_at(&self, base_pfn: u64, size_pages: u64) -> Result<(), FixedPoolOutOfMemory> {
         let mut inner = self.inner.lock();
 
         inner.add(base_pfn, size_pages);
@@ -355,9 +358,17 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mapping.read_at(0, checker.as_mut_slice())?;
-        tracing::info!("YSP: read [{} {} {} {} {} {} {} {}]",
-            checker[0], checker[1], checker[2], checker[3],
-            checker[4], checker[5], checker[6], checker[7],);
+        tracing::info!(
+            "YSP: read [{} {} {} {} {} {} {} {}]",
+            checker[0],
+            checker[1],
+            checker[2],
+            checker[3],
+            checker[4],
+            checker[5],
+            checker[6],
+            checker[7],
+        );
 
         Ok(user_driver::memory::MemoryBlock::new(FixedDmaBuffer {
             mapping,
@@ -366,8 +377,18 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         }))
     }
 
-    fn restore_dma_buffer(&self, addr: u64, len: usize, pfns: &[u64]) -> anyhow::Result<user_driver::memory::MemoryBlock> {
-        tracing::info!("YSP: CORRECT FixedPoolAllocator::restore_dma_buffer {:X} len={} pfn [{:X}]", addr, len, pfns[0]);
+    fn restore_dma_buffer(
+        &self,
+        addr: u64,
+        len: usize,
+        pfns: &[u64],
+    ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+        tracing::info!(
+            "YSP: CORRECT FixedPoolAllocator::restore_dma_buffer {:X} len={} pfn [{:X}]",
+            addr,
+            len,
+            pfns[0]
+        );
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }
@@ -408,9 +429,17 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mapping.read_at(0, checker.as_mut_slice())?;
-        tracing::info!("YSP: read [{} {} {} {} {} {} {} {}]",
-            checker[0], checker[1], checker[2], checker[3],
-            checker[4], checker[5], checker[6], checker[7],);
+        tracing::info!(
+            "YSP: read [{} {} {} {} {} {} {} {}]",
+            checker[0],
+            checker[1],
+            checker[2],
+            checker[3],
+            checker[4],
+            checker[5],
+            checker[6],
+            checker[7],
+        );
 
         Ok(user_driver::memory::MemoryBlock::new(FixedDmaBuffer {
             mapping,
@@ -472,38 +501,76 @@ mod test {
         };
 
         let r1 = alloc
-            .restore(13.try_into().unwrap(), 1.try_into().unwrap(), "restore1".into())
+            .restore(
+                13.try_into().unwrap(),
+                1.try_into().unwrap(),
+                "restore1".into(),
+            )
             .unwrap();
         assert_eq!(r1.base_pfn, 13);
         assert_eq!(r1.size_pages, 1);
 
         let r2 = alloc
-            .restore(15.try_into().unwrap(), 2.try_into().unwrap(), "restore2".into())
+            .restore(
+                15.try_into().unwrap(),
+                2.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r2.base_pfn, 15);
         assert_eq!(r2.size_pages, 2);
 
         let r3 = alloc
-            .restore(18.try_into().unwrap(), 4.try_into().unwrap(), "restore2".into())
+            .restore(
+                18.try_into().unwrap(),
+                4.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r3.base_pfn, 18);
         assert_eq!(r3.size_pages, 4);
 
         let r4 = alloc
-            .restore(10.try_into().unwrap(), 3.try_into().unwrap(), "restore2".into())
+            .restore(
+                10.try_into().unwrap(),
+                3.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r4.base_pfn, 10);
         assert_eq!(r4.size_pages, 3);
 
         let r5 = alloc
-            .restore(14.try_into().unwrap(), 1.try_into().unwrap(), "restore2".into())
+            .restore(
+                14.try_into().unwrap(),
+                1.try_into().unwrap(),
+                "restore2".into(),
+            )
             .unwrap();
         assert_eq!(r5.base_pfn, 14);
         assert_eq!(r5.size_pages, 1);
 
-        assert!(alloc.restore(5.try_into().unwrap(), 3.try_into().unwrap(), "failed".into()).is_err());
-        assert!(alloc.restore(100.try_into().unwrap(), 10.try_into().unwrap(), "failed".into()).is_err());
-        assert!(alloc.restore(12.try_into().unwrap(), 4.try_into().unwrap(), "failed".into()).is_err());
+        assert!(alloc
+            .restore(
+                5.try_into().unwrap(),
+                3.try_into().unwrap(),
+                "failed".into()
+            )
+            .is_err());
+        assert!(alloc
+            .restore(
+                100.try_into().unwrap(),
+                10.try_into().unwrap(),
+                "failed".into()
+            )
+            .is_err());
+        assert!(alloc
+            .restore(
+                12.try_into().unwrap(),
+                4.try_into().unwrap(),
+                "failed".into()
+            )
+            .is_err());
 
         let inner = alloc.inner.lock();
         assert_eq!(inner.state.len(), 6);
