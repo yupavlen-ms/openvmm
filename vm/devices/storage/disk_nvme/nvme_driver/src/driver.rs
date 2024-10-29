@@ -664,11 +664,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     );
                 }
             }
-            .instrument(tracing::info_span!(
-                parent: None,
-                "nvme_async_event_task",
-                device_id = worker.device.id()
-            ))
         });
 
         let state = WorkerState {

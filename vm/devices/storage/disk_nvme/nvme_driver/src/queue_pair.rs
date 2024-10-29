@@ -75,7 +75,7 @@ impl QueuePair {
         PAGE_SIZE
     }
 
-    /// Return size in bytes for DMA transfer block.
+    /// Return size in bytes for DMA memory.
     fn dma_data_size() -> usize {
         const PER_QUEUE_PAGES: usize = 128;
         #[allow(clippy::assertions_on_constants)]
@@ -89,7 +89,7 @@ impl QueuePair {
 
     /// Return total DMA buffer size needed for the queue pair (all chunks are contiguous).
     pub fn required_dma_size() -> usize {
-        // 4k for SQ + 4k for CQ + 256k for data.
+        // 4k for SQ + 4k for CQ + 512k for data.
         QueuePair::sq_size() + QueuePair::cq_size() + QueuePair::dma_data_size()
     }
 
@@ -741,11 +741,11 @@ pub struct QueuePairSavedState {
     #[mesh(7)]
     pub cq_addr: u64,
     #[mesh(8)]
-    pub base_mem: Option<u64>, // TODO: Would it be better to store const u8* ?
+    pub base_va: u64, // TODO: Would it be better to store const u8* ?
     #[mesh(9)]
-    pub mem_len: Option<usize>, // TODO: Could be redundant with 'pfns'.
+    pub mem_len: usize, // TODO: Could be redundant with 'pfns'.
     #[mesh(10)]
-    pub pfns: Option<Vec<u64>>, // This could be a duplicate of the queue saved state.
+    pub pfns: Vec<u64>, // This could be a duplicate of the queue saved state.
     #[mesh(11)]
     pub pending_cmds: Vec<PendingCommandSavedState>,
 }
