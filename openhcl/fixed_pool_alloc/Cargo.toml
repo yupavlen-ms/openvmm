@@ -17,7 +17,6 @@ memory_range.workspace = true
 user_driver.workspace = true
 hvdef.workspace = true
 sparse_mmap.workspace = true
-# nix = { workspace = true, features = ["mman"] }
 libc.workspace = true
 
 inspect.workspace = true

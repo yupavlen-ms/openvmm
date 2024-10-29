@@ -379,7 +379,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     /// Shuts the device down.
     pub async fn shutdown(mut self) {
         // If nvme_keepalive was requested, return early.
-        // The memory is still aliased as we don't flush pendiong IOs.
+        // The memory is still aliased as we don't flush pending IOs.
         if self.nvme_keepalive {
             return;
         }

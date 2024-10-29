@@ -14,7 +14,6 @@ mod mapped_dma;
 
 pub use mapped_dma::FixedDmaBuffer;
 
-// #[cfg(feature = "vfio")]
 use anyhow::Context;
 use hvdef::HV_PAGE_SIZE;
 use inspect::Inspect;
@@ -377,7 +376,6 @@ impl FixedPoolAllocator {
     }
 }
 
-// #[cfg(feature = "vfio")]
 impl VfioDmaBuffer for FixedPoolAllocator {
     /// prealloc_at must be called before calling 'create'.
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
