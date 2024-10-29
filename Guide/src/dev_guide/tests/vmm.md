@@ -23,7 +23,7 @@ VMM tests are run using standard Rust test infrastructure, and are invoked via
 `cargo test` / `cargo nextest`.
 
 ```bash
-cargo nextest run vmm_tests [TEST_FILTERS]
+cargo nextest run -p vmm_tests [TEST_FILTERS]
 ```
 
 For example, to run a simple VMM test that simply boots using UEFI:
