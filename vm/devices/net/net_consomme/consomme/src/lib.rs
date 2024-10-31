@@ -162,6 +162,11 @@ pub struct ConsommeState {
     buffer: Box<[u8]>,
 }
 
+/// An error indicating that the CIDR is invalid.
+#[derive(Debug, Error)]
+#[error("invalid CIDR")]
+pub struct InvalidCidr;
+
 impl ConsommeState {
     /// Create default dynamic network state. The default state is
     ///     IP address: 10.0.0.2 / 24
@@ -178,6 +183,21 @@ impl ConsommeState {
             nameservers,
             buffer: Box::new([0; 65535]),
         })
+    }
+
+    /// Sets the cidr for the network.
+    ///
+    /// Setting, for example, 192.168.0.0/24 will set the gateway to
+    /// 192.168.0.1 and the client IP to 192.168.0.2.
+    pub fn set_cidr(&mut self, cidr: &str) -> Result<(), InvalidCidr> {
+        let cidr: smoltcp::wire::Ipv4Cidr = cidr.parse().map_err(|()| InvalidCidr)?;
+        let base_address = cidr.network().address();
+        self.gateway_ip = base_address;
+        self.gateway_ip.0[3] += 1;
+        self.client_ip = base_address;
+        self.client_ip.0[3] += 2;
+        self.net_mask = cidr.netmask();
+        Ok(())
     }
 }
 
