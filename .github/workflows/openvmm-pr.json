@@ -15,7 +15,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_guide\"},\"is_secret\":false},\"debug_label\":\"guide\",\"done\":{\"backing_var\":\"start1\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_guide::publish:0:flowey_lib_hvlite/src/artifact_guide.rs:34:40\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -128,7 +128,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_x64-windows-rustdoc\"},\"is_secret\":false},\"debug_label\":\"rustdoc\",\"done\":{\"backing_var\":\"start2\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_rustdoc::publish:1:flowey_lib_hvlite/src/artifact_rustdoc.rs:48:33\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -260,7 +260,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_x64-linux-rustdoc\"},\"is_secret\":false},\"debug_label\":\"rustdoc\",\"done\":{\"backing_var\":\"start3\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_rustdoc::publish:1:flowey_lib_hvlite/src/artifact_rustdoc.rs:48:33\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -389,7 +389,7 @@
         "{\"SetVerbose\":{\"backing_var\":{\"RuntimeVar\":\"param0\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -511,7 +511,7 @@
         "{\"SetVerbose\":{\"backing_var\":{\"RuntimeVar\":\"param0\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -643,7 +643,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_aarch64-windows-vmgstool\"},\"is_secret\":false},\"debug_label\":\"vmgstool\",\"done\":{\"backing_var\":\"start6\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_vmgstool::publish:0:flowey_lib_hvlite/src/artifact_vmgstool.rs:37:34\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -814,7 +814,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_aarch64-windows-vmm-tests-archive\"},\"is_secret\":false},\"debug_label\":\"vmm_tests\",\"done\":{\"backing_var\":\"start12\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_nextest_vmm_tests_archive::publish:0:flowey_lib_hvlite/src/artifact_nextest_vmm_tests_archive.rs:39:35\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -983,7 +983,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_x64-windows-vmgstool\"},\"is_secret\":false},\"debug_label\":\"vmgstool\",\"done\":{\"backing_var\":\"start13\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_vmgstool::publish:0:flowey_lib_hvlite/src/artifact_vmgstool.rs:37:34\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -1156,7 +1156,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_x64-windows-vmm-tests-archive\"},\"is_secret\":false},\"debug_label\":\"vmm_tests\",\"done\":{\"backing_var\":\"start19\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_nextest_vmm_tests_archive::publish:0:flowey_lib_hvlite/src/artifact_nextest_vmm_tests_archive.rs:39:35\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -1326,7 +1326,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_aarch64-linux-vmgstool\"},\"is_secret\":false},\"debug_label\":\"vmgstool\",\"done\":{\"backing_var\":\"start21\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_vmgstool::publish:0:flowey_lib_hvlite/src/artifact_vmgstool.rs:37:34\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -1550,7 +1550,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_x64-linux-vmm-tests-archive\"},\"is_secret\":false},\"debug_label\":\"vmm_tests\",\"done\":{\"backing_var\":\"start32\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_nextest_vmm_tests_archive::publish:0:flowey_lib_hvlite/src/artifact_nextest_vmm_tests_archive.rs:39:35\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -1782,7 +1782,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_aarch64-linux-musl-pipette\"},\"is_secret\":false},\"debug_label\":\"pipette\",\"done\":{\"backing_var\":\"start34\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_pipette::publish:0:flowey_lib_hvlite/src/artifact_pipette.rs:37:33\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -1995,7 +1995,7 @@
         "{\"artifact_dir\":{\"backing_var\":{\"RuntimeVar\":\"artifact_publish_from_x64-linux-musl-pipette\"},\"is_secret\":false},\"debug_label\":\"pipette\",\"done\":{\"backing_var\":\"start36\",\"is_secret\":false},\"files\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_hvlite::artifact_pipette::publish:0:flowey_lib_hvlite/src/artifact_pipette.rs:37:33\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -2242,7 +2242,7 @@
         "{\"backing_var\":\"flowey_lib_common::download_cargo_nextest:2:flowey_lib_common/src/download_cargo_nextest.rs:79:21\",\"is_secret\":false}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -2425,7 +2425,7 @@
         "{\"backing_var\":\"flowey_lib_common::download_cargo_nextest:2:flowey_lib_common/src/download_cargo_nextest.rs:79:21\",\"is_secret\":false}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -2631,7 +2631,7 @@
         "{\"backing_var\":\"flowey_lib_common::download_cargo_nextest:2:flowey_lib_common/src/download_cargo_nextest.rs:79:21\",\"is_secret\":false}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -2831,7 +2831,7 @@
     },
     "16": {
       "flowey_lib_common::cache": [
-        "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_azcopy:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_azcopy:1:flowey_lib_common/src/download_azcopy.rs:58:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"azcopy-10.26.0-20240731\"},\"is_secret\":false},\"label\":\"azcopy\",\"restore_keys\":null}",
+        "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_azcopy:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_azcopy:1:flowey_lib_common/src/download_azcopy.rs:58:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"azcopy-10.27.0-20241030\"},\"is_secret\":false},\"label\":\"azcopy\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_cargo_nextest:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_cargo_nextest:1:flowey_lib_common/src/download_cargo_nextest.rs:66:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"cargo-nextest-0.9.74\"},\"is_secret\":false},\"label\":\"cargo-nextest\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_gh_cli:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_gh_cli:1:flowey_lib_common/src/download_gh_cli.rs:65:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"gh-cli-2.52.0\"},\"is_secret\":false},\"label\":\"gh-cli\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_gh_release:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_gh_release:1:flowey_lib_common/src/download_gh_release.rs:151:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"gh-release-download-cece0abc200568d6\"},\"is_secret\":false},\"label\":\"gh-release-download\",\"restore_keys\":null}"
@@ -2842,7 +2842,7 @@
       ],
       "flowey_lib_common::download_azcopy": [
         "{\"GetAzCopy\":{\"backing_var\":\"flowey_lib_hvlite::download_openvmm_vmm_tests_vhds:0:flowey_lib_hvlite/src/download_openvmm_vmm_tests_vhds.rs:113:30\",\"is_secret\":false}}",
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -2980,7 +2980,7 @@
     },
     "17": {
       "flowey_lib_common::cache": [
-        "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_azcopy:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_azcopy:1:flowey_lib_common/src/download_azcopy.rs:58:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"azcopy-10.26.0-20240731\"},\"is_secret\":false},\"label\":\"azcopy\",\"restore_keys\":null}",
+        "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_azcopy:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_azcopy:1:flowey_lib_common/src/download_azcopy.rs:58:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"azcopy-10.27.0-20241030\"},\"is_secret\":false},\"label\":\"azcopy\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_cargo_nextest:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_cargo_nextest:1:flowey_lib_common/src/download_cargo_nextest.rs:66:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"cargo-nextest-0.9.74\"},\"is_secret\":false},\"label\":\"cargo-nextest\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_gh_cli:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_gh_cli:1:flowey_lib_common/src/download_gh_cli.rs:65:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"gh-cli-2.52.0\"},\"is_secret\":false},\"label\":\"gh-cli\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_gh_release:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_gh_release:1:flowey_lib_common/src/download_gh_release.rs:151:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"gh-release-download-cece0abc200568d6\"},\"is_secret\":false},\"label\":\"gh-release-download\",\"restore_keys\":null}"
@@ -2991,7 +2991,7 @@
       ],
       "flowey_lib_common::download_azcopy": [
         "{\"GetAzCopy\":{\"backing_var\":\"flowey_lib_hvlite::download_openvmm_vmm_tests_vhds:0:flowey_lib_hvlite/src/download_openvmm_vmm_tests_vhds.rs:113:30\",\"is_secret\":false}}",
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -3129,7 +3129,7 @@
     },
     "18": {
       "flowey_lib_common::cache": [
-        "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_azcopy:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_azcopy:1:flowey_lib_common/src/download_azcopy.rs:58:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"azcopy-10.26.0-20240731\"},\"is_secret\":false},\"label\":\"azcopy\",\"restore_keys\":null}",
+        "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_azcopy:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_azcopy:1:flowey_lib_common/src/download_azcopy.rs:58:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"azcopy-10.27.0-20241030\"},\"is_secret\":false},\"label\":\"azcopy\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_cargo_nextest:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_cargo_nextest:1:flowey_lib_common/src/download_cargo_nextest.rs:66:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"cargo-nextest-0.9.74\"},\"is_secret\":false},\"label\":\"cargo-nextest\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_gh_cli:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_gh_cli:1:flowey_lib_common/src/download_gh_cli.rs:65:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"gh-cli-2.52.0\"},\"is_secret\":false},\"label\":\"gh-cli\",\"restore_keys\":null}",
         "{\"dir\":{\"backing_var\":{\"RuntimeVar\":\"flowey_lib_common::download_gh_release:0:flowey_core/src/node.rs:884:34\"},\"is_secret\":false},\"hitvar\":{\"HitVar\":{\"backing_var\":\"flowey_lib_common::download_gh_release:1:flowey_lib_common/src/download_gh_release.rs:151:26\",\"is_secret\":false}},\"key\":{\"backing_var\":{\"Inline\":\"gh-release-download-cece0abc200568d6\"},\"is_secret\":false},\"label\":\"gh-release-download\",\"restore_keys\":null}"
@@ -3140,7 +3140,7 @@
       ],
       "flowey_lib_common::download_azcopy": [
         "{\"GetAzCopy\":{\"backing_var\":\"flowey_lib_hvlite::download_openvmm_vmm_tests_vhds:0:flowey_lib_hvlite/src/download_openvmm_vmm_tests_vhds.rs:113:30\",\"is_secret\":false}}",
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -3279,7 +3279,7 @@
         "{\"SetVerbose\":{\"backing_var\":{\"RuntimeVar\":\"param0\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
@@ -3363,7 +3363,7 @@
         "{\"SetVerbose\":{\"backing_var\":{\"RuntimeVar\":\"param0\"},\"is_secret\":false}}"
       ],
       "flowey_lib_common::download_azcopy": [
-        "{\"Version\":\"10.26.0-20240731\"}"
+        "{\"Version\":\"10.27.0-20241030\"}"
       ],
       "flowey_lib_common::download_cargo_fuzz": [
         "{\"Version\":\"0.12.0\"}"
