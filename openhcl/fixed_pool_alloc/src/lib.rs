@@ -328,9 +328,10 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
         let size_pages = len as u64 / HV_PAGE_SIZE;
 
         // This is another hack until we have proper memory mapping.
-        // Assign from PFN 0x127000 upwards which is free on my test setup.
+        // Assign from PFN 0x126000 upwards which is free on my test setup.
         // Mark it as YSP: FIXME: HACK:
-        self.prealloc_at(0x127000, size_pages)?;
+        self.prealloc_at(0x126000, size_pages)?;
+        tracing::info!("YSP: HACK: prealloc_at 0x126000 len={} pages", size_pages);
 
         let alloc = self
             .alloc(

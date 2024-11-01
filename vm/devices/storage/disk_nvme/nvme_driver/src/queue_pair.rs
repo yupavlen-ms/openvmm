@@ -226,9 +226,9 @@ impl QueuePair {
         local_queue_data.sq_addr = self.sq_addr();
         local_queue_data.cq_addr = self.cq_addr();
 
-        local_queue_data.base_mem = Some(self.mem.base_va());
-        local_queue_data.mem_len = Some(self.mem.len());
-        local_queue_data.pfns = Some(self.mem.pfns().to_vec());
+        local_queue_data.base_va = self.mem.base_va();
+        local_queue_data.mem_len = self.mem.len();
+        local_queue_data.pfns = self.mem.pfns().to_vec();
 
         Ok(local_queue_data)
     }
@@ -655,9 +655,9 @@ impl QueueHandler {
             msix: 0,        // Will be updated by the caller.
             sq_addr: 0,     // Will be updated by the caller.
             cq_addr: 0,     // Will be updated by the caller.
-            base_mem: None, // Will be updated by the caller.
-            mem_len: None,  // Will be updated by the caller.
-            pfns: None,     // Will be updated by the caller.
+            base_va: 0, // Will be updated by the caller.
+            mem_len: 0,  // Will be updated by the caller.
+            pfns: vec![],     // Will be updated by the caller.
         })
     }
 
@@ -665,7 +665,7 @@ impl QueueHandler {
     pub fn restore(&mut self, saved_state: &QueuePairSavedState) -> anyhow::Result<()> {
         tracing::info!(
             "YSP: QueueHandler::restore {:X}? qid={}/{} cpu={} msi={}",
-            saved_state.base_mem.unwrap_or_default(),
+            saved_state.base_va,
             saved_state.sq_state.sqid,
             saved_state.cq_state.cqid,
             saved_state.cpu,
