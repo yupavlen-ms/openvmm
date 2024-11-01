@@ -61,9 +61,9 @@ pub struct NvmeDriver<T: DeviceBacking> {
     io_issuers: Arc<IoIssuers>,
     #[inspect(skip)]
     rescan_event: Arc<event_listener::Event>,
-    /// NVMe namespace associated with this driver (1:1).
+    /// NVMe namespaces associated with this driver.
     #[inspect(skip)]
-    namespace: Option<Arc<Namespace>>,
+    namespace: Vec<Arc<Namespace>>,
     bar0_va: Option<u64>,
     /// Keeps the controller connected (CSTS.RDY==1) while servicing.
     nvme_keepalive: bool,
@@ -259,7 +259,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             driver,
             io_issuers,
             rescan_event: Default::default(),
-            namespace: None,
+            namespace: vec![],
             bar0_va: Some(bar0_va),
             nvme_keepalive: false,
         })
@@ -511,8 +511,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             )
             .await?,
         );
-        self.namespace = Some(ns.clone());
-        tracing::info!("YSP: namespace created {}", ns.clone().nsid());
+        let ysp_nsid = ns.nsid();
+        self.namespace.push(ns.clone());
+        tracing::info!("YSP: namespace added {}", ysp_nsid);
         Ok(ns)
     }
 
@@ -543,14 +544,11 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .unwrap()
             .write_to(save_state.identify_ctrl.as_mut());
         save_state.device_id = self.device_id.clone();
-        save_state.nsid = self.namespace.as_ref().map_or(0, |ns| ns.nsid());
-        // Either 1 or 0 namespaces per driver.
-        save_state.namespace = match &self.namespace {
-            Some(ns) => Some(ns.save()?),
-            None => None,
-        };
+        for ns in &self.namespace {
+            save_state.namespace.push(ns.save()?);
+            tracing::info!("YSP: saved nsid={}", ns.nsid());
+        }
         save_state.bar0_va = self.bar0_va;
-        tracing::info!("YSP: saved nsid={}", save_state.nsid);
 
         Ok(save_state)
     }
@@ -578,7 +576,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         mut device: T,
         saved_state: &NvmeDriverSavedState,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: NvmeDriver::restore nsid={}", saved_state.nsid);
+        tracing::info!("YSP: NvmeDriver::restore");
         let driver = driver_source.simple();
         let bar0_mapping = device
             .map_bar(0, saved_state.bar0_va)
@@ -620,7 +618,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             driver: driver.clone(),
             io_issuers,
             rescan_event: Default::default(),
-            namespace: None, // YSP: FIXME: check this and below
+            namespace: vec![], // YSP: FIXME: check this and below
             bar0_va: Some(bar0_va),
             nvme_keepalive: false,
         };
@@ -710,22 +708,17 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         worker.io = ioq;
 
         // Restore namespace(s).
-        this.namespace = match saved_state.namespace.as_ref() {
-            Some(n) => Some(Arc::new(Namespace::restore(
+        for ns in &saved_state.namespace {
+            this.namespace.push(Arc::new(Namespace::restore(
                 &driver,
                 admin.issuer().clone(),
                 this.rescan_event.clone(),
                 this.identify.clone().unwrap(),
                 &this.io_issuers,
                 this.device_id.as_ref(),
-                saved_state.nsid,
-                &n.identify_ns,
-                n,
-            )?)),
-            None => {
-                // No namespace was present/saved.
-                None
-            }
+                &ns.identify_ns,
+                ns,
+            )?));
         };
 
         task.insert(&this.driver, "nvme_worker", state);
@@ -1030,10 +1023,9 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
                     dma_base: None,
                     dma_len: None,
                     dma_pfns: vec![],
-                    nsid: 0, // Invalid namespace ID per NVMe spec.
                     identify_ctrl: [0; 4096],
                     device_id: "".to_string(),
-                    namespace: None,
+                    namespace: vec![],
                     bar0_va: None,
                     qsize: worker_state.qsize,
                     max_io_queues: worker_state.max_io_queues,
@@ -1068,10 +1060,9 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             dma_base,
             dma_len,
             dma_pfns,
-            nsid: 0,                   // Will be updated by the caller.
             identify_ctrl: [0; 4096],  // Will be updated by the caller.
             device_id: "".to_string(), // Will be updated by the caller.
-            namespace: None,           // Will be updated by the caller.
+            namespace: vec![],           // Will be updated by the caller.
             bar0_va: None,             // Will be updated by the caller.
             qsize: worker_state.qsize,
             max_io_queues: worker_state.max_io_queues,
@@ -1095,44 +1086,41 @@ impl<T: DeviceBacking> InspectTask<WorkerState> for DriverWorkerTask<T> {
 #[derive(Protobuf, Clone, Debug)]
 #[mesh(package = "underhill")]
 pub struct NvmeDriverSavedState {
-    /// Namespace ID.
-    #[mesh(1)]
-    pub nsid: u32,
     /// Admin queue state.
-    #[mesh(2)]
+    #[mesh(1)]
     pub admin: Option<QueuePairSavedState>,
     /// IO queue states.
-    #[mesh(3)]
+    #[mesh(2)]
     pub io: Vec<QueuePairSavedState>,
     /// Copy of the controller's IDENTIFY structure.
-    #[mesh(4)]
+    #[mesh(3)]
     pub identify_ctrl: [u8; 4096],
     /// Device ID string.
-    #[mesh(5)]
+    #[mesh(4)]
     pub device_id: String,
     /// Namespace data.
-    #[mesh(6)]
-    pub namespace: Option<crate::namespace::SavedNamespaceData>,
+    #[mesh(5)]
+    pub namespace: Vec<crate::namespace::SavedNamespaceData>,
     /// BAR0 mapping.
-    #[mesh(7)]
+    #[mesh(6)]
     pub bar0_va: Option<u64>,
     /// Queue size as determined by CAP.MQES.
-    #[mesh(8)]
+    #[mesh(7)]
     pub qsize: u16,
     /// Max number of IO queue pairs.
-    #[mesh(9)]
+    #[mesh(8)]
     pub max_io_queues: u16,
     /// State of the attached VFIO device.
-    #[mesh(10)]
+    #[mesh(9)]
     pub vfio_state: VfioDeviceSavedState,
     /// Contiguous chunk of memory assigned to this driver - base address (VA).
-    #[mesh(11)]
+    #[mesh(10)]
     pub dma_base: Option<u64>, // TODO: Would it be better to store const u8* ?
     /// DMA block length in bytes.
-    #[mesh(12)]
+    #[mesh(11)]
     pub dma_len: Option<usize>, // TODO: Could be redundant with 'pfns'.
     /// Vector of PFNs of this DMA block.
-    #[mesh(13)]
+    #[mesh(12)]
     pub dma_pfns: Vec<u64>,
     //registers: Arc<DeviceRegisters<T>>,
     //interrupts: Vec<NotifyChannel>,
