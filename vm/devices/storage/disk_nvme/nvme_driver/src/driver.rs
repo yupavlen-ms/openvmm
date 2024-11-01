@@ -505,7 +505,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             return Ok(ns.clone());
         }
 
-        let ns2 = Arc::new(
+        let ns_new = Arc::new(
             Namespace::new(
                 &self.driver,
                 self.admin.as_ref().unwrap().clone(),
@@ -519,9 +519,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .await?,
         );
 
-        self.namespace.push(ns2.clone());
+        self.namespace.push(ns_new.clone());
         tracing::info!("YSP: NEW namespace {} for {}", nsid, &self.device_id);
-        Ok(ns2)
+        Ok(ns_new)
     }
 
     /// Returns the number of CPUs that are in fallback mode (that are using a
@@ -1069,7 +1069,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             dma_pfns,
             identify_ctrl: [0; 4096],  // Will be updated by the caller.
             device_id: "".to_string(), // Will be updated by the caller.
-            namespace: vec![],           // Will be updated by the caller.
+            namespace: vec![],         // Will be updated by the caller.
             bar0_va: None,             // Will be updated by the caller.
             qsize: worker_state.qsize,
             max_io_queues: worker_state.max_io_queues,
