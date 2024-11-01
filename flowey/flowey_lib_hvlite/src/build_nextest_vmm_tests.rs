@@ -65,6 +65,7 @@ impl FlowNode for Node {
         ctx.import::<crate::run_cargo_nextest_run::Node>();
         ctx.import::<crate::git_checkout_openvmm_repo::Node>();
         ctx.import::<crate::init_openvmm_magicpath_openhcl_sysroot::Node>();
+        ctx.import::<crate::init_cross_build::Node>();
         ctx.import::<flowey_lib_common::run_cargo_nextest_archive::Node>();
     }
 
@@ -94,6 +95,11 @@ impl FlowNode for Node {
                 );
             }
 
+            let injected_env = ctx.reqv(|v| crate::init_cross_build::Request {
+                target: target.clone(),
+                injected_env: v,
+            });
+
             let build_params =
                 flowey_lib_common::run_cargo_nextest_run::build_params::NextestBuildParams {
                     packages: ReadVar::from_static(TestPackages::Crates {
@@ -107,6 +113,7 @@ impl FlowNode for Node {
                         CommonProfile::Release => CargoBuildProfile::Release,
                         CommonProfile::Debug => CargoBuildProfile::Debug,
                     },
+                    extra_env: injected_env,
                 };
 
             match build_mode {

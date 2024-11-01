@@ -91,11 +91,13 @@ impl SimpleFlowNode for Node {
         // if we ever decide to do more involved testing for this lib,
         // this should get split out into a separate step
 
-        // TODO: figure out how to test vmgs_lib on aarch64
-        let did_test = if !matches!(
+        // TODO: figure out how to test vmgs_lib on other architectures.
+        // Currently x86 only
+        let did_test = if matches!(
             &target.as_triple().architecture,
-            target_lexicon::Architecture::Aarch64(_)
-        ) {
+            target_lexicon::Architecture::X86_64
+        ) && matches!(ctx.arch(), FlowArch::X86_64)
+        {
             let clang_installed =
                 ctx.reqv(|v| flowey_lib_common::install_apt_pkg::Request::Install {
                     package_names: vec!["clang".into()],

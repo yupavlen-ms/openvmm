@@ -19,6 +19,7 @@ pub struct TestResults {
 pub mod build_params {
     use crate::run_cargo_build::CargoBuildProfile;
     use flowey::node::prelude::*;
+    use std::collections::BTreeMap;
 
     #[derive(Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Debug)]
     pub enum PanicAbortTests {
@@ -60,12 +61,13 @@ pub mod build_params {
         /// Whether to disable default features
         pub no_default_features: bool,
         /// Whether to build tests with unstable `-Zpanic-abort-tests` flag
-        // FIXME: this should probably be a generic `with_env` parameter
         pub unstable_panic_abort_tests: Option<PanicAbortTests>,
         /// Build unit tests for the specified target
         pub target: target_lexicon::Triple,
         /// Build unit tests with the specified cargo profile
         pub profile: CargoBuildProfile,
+        /// Additional env vars set when building the tests
+        pub extra_env: ReadVar<BTreeMap<String, String>, C>,
     }
 }
 
@@ -279,6 +281,7 @@ impl FlowNode for Node {
                                     unstable_panic_abort_tests,
                                     target,
                                     profile,
+                                    extra_env,
                                 },
                             nextest_installed: _, // side-effect
                             rust_toolchain,
@@ -292,6 +295,7 @@ impl FlowNode for Node {
                                 features,
                                 unstable_panic_abort_tests,
                                 no_default_features,
+                                rt.read(extra_env),
                             );
 
                             let nextest_invocation = NextestInvocation::WithCargo {
@@ -630,6 +634,7 @@ pub(crate) fn cargo_nextest_build_args_and_env(
     features: build_params::FeatureSet,
     unstable_panic_abort_tests: Option<build_params::PanicAbortTests>,
     no_default_features: bool,
+    mut extra_env: BTreeMap<String, String>,
 ) -> (Vec<String>, BTreeMap<String, String>) {
     let locked = cargo_flags.locked.then_some("--locked");
     let verbose = cargo_flags.verbose.then_some("--verbose");
@@ -709,6 +714,7 @@ pub(crate) fn cargo_nextest_build_args_and_env(
     if use_rustc_bootstrap {
         env.insert("RUSTC_BOOTSTRAP".into(), "1".into());
     }
+    env.append(&mut extra_env);
 
     (args, env)
 }
@@ -723,6 +729,7 @@ impl build_params::NextestBuildParams {
             unstable_panic_abort_tests,
             target,
             profile,
+            extra_env,
         } = self;
 
         build_params::NextestBuildParams {
@@ -732,6 +739,7 @@ impl build_params::NextestBuildParams {
             unstable_panic_abort_tests,
             target,
             profile,
+            extra_env: extra_env.claim(ctx),
         }
     }
 }
