@@ -303,7 +303,7 @@ impl FixedPoolAllocator {
 
     /// Allocate contiguous pool from starting PFN.
     /// This is still under research so mark it as a hack.
-    /// YSP: FIXME: HACK:
+    /// YSP: FIXME: HACK: Test
     pub fn prealloc_at(&self, base_pfn: u64, size_pages: u64) -> Result<(), FixedPoolOutOfMemory> {
         let mut inner = self.inner.lock();
 
