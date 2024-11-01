@@ -634,6 +634,7 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, SnpBacked> {
             hv1_hypercall::HvX64EnableVpVtl,
             hv1_hypercall::HvExtQueryCapabilities,
             hv1_hypercall::HvVtlCall,
+            hv1_hypercall::HvVtlReturn,
             hv1_hypercall::HvFlushVirtualAddressList,
             hv1_hypercall::HvFlushVirtualAddressListEx,
             hv1_hypercall::HvFlushVirtualAddressSpace,
@@ -2209,16 +2210,6 @@ impl<T: CpuIo> hv1_hypercall::RetargetDeviceInterrupt for UhHypercallHandler<'_,
             params.multicast,
             params.target_processors,
         )
-    }
-}
-
-impl<T: CpuIo> hv1_hypercall::VtlCall for UhHypercallHandler<'_, '_, T, SnpBacked> {
-    fn is_vtl_call_allowed(&self) -> bool {
-        self.hcvm_is_vtl_call_allowed()
-    }
-
-    fn vtl_call(&mut self) {
-        self.hcvm_vtl_call()
     }
 }
 
