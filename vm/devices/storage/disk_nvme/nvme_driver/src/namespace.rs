@@ -540,11 +540,10 @@ impl Namespace {
         identify_ctrl: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
         device_id: &str,
-        nsid: u32,
         identify_ns: &[u8; 4096],
-        _saved_state: &SavedNamespaceData,
+        saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
-        tracing::info!("YSP: Namespace::restore");
+        tracing::info!("YSP: Namespace::restore nsid={}", saved_state.nsid);
         let identify = nvm::IdentifyNamespace::read_from_prefix(identify_ns)
             .unwrap_or(nvm::IdentifyNamespace::new_zeroed());
         // Restore provides Identify Namespace result to new() so there is no wait.
@@ -555,7 +554,7 @@ impl Namespace {
             identify_ctrl,
             io_issuers,
             device_id,
-            nsid,
+            saved_state.nsid,
             Some(identify),
         ));
 
