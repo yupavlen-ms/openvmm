@@ -649,11 +649,11 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
         panic!("no cpus");
     }
 
+    validate_vp_hw_ids(partition_info);
     log!(
         "YSP: unwrapped: {}",
         partition_info.preserve_dma_4k_pages.unwrap_or(0)
     );
-    validate_vp_hw_ids(partition_info);
 
     setup_vtl2_vp(partition_info);
     setup_vtl2_memory(&p, partition_info);

@@ -166,11 +166,11 @@ pub struct ParsedBootDtInfo {
     pub gic: Option<GicInfo>,
     /// The memory allocation mode the bootloader decided to use.
     pub memory_allocation_mode: MemoryAllocationMode,
+    /// The isolation type of the partition.
+    pub isolation: IsolationType,
     /// Parts of VTL2 memory to preserve during servicing.
     #[inspect(iter_by_index)]
     pub dma_preserve_ranges: Vec<MemoryRange>,
-    /// The isolation type of the partition.
-    pub isolation: IsolationType,
 }
 
 fn err_to_owned(e: fdt::parser::Error<'_>) -> anyhow::Error {
