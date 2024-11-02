@@ -81,14 +81,23 @@ impl FlowNode for Node {
         {
             let mut ambient_deps = ambient_deps.clone();
 
+            let sysroot_arch = match target.architecture {
+                target_lexicon::Architecture::Aarch64(_) => {
+                    crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch::Aarch64
+                }
+                target_lexicon::Architecture::X86_64 => {
+                    crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch::X64
+                }
+                arch => anyhow::bail!("unsupported arch {arch}"),
+            };
+
             // See comment in `crate::cargo_build` for why this is necessary.
             //
             // copied here since this node doesn't actually route through `cargo build`.
             if matches!(target.environment, target_lexicon::Environment::Musl) {
                 ambient_deps.push(
                     ctx.reqv(|v| crate::init_openvmm_magicpath_openhcl_sysroot::Request {
-                        arch:
-                            crate::init_openvmm_magicpath_openhcl_sysroot::OpenvmmSysrootArch::X64,
+                        arch: sysroot_arch,
                         path: v,
                     })
                     .into_side_effect(),
