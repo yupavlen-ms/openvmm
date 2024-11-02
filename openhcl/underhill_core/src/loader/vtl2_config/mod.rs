@@ -9,6 +9,7 @@
 //! expected to be already validated by the bootloader.
 
 use anyhow::Context;
+use bootloader_fdt_parser::IsolationType;
 use bootloader_fdt_parser::ParsedBootDtInfo;
 use hvdef::HV_PAGE_SIZE;
 use inspect::Inspect;
@@ -146,9 +147,7 @@ impl Vtl2ParamsMap {
 }
 
 /// Reads the VTL 2 parameters from the vtl-boot-data region.
-pub fn read_vtl2_params(
-    hcl: &hcl::ioctl::Hcl,
-) -> anyhow::Result<(RuntimeParameters, MeasuredVtl2Info)> {
+pub fn read_vtl2_params() -> anyhow::Result<(RuntimeParameters, MeasuredVtl2Info)> {
     let parsed_openhcl_boot = ParsedBootDtInfo::new().context("failed to parse openhcl_boot dt")?;
     tracing::info!("YSP: read_vtl2_params");
     for zzz in &parsed_openhcl_boot.vtl2_memory {
@@ -202,7 +201,7 @@ pub fn read_vtl2_params(
     };
 
     let (cvm_cpuid_info, snp_secrets) = {
-        if hcl.isolation() == Some(hcl::ioctl::IsolationType::Snp) {
+        if parsed_openhcl_boot.isolation == IsolationType::Snp {
             let mut cpuid_pages: Vec<u8> =
                 vec![0; (HV_PAGE_SIZE * PARAVISOR_CONFIG_CPUID_SIZE_PAGES) as usize];
             mapping
@@ -226,7 +225,7 @@ pub fn read_vtl2_params(
         }
     };
 
-    let accepted_regions = if hcl.isolation().is_some() {
+    let accepted_regions = if parsed_openhcl_boot.isolation != IsolationType::None {
         parsed_openhcl_boot.accepted_ranges.clone()
     } else {
         Vec::new()

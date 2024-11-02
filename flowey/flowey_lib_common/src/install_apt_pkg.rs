@@ -170,11 +170,31 @@ impl FlowNode for Node {
 
                 let sh = xshell::Shell::new()?;
 
+                // The apt-get retries below avoid failures in CI that can be
+                // intermittently caused by other processes temporarily holding
+                // the necessary dpkg or apt locks.
+
                 if !skip_update {
-                    xshell::cmd!(sh, "sudo apt-get update").run()?;
+                    // Retry on failure in CI
+                    let mut i = 0;
+                    while let Err(e) = xshell::cmd!(sh, "sudo apt-get update").run() {
+                        i += 1;
+                        if i == 5 || interactive {
+                            return Err(e.into());
+                        }
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    }
                 }
-                let auto_accept = (!interactive).then_some("-y");
-                xshell::cmd!(sh, "sudo apt-get install {auto_accept...} {packages...}").run()?;
+
+                let mut options = Vec::new();
+                if !interactive {
+                    // auto accept
+                    options.push("-y");
+                    // Wait for dpkg locks to be released when running in CI
+                    options.extend(["-o", "DPkg::Lock::Timeout=60"]);
+                }
+
+                xshell::cmd!(sh, "sudo apt-get install {options...} {packages...}").run()?;
 
                 Ok(())
             }

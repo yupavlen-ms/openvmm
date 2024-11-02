@@ -27,6 +27,7 @@ use pal_async::task::Task;
 use safeatomic::AtomicSliceOps;
 use slab::Slab;
 use std::future::poll_fn;
+use std::num::Wrapping;
 use std::sync::Arc;
 use std::task::Poll;
 use thiserror::Error;
@@ -58,6 +59,59 @@ impl Inspect for QueuePair {
             mem: _,
         } = self;
         issuer.send.send(Req::Inspect(req.defer()));
+    }
+}
+
+impl PendingCommands {
+    const CID_KEY_BITS: u32 = 10;
+    const CID_KEY_MASK: u16 = (1 << Self::CID_KEY_BITS) - 1;
+    const MAX_CIDS: usize = 1 << Self::CID_KEY_BITS;
+    const CID_SEQ_OFFSET: Wrapping<u16> = Wrapping(1 << Self::CID_KEY_BITS);
+
+    fn new() -> Self {
+        Self {
+            commands: Slab::new(),
+            next_cid_high_bits: Wrapping(0),
+        }
+    }
+
+    fn is_full(&self) -> bool {
+        self.commands.len() >= Self::MAX_CIDS
+    }
+
+    fn is_empty(&self) -> bool {
+        self.commands.is_empty()
+    }
+
+    /// Inserts a command into the pending list, updating it with a new CID.
+    fn insert(
+        &mut self,
+        command: &mut spec::Command,
+        respond: mesh::OneshotSender<spec::Completion>,
+    ) {
+        let entry = self.commands.vacant_entry();
+        assert!(entry.key() < Self::MAX_CIDS);
+        assert_eq!(self.next_cid_high_bits % Self::CID_SEQ_OFFSET, Wrapping(0));
+        let cid = entry.key() as u16 | self.next_cid_high_bits.0;
+        self.next_cid_high_bits += Self::CID_SEQ_OFFSET;
+        command.cdw0.set_cid(cid);
+        entry.insert(PendingCommand {
+            command: *command,
+            respond,
+        });
+    }
+
+    fn remove(&mut self, cid: u16) -> mesh::OneshotSender<spec::Completion> {
+        let command = self
+            .commands
+            .try_remove((cid & Self::CID_KEY_MASK) as usize)
+            .expect("completion for unknown cid");
+        assert_eq!(
+            command.command.cdw0.cid(),
+            cid,
+            "cid sequence number mismatch"
+        );
+        command.respond
     }
 }
 
@@ -139,8 +193,7 @@ impl QueuePair {
         let queue_handler = QueueHandler {
             sq,
             cq,
-            commands: Slab::new(),
-            max_cids: 1024,
+            commands: PendingCommands::new(),
             stats: Default::default(),
         };
 
@@ -496,6 +549,15 @@ struct Prp<'a> {
 }
 
 #[derive(Inspect)]
+struct PendingCommands {
+    /// Mapping from the low bits of cid to pending command.
+    #[inspect(iter_by_key)]
+    commands: Slab<PendingCommand>,
+    #[inspect(hex)]
+    next_cid_high_bits: Wrapping<u16>,
+}
+
+#[derive(Inspect)]
 struct PendingCommand {
     // Keep the command around for diagnostics.
     command: spec::Command,
@@ -520,10 +582,7 @@ enum Req {
 struct QueueHandler {
     sq: SubmissionQueue,
     cq: CompletionQueue,
-    /// Mapping from cid to pending command.
-    #[inspect(iter_by_key)]
-    commands: Slab<PendingCommand>,
-    max_cids: usize,
+    commands: PendingCommands,
     stats: QueueStats,
 }
 
@@ -548,7 +607,7 @@ impl QueueHandler {
             }
 
             let event = poll_fn(|cx| {
-                if !self.sq.is_full() && self.commands.len() < self.max_cids {
+                if !self.sq.is_full() && !self.commands.is_full() {
                     if let Poll::Ready(Some(req)) = recv.poll_next_unpin(cx) {
                         return Event::Request(req).into();
                     }
@@ -590,6 +649,7 @@ impl QueueHandler {
                             );
                         }
                         entry.insert(PendingCommand { command, respond });
+                        // YSP: FIXME: this --> self.commands.insert(&mut command, respond);
                         self.sq.write(command).unwrap();
                         self.stats.issued.increment();
                     }
@@ -617,8 +677,9 @@ impl QueueHandler {
                         );
                     }
                     assert_eq!(completion.sqid, self.sq.id());
+                    let respond = self.commands.remove(completion.cid);
                     self.sq.update_head(completion.sqhd);
-                    command.respond.send(completion);
+                    respond.send(completion);
                     self.stats.completed.increment();
                 }
             }

@@ -94,6 +94,19 @@ impl AddressRange {
     }
 }
 
+/// The isolation type of the partition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Inspect)]
+pub enum IsolationType {
+    /// No isolation.
+    None,
+    /// Hyper-V based isolation.
+    Vbs,
+    /// AMD SNP.
+    Snp,
+    /// Intel TDX.
+    Tdx,
+}
+
 /// The memory allocation mode provided by the host. This reports how the
 /// bootloader decided to provide memory for the kernel.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Inspect)]
@@ -122,13 +135,15 @@ pub enum MemoryAllocationMode {
 /// the host provided device tree.
 #[derive(Debug, Inspect, PartialEq, Eq)]
 pub struct ParsedBootDtInfo {
-    /// The cpus in the system. Note that this is not sorted in any particular
-    /// order.
+    /// The cpus in the system. The index in the vector is also the mshv VP
+    /// index.
     #[inspect(iter_by_index)]
     pub cpus: Vec<Cpu>,
     /// The physical address bits of the system. Today, this is only reported on aarch64.
     /// TODO: Could we also report this on x64, and in CVMs?
     pub physical_address_bits: Option<u8>,
+    /// The physical address of the VTL0 alias mapping, if one is configured.
+    pub vtl0_alias_map: Option<u64>,
     /// The memory ranges for VTL2 that were reported to the kernel. This is
     /// sorted in ascending order.
     #[inspect(iter_by_index)]
@@ -154,6 +169,8 @@ pub struct ParsedBootDtInfo {
     /// Parts of VTL2 memory to preserve during servicing.
     #[inspect(iter_by_index)]
     pub dma_preserve_ranges: Vec<MemoryRange>,
+    /// The isolation type of the partition.
+    pub isolation: IsolationType,
 }
 
 fn err_to_owned(e: fdt::parser::Error<'_>) -> anyhow::Error {
@@ -187,7 +204,9 @@ struct OpenhclInfo {
     config_ranges: Vec<MemoryRange>,
     partition_memory_map: Vec<AddressRange>,
     accepted_memory: Vec<MemoryRange>,
+    vtl0_alias_map: Option<u64>,
     memory_allocation_mode: MemoryAllocationMode,
+    isolation: IsolationType,
     dma_preserve_ranges: Vec<MemoryRange>,
 }
 
@@ -287,6 +306,18 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         }
     }
 
+    let isolation = {
+        let prop = try_find_property(node, "isolation-type").context("missing isolation-type")?;
+
+        match prop.read_str().map_err(err_to_owned)? {
+            "none" => IsolationType::None,
+            "vbs" => IsolationType::Vbs,
+            "snp" => IsolationType::Snp,
+            "tdx" => IsolationType::Tdx,
+            ty => bail!("invalid isolation-type {ty}"),
+        }
+    };
+
     let memory_allocation_mode = {
         let prop = try_find_property(node, "memory-allocation-mode")
             .context("missing memory-allocation-mode")?;
@@ -328,6 +359,7 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         })
         .collect();
 
+<<<<<<< HEAD
     // Report DMA preserve ranges in a separate vec, for convenience.
     let dma_preserve_ranges = memory
         .iter()
@@ -339,6 +371,12 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
             }
         })
         .collect();
+=======
+    let vtl0_alias_map = try_find_property(node, "vtl0-alias-map")
+        .map(|prop| prop.read_u64(0).map_err(err_to_owned))
+        .transpose()
+        .context("unable to read vtl0-alias-map")?;
+>>>>>>> main
 
     // Extract vmbus mmio information from the overall memory map.
     let vtl0_mmio = memory
@@ -357,7 +395,9 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         config_ranges,
         partition_memory_map: memory,
         accepted_memory,
+        vtl0_alias_map,
         memory_allocation_mode,
+        isolation,
         dma_preserve_ranges,
     })
 }
@@ -448,7 +488,9 @@ impl ParsedBootDtInfo {
         let mut gic = None;
         let mut partition_memory_map = Vec::new();
         let mut accepted_ranges = Vec::new();
+        let mut vtl0_alias_map = None;
         let mut memory_allocation_mode = MemoryAllocationMode::Host;
+        let mut isolation = IsolationType::None;
         let mut dma_preserve_ranges = Vec::new();
 
         let parser = Parser::new(raw)
@@ -474,13 +516,23 @@ impl ParsedBootDtInfo {
                 }
 
                 "openhcl" => {
-                    let info = parse_openhcl(&child)?;
-                    vtl0_mmio = info.vtl0_mmio;
-                    config_ranges = info.config_ranges;
-                    partition_memory_map = info.partition_memory_map;
-                    accepted_ranges = info.accepted_memory;
-                    memory_allocation_mode = info.memory_allocation_mode;
-                    dma_preserve_ranges = info.dma_preserve_ranges;
+                    let OpenhclInfo {
+                        vtl0_mmio: n_vtl0_mmio,
+                        config_ranges: n_config_ranges,
+                        partition_memory_map: n_partition_memory_map,
+                        accepted_memory: n_accepted_memory,
+                        vtl0_alias_map: n_vtl0_alias_map,
+                        memory_allocation_mode: n_memory_allocation_mode,
+                        isolation: n_isolation,
+                    } = parse_openhcl(&child)?;
+                    vtl0_mmio = n_vtl0_mmio;
+                    config_ranges = n_config_ranges;
+                    partition_memory_map = n_partition_memory_map;
+                    accepted_ranges = n_accepted_memory;
+                    vtl0_alias_map = n_vtl0_alias_map;
+                    memory_allocation_mode = n_memory_allocation_mode;
+                    isolation = n_isolation;
+                    dma_preserve_ranges = n_dma_preserve_ranges;
                 }
 
                 _ if child.name.starts_with("memory@") => {
@@ -507,9 +559,11 @@ impl ParsedBootDtInfo {
             vtl2_memory,
             partition_memory_map,
             physical_address_bits,
+            vtl0_alias_map,
             accepted_ranges,
             gic,
             memory_allocation_mode,
+            isolation,
             dma_preserve_ranges,
         })
     }
@@ -678,6 +732,16 @@ mod tests {
         }
 
         let mut openhcl_builder = root_builder.start_node("openhcl")?;
+        let p_isolation_type = openhcl_builder.add_string("isolation-type")?;
+        openhcl_builder = openhcl_builder.add_str(
+            p_isolation_type,
+            match info.isolation {
+                IsolationType::None => "none",
+                IsolationType::Vbs => "vbs",
+                IsolationType::Snp => "snp",
+                IsolationType::Tdx => "tdx",
+            },
+        )?;
 
         let p_memory_allocation_mode = openhcl_builder.add_string("memory-allocation-mode")?;
         match info.memory_allocation_mode {
@@ -695,6 +759,11 @@ mod tests {
                     .add_u64(p_memory_size, memory_size)?
                     .add_u64(p_mmio_size, mmio_size)?;
             }
+        }
+
+        if let Some(data) = info.vtl0_alias_map {
+            let p_vtl0_alias_map = openhcl_builder.add_string("vtl0-alias-map")?;
+            openhcl_builder = openhcl_builder.add_u64(p_vtl0_alias_map, data)?;
         }
 
         openhcl_builder = openhcl_builder
@@ -829,6 +898,7 @@ mod tests {
                 MemoryRange::new(0x30000..0x40000),
             ],
             physical_address_bits: Some(48),
+            vtl0_alias_map: Some(1 << 48),
             gic: Some(GicInfo {
                 gic_distributor_base: 0x10000,
                 gic_redistributors_base: 0x20000,
@@ -841,6 +911,7 @@ mod tests {
                 memory_size: 0x1000,
                 mmio_size: 0x2000,
             },
+            isolation: IsolationType::Vbs,
         };
 
         let dt = build_dt(&orig_info).unwrap();

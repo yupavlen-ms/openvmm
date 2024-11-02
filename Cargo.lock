@@ -688,6 +688,7 @@ dependencies = [
  "futures",
  "getrandom",
  "inspect",
+ "inspect_counters",
  "libc",
  "mesh",
  "pal_async",
@@ -2425,8 +2426,10 @@ version = "0.0.0"
 dependencies = [
  "bitfield-struct",
  "build_rs_guest_arch",
+ "fs-err",
  "getrandom",
  "hvdef",
+ "inspect",
  "libc",
  "memory_range",
  "nix 0.26.4",
@@ -3938,6 +3941,7 @@ dependencies = [
  "net_backend_resources",
  "pal_async",
  "parking_lot",
+ "thiserror",
  "tracing",
  "vm_resource",
 ]
@@ -4342,9 +4346,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.66"
+version = "0.10.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9529f4786b70a3e8c61e11179af17ab6188ad8d0ded78c5529441ed39d4bd9c1"
+checksum = "6174bc48f102d208783c2c84bf931bb75927a617866870de8a4ea85597f871f5"
 dependencies = [
  "bitflags 2.4.2",
  "cfg-if",
@@ -4383,9 +4387,9 @@ dependencies = [
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.103"
+version = "0.9.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f9e8deee91df40a943c71b917e5874b951d32a802526c85721ce3b776c929d6"
+checksum = "45abf306cbf99debc8195b66b7346498d7b10c210de50418b5ccd7ceba08c741"
 dependencies = [
  "cc",
  "libc",
@@ -6544,6 +6548,7 @@ version = "0.0.0"
 dependencies = [
  "base64 0.21.7",
  "base64-serde",
+ "cvm_tracing",
  "get_protocol",
  "getrandom",
  "guest_emulation_transport",
@@ -6626,7 +6631,6 @@ dependencies = [
  "guest_emulation_transport",
  "guestmem",
  "guid",
- "hcl",
  "hcl_compat_uefi_nvram_storage",
  "hvdef",
  "hyperv_ic_guest",
@@ -6674,7 +6678,6 @@ dependencies = [
  "serde_json",
  "serial_16550_resources",
  "shared_pool_alloc",
- "sidecar_client",
  "socket2",
  "sparse_mmap",
  "state_unit",
@@ -6798,6 +6801,7 @@ dependencies = [
  "futures",
  "guestmem",
  "hcl",
+ "hv1_emulator",
  "hvdef",
  "inspect",
  "memory_range",
@@ -6807,8 +6811,10 @@ dependencies = [
  "thiserror",
  "tracing",
  "underhill_threadpool",
+ "virt",
  "virt_mshv_vtl",
  "vm_topology",
+ "vtl_array",
  "x86defs",
 ]
 

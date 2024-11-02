@@ -89,6 +89,10 @@ pub enum Error {
     UnsupportedGuestArch,
     #[error("igvm file does not support vbs")]
     NoVbsSupport,
+    #[error("vp context for lower VTL not supported")]
+    LowerVtlContext,
+    #[error("missing vtl2 required range")]
+    MissingVtl2RequiredRange,
 }
 
 fn from_memory_range(range: &MemoryRange) -> IGVM_VHS_MEMORY_RANGE {
@@ -758,7 +762,7 @@ fn load_igvm_x86(
                 vtl2_protectable,
             } = *header
             {
-                if vtl2_protectable {
+                if vtl2_protectable || max_vtl == hvdef::Vtl::Vtl0 {
                     let base = relocate_gpa(gpa);
                     vtl2_ram_range = Some(MemoryRangeWithNode {
                         range: MemoryRange::new(base..base + number_of_bytes as u64),
@@ -769,7 +773,7 @@ fn load_igvm_x86(
             }
         }
 
-        let vtl2_range = vtl2_ram_range.expect("must have vtl2 required memory header");
+        let vtl2_range = vtl2_ram_range.ok_or(Error::MissingVtl2RequiredRange)?;
 
         // The Vtl2 ram range is only set when Vtl2 is not allocating ram
         // itself.
@@ -995,6 +999,10 @@ fn load_igvm_x86(
                 ref registers,
                 compatibility_mask: _,
             } => {
+                if from_igvm_vtl(vtl) != max_vtl {
+                    return Err(Error::LowerVtlContext);
+                }
+
                 let mut cr3: Option<u64> = None;
                 let mut cr4: Option<u64> = None;
 
@@ -1097,7 +1105,7 @@ fn load_igvm_x86(
                     };
 
                     loader
-                        .import_vp_register(from_igvm_vtl(vtl), reloc_reg)
+                        .import_vp_register(reloc_reg)
                         .map_err(Error::Loader)?;
                 }
 
