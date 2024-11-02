@@ -41,7 +41,6 @@ pub struct MemoryMappings {
     #[inspect(skip)]
     private_vtl0_memory: Option<GuestMemory>,
     #[inspect(skip)]
-    // YSP #[inspect(skip)]
     layout: MemoryLayout,
     #[inspect(skip)]
     acceptor: Option<Arc<MemoryAcceptor>>,

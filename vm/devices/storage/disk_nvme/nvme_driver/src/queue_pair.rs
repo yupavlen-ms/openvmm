@@ -505,7 +505,6 @@ impl Issuer {
         mem.write(data);
         let prp = mem.prp();
         command.dptr = prp.dptr;
-        // tracing::info!("YSP: before issue_raw (in) {:X} {}", mem.physical_address(0), mem.page_count());
         self.issue_raw(command).await
     }
 
@@ -522,7 +521,6 @@ impl Issuer {
 
         let prp = mem.prp();
         command.dptr = prp.dptr;
-        // tracing::info!("YSP: before issue_raw (out) {:X} {}", mem.physical_address(0), mem.page_count());
         let completion = self.issue_raw(command).await;
         mem.read(data);
         completion
@@ -563,13 +561,6 @@ struct PendingCommand {
     command: spec::Command,
     #[inspect(skip)]
     respond: mesh::OneshotSender<spec::Completion>,
-}
-
-// YSP: debug
-impl PendingCommand {
-    pub fn opcode(&self) -> u8 {
-        self.command.cdw0.opcode()
-    }
 }
 
 enum Req {
@@ -614,17 +605,9 @@ impl QueueHandler {
                 }
                 while !self.commands.is_empty() {
                     if let Some(completion) = self.cq.read() {
-                        if self.cq._id() == 0 {
-                            tracing::info!(
-                                "YSP: completion cid {} q {}",
-                                &completion.cid,
-                                &self.cq._id()
-                            );
-                        }
                         return Event::Completion(completion).into();
                     }
                     if interrupt.poll(cx).is_pending() {
-                        //tracing::info!("YSP: interrupt pending");
                         break;
                     }
                     self.stats.interrupts.increment();
@@ -639,17 +622,6 @@ impl QueueHandler {
                 Event::Request(req) => match req {
                     Req::Command(Rpc(mut command, respond)) => {
                         self.commands.insert(&mut command, respond);
-                        let entry = self.commands.vacant_entry();
-                        command.cdw0.set_cid(entry.key() as u16);
-                        if self.sq.id() == 0 {
-                            tracing::info!(
-                                "YSP: Req::Command {:X} cid {} q {}",
-                                &command.cdw0.opcode(),
-                                &command.cdw0.cid(),
-                                &self.sq.id()
-                            );
-                        }
-                        entry.insert(PendingCommand { command, respond });
                         self.sq.write(command).unwrap();
                         self.stats.issued.increment();
                     }
@@ -659,23 +631,6 @@ impl QueueHandler {
                     }
                 },
                 Event::Completion(completion) => {
-                    // YSP: FIXME: changed remove() to try_remove()
-                    let command = self.commands.try_remove(completion.cid.into());
-                    // YSP: FIXME: debug code
-                    if command.is_none() {
-                        tracing::info!("YSP: Req::Completion oopsie cid {:X} my-q {} target-q {:X} capacity {} len {}", &completion.cid, &self.sq.id(), completion.sqid, self.commands.capacity(), self.commands.len());
-                    }
-                    // YSP: FIXME: restore the proper variable type. Crash here.
-                    let command = command.unwrap();
-                    if completion.sqid != self.sq.id() {
-                        tracing::info!(
-                            "YSP: Req::Completion opc {} cid {} my-q {} target-q {}",
-                            command.opcode(),
-                            &completion.cid,
-                            &self.sq.id(),
-                            completion.sqid
-                        );
-                    }
                     assert_eq!(completion.sqid, self.sq.id());
                     let respond = self.commands.remove(completion.cid);
                     self.sq.update_head(completion.sqhd);
@@ -708,7 +663,6 @@ impl QueueHandler {
         }
         // The data is collected from both QueuePair and QueueHandler.
         Ok(QueuePairSavedState {
-            max_cids: self.max_cids,
             sq_state: self.sq.save(),
             cq_state: self.cq.save(),
             pending_cmds,
@@ -732,7 +686,6 @@ impl QueueHandler {
             saved_state.cpu,
             saved_state.msix,
         );
-        self.max_cids = saved_state.max_cids;
 
         // Restore pending commands.
         let mut pending: Vec<(usize, PendingCommand)> = Vec::new();
@@ -792,21 +745,19 @@ pub struct QueuePairSavedState {
     /// Interrupt vector (MSI-X)
     pub msix: u32,
     #[mesh(3)]
-    pub max_cids: usize,
-    #[mesh(4)]
     pub sq_state: SubmissionQueueSavedState,
-    #[mesh(5)]
+    #[mesh(4)]
     pub cq_state: CompletionQueueSavedState,
-    #[mesh(6)]
+    #[mesh(5)]
     pub sq_addr: u64,
-    #[mesh(7)]
+    #[mesh(6)]
     pub cq_addr: u64,
-    #[mesh(8)]
+    #[mesh(7)]
     pub base_va: u64, // TODO: Would it be better to store const u8* ?
-    #[mesh(9)]
+    #[mesh(8)]
     pub mem_len: usize, // TODO: Could be redundant with 'pfns'.
-    #[mesh(10)]
+    #[mesh(9)]
     pub pfns: Vec<u64>, // This could be a duplicate of the queue saved state.
-    #[mesh(11)]
+    #[mesh(10)]
     pub pending_cmds: Vec<PendingCommandSavedState>,
 }

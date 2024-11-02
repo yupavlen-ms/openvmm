@@ -398,6 +398,11 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         })
         .collect();
 
+    let vtl0_alias_map = try_find_property(node, "vtl0-alias-map")
+        .map(|prop| prop.read_u64(0).map_err(err_to_owned))
+        .transpose()
+        .context("unable to read vtl0-alias-map")?;
+
     // Extract vmbus mmio information from the overall memory map.
     let vtl0_mmio = memory
         .iter()
