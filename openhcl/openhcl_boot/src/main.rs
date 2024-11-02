@@ -313,7 +313,7 @@ fn reserved_memory_regions(
         }));
     }
 
-    // YSP: FIXME: Test
+    // YSP: FIXME: Test. Testy test.
     //reserved.push((MemoryRange::new(0x126000000..0x128000000), ReservedMemoryType::DmaBuffers));
 
     // YSP: FIXME: Debug
