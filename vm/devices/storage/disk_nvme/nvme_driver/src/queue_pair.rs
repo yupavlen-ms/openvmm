@@ -36,8 +36,6 @@ use user_driver::memory::MemoryBlock;
 use user_driver::memory::PAGE_SIZE;
 use user_driver::memory::PAGE_SIZE64;
 use user_driver::DeviceBacking;
-use zerocopy::AsBytes;
-use zerocopy::FromBytes;
 use zerocopy::FromZeroes;
 
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
@@ -102,6 +100,7 @@ impl PendingCommands {
     }
 
     fn remove(&mut self, cid: u16) -> mesh::OneshotSender<spec::Completion> {
+        // tracing::info!("YSP: remove CID {}->{}", cid, cid & Self::CID_KEY_MASK);
         let command = self
             .commands
             .try_remove((cid & Self::CID_KEY_MASK) as usize)
@@ -114,12 +113,41 @@ impl PendingCommands {
         command.respond
     }
 
-    pub fn save(&self) {
-        // YSP: FIXME:
+    /// Save pending commands into a buffer.
+    pub fn save(&self) -> PendingCommandsSavedState {
+        let mut commands = Vec::new();
+        // Convert Slab into Vec.
+        for cmd in &self.commands {
+            commands.push(cmd.1.command.clone());
+        }
+        tracing::info!("YSP: save CID {}", self.next_cid_high_bits.0);
+        PendingCommandsSavedState {
+            commands: commands,
+            next_cid_high_bits: self.next_cid_high_bits.0,
+        }
     }
 
-    pub fn restore(&mut self) {
-        // YSP: FIXME:
+    /// Restore pending commands from the saved state.
+    pub fn restore(&mut self, saved_state: &PendingCommandsSavedState) -> anyhow::Result<()> {
+        let mut commands: Vec<(usize, PendingCommand)> = Vec::new();
+        for cmd in &saved_state.commands {
+            let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
+            let pending_command = PendingCommand {
+                command: cmd.clone(),
+                respond: send,
+            };
+            // Remove high CID bits to be used as a key.
+            let cid = cmd.cdw0.cid() & Self::CID_KEY_MASK;
+            commands.push((cid as usize, pending_command));
+        }
+        // Re-create identical Slab where CIDs are correctly mapped.
+        self.commands = commands
+            .into_iter()
+            .collect::<Slab<PendingCommand>>();
+        tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
+        self.next_cid_high_bits = Wrapping(saved_state.next_cid_high_bits);
+
+        Ok(())
     }
 }
 
@@ -656,34 +684,18 @@ impl QueueHandler {
             self.sq.id(),
             self.cq._id()
         );
-        let mut pending_cmds: Vec<PendingCommandSavedState> = Vec::new();
-        self.commands.save(); // YSP: FIXME:
-        // YSP: FIXME:
-        //for cmd in &self.commands {
-        //    let mut command: [u8; 64] = [0; 64];
-        //    command.copy_from_slice(cmd.1.command.as_bytes());
-        //    let command = PendingCommandSavedState {
-        //        command,
-        //        cid: cmd.0 as u16,
-        //    };
-        //    pending_cmds.push(
-        //        //cmd.1.command.as_bytes().into()
-        //        command,
-        //    );
-        //}
         // The data is collected from both QueuePair and QueueHandler.
         Ok(QueuePairSavedState {
-            // max_cids: self.max_cids, // YSP: FIXME:
             sq_state: self.sq.save(),
             cq_state: self.cq.save(),
-            pending_cmds,
-            cpu: 0,         // Will be updated by the caller.
-            msix: 0,        // Will be updated by the caller.
-            sq_addr: 0,     // Will be updated by the caller.
-            cq_addr: 0,     // Will be updated by the caller.
-            base_va: 0, // Will be updated by the caller.
-            mem_len: 0,  // Will be updated by the caller.
-            pfns: vec![],     // Will be updated by the caller.
+            pending_cmds: self.commands.save(),
+            cpu: 0,       // Will be updated by the caller.
+            msix: 0,      // Will be updated by the caller.
+            sq_addr: 0,   // Will be updated by the caller.
+            cq_addr: 0,   // Will be updated by the caller.
+            base_va: 0,   // Will be updated by the caller.
+            mem_len: 0,   // Will be updated by the caller.
+            pfns: vec![], // Will be updated by the caller.
         })
     }
 
@@ -697,23 +709,7 @@ impl QueueHandler {
             saved_state.cpu,
             saved_state.msix,
         );
-        //self.max_cids = saved_state.max_cids;
-
-        // Restore pending commands.
-        // YSP: FIXME:
-        //let mut pending: Vec<(usize, PendingCommand)> = Vec::new();
-        //for cmd in &saved_state.pending_cmds {
-        //    let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
-        //    let pending_command = PendingCommand {
-        //        command: FromBytes::read_from_prefix(cmd.command.as_bytes()).unwrap(),
-        //        respond: send,
-        //    };
-        //    pending.push((cmd.cid as usize, pending_command));
-        //}
-        // YSP: FIXME:
-        // self.commands = pending.into_iter().collect::<Slab<PendingCommand>>();
-        self.commands = PendingCommands::new(); // YSP: FIXME:
-
+        self.commands.restore(&saved_state.pending_cmds)?;
         self.sq.restore(&saved_state.sq_state)?;
         self.cq.restore(&saved_state.cq_state)?;
 
@@ -728,26 +724,16 @@ pub(crate) fn admin_cmd(opcode: spec::AdminOpcode) -> spec::Command {
     }
 }
 
-#[repr(C)]
-#[derive(Protobuf, Clone, Debug, AsBytes, FromBytes, FromZeroes)]
+#[derive(Protobuf, Clone, Debug)]
 #[mesh(package = "underhill")]
-pub struct PendingCommandSavedState {
+pub struct PendingCommandsSavedState {
     #[mesh(1)]
-    pub command: [u8; 64],
+    pub commands: Vec<spec::Command>, 
     #[mesh(2)]
-    pub cid: u16,
+    pub next_cid_high_bits: u16,
     // TODO: Investigate
     //    #[inspect(skip)]
     //    respond: mesh::OneshotSender<spec::Completion>,
-}
-
-impl From<&[u8]> for PendingCommandSavedState {
-    fn from(value: &[u8]) -> Self {
-        let mut command: [u8; 64] = [0; 64];
-        command.copy_from_slice(value);
-        let cid = ((command[0] as u16) << 8) | command[1] as u16;
-        Self { command, cid }
-    }
 }
 
 #[derive(Protobuf, Clone, Debug)]
@@ -774,5 +760,5 @@ pub struct QueuePairSavedState {
     #[mesh(9)]
     pub pfns: Vec<u64>, // This could be a duplicate of the queue saved state.
     #[mesh(10)]
-    pub pending_cmds: Vec<PendingCommandSavedState>,
+    pub pending_cmds: PendingCommandsSavedState,
 }
