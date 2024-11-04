@@ -1859,7 +1859,7 @@ async fn run_control(driver: &DefaultDriver, mesh: &VmmMesh, opt: Options) -> an
                 term::set_raw_console(false);
 
                 loop {
-                    let line = rl.readline("hvlite> ");
+                    let line = rl.readline("openvmm> ");
                     if line.is_err() {
                         break;
                     }
