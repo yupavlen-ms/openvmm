@@ -97,6 +97,7 @@ impl NvmeManager {
         vp_count: u32,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         mem_block: MemoryBlock,
+        nvme_keepalive: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
         let (send, recv) = mesh::channel();
@@ -117,7 +118,7 @@ impl NvmeManager {
             dma_buffer: dma_buffer.clone(),
             mem_block,
             mem_next_offset: 0,
-            nvme_keepalive: false, // Will be set to true after save completed.
+            nvme_keepalive,
         };
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
@@ -137,7 +138,7 @@ impl NvmeManager {
             client: NvmeManagerClient {
                 sender: Arc::new(send),
             },
-            nvme_keepalive: true,
+            nvme_keepalive,
         }
     }
 
@@ -252,7 +253,7 @@ struct NvmeManagerWorker {
     dma_buffer: Arc<dyn VfioDmaBuffer>,
     vp_count: u32,
     /// Contiguous DMA memory block to be sliced per queue.
-    // YSP #[inspect(skip)]
+    #[inspect(skip)]
     mem_block: MemoryBlock,
     /// Next available offset to use.
     mem_next_offset: usize,
@@ -335,14 +336,7 @@ impl NvmeManagerWorker {
         let driver = match self.devices.entry(pci_id.to_owned()) {
             hash_map::Entry::Occupied(entry) => {
                 tracing::info!("YSP: existing entry");
-                let existing_driver = entry.into_mut();
-                let _ = existing_driver
-                    .attach()
-                    .instrument(tracing::info_span!("nvme_driver_attach", pci_id = pci_id))
-                    .await
-                    .map_err(InnerError::Vfio);
-
-                existing_driver
+                entry.into_mut()
             }
             hash_map::Entry::Vacant(entry) => {
                 let device =
@@ -441,7 +435,7 @@ impl NvmeManagerWorker {
                     &self.driver_source,
                     &disk.pci_id.clone(),
                     dma_buffer.clone(),
-                    Some(&disk.driver_state.vfio_state),
+                    true,
                 )
                 .instrument(tracing::info_span!("vfio_device_restore", pci_id = disk.pci_id.clone()))
                 .await?;

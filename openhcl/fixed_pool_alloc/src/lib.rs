@@ -14,17 +14,19 @@ mod mapped_dma;
 
 pub use mapped_dma::FixedDmaBuffer;
 
-#[cfg(feature = "vfio")]
 use anyhow::Context;
 use hvdef::HV_PAGE_SIZE;
 use inspect::Inspect;
+use memory_range::MemoryRange;
 use parking_lot::Mutex;
-use std::ffi::c_void;
 use std::num::NonZeroU64;
-use std::os::fd::AsRawFd;
 use std::sync::Arc;
 use thiserror::Error;
+use user_driver::memory::MemoryBlock;
 use vm_topology::memory::MemoryRangeWithNode;
+use user_driver::vfio::VfioDmaBuffer;
+use std::ffi::c_void;
+use std::os::fd::AsRawFd;
 
 /// Error returned when unable to allocate memory.
 #[derive(Debug, Error)]
@@ -81,25 +83,24 @@ impl FixedMapping {
         Ok(Self { addr, len })
     }
 
-    #[cfg(feature = "nvme_keepalive")]
-    fn new_in(addr_fixed: u64, len: usize, file_mapping: impl AsRawFd) -> std::io::Result<Self> {
+    fn new_in(len: usize, file_mapping: impl AsRawFd) -> std::io::Result<Self> {
         // SAFETY: addr_fixed and len are restored after servicing.
         let addr = unsafe {
             // MAP_UNINITIALIZED is documented but not defined in MapFlags.
             // MAP_ANONYMOUS is documented as performing zeroinit. Otherwise, fd must be set.
             // TODO: Check if MAP_UNINITIALIZED is needed.
             libc::mmap(
-                addr_fixed as *mut c_void,
+                // YSP: FIXME: addr_fixed as *mut c_void,
+                std::ptr::null_mut(),
                 len,
                 libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_LOCKED | libc::MAP_FIXED,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_LOCKED, // YSP: FIXME: | libc::MAP_FIXED,
                 file_mapping.as_raw_fd(),
                 0,
             )
         };
         tracing::info!(
-            "YSP: requested: {:X} actual {:X}",
-            addr_fixed,
+            "YSP: requested: ??? actual {:X}",
             addr as usize
         );
         if addr == libc::MAP_FAILED {
@@ -206,13 +207,13 @@ pub struct FixedPool {
 
 impl FixedPool {
     /// Create a fixed pool allocator, with the specified memory.
-    ///
-    pub fn new(fixed_pool: &[MemoryRangeWithNode]) -> anyhow::Result<Self> {
+    // YSP: FIXME: See if we need MemoryRangeWithNode
+    pub fn new(fixed_pool: &[MemoryRange]) -> anyhow::Result<Self> {
         let mut pages = Vec::new();
         for range in fixed_pool {
             pages.push(State::Free {
-                base_pfn: range.range.start() / HV_PAGE_SIZE,
-                size_pages: range.range.len() / HV_PAGE_SIZE,
+                base_pfn: range.start() / HV_PAGE_SIZE,
+                size_pages: range.len() / HV_PAGE_SIZE,
             });
         }
 
@@ -313,9 +314,9 @@ impl FixedPoolAllocator {
     }
 }
 
-#[cfg(feature = "vfio")]
-impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
-    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+impl VfioDmaBuffer for FixedPoolAllocator {
+    /// Create new DMA buffer in heap memory.
+    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
         tracing::info!("YSP: FixedPoolAllocator::create_dma_buffer size={}", len);
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
@@ -371,7 +372,7 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
             checker[7],
         );
 
-        Ok(user_driver::memory::MemoryBlock::new(FixedDmaBuffer {
+        Ok(MemoryBlock::new(FixedDmaBuffer {
             mapping,
             _alloc: alloc,
             pfns,
@@ -380,13 +381,11 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
 
     fn restore_dma_buffer(
         &self,
-        addr: u64,
         len: usize,
         pfns: &[u64],
-    ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+    ) -> anyhow::Result<MemoryBlock> {
         tracing::info!(
-            "YSP: CORRECT FixedPoolAllocator::restore_dma_buffer {:X} len={} pfn [{:X}]",
-            addr,
+            "YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]",
             len,
             pfns[0]
         );
@@ -412,7 +411,7 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
             .context("failed to allocate fixed mem")?;
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
-        let mapping = sparse_mmap::SparseMapping::new_at(len, Some(addr))
+        let mapping = sparse_mmap::SparseMapping::new_at(len, None) // YSP: FIXME: Attn
             .context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
@@ -442,7 +441,7 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
             checker[7],
         );
 
-        Ok(user_driver::memory::MemoryBlock::new(FixedDmaBuffer {
+        Ok(MemoryBlock::new(FixedDmaBuffer {
             mapping,
             _alloc: alloc,
             pfns,
@@ -450,12 +449,6 @@ impl user_driver::vfio::VfioDmaBuffer for FixedPoolAllocator {
     }
 }
 
-// YSP
-impl Inspect for FixedPoolAllocator {
-    fn inspect(&self, _req: inspect::Request<'_>) {
-        tracing::info!("YSP: hey I'm inspecting FixedPoolAllocator")
-    }
-}
 
 // YSP: rewrite
 #[cfg(test)]

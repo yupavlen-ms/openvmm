@@ -218,6 +218,8 @@ struct UhPartitionInner {
     #[inspect(with = "inspect::AtomicMut")]
     no_sidecar_hotplug: AtomicBool,
     use_mmio_hypercalls: bool,
+    #[inspect(skip)]
+    dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 #[derive(Clone, Inspect)]
@@ -1138,6 +1140,8 @@ pub struct UhPartitionNewParams<'a> {
     pub use_mmio_hypercalls: bool,
     /// Intercept guest debug exceptions to support gdbstub.
     pub intercept_debug_exceptions: bool,
+    /// Allocator for DMA pages to be preserved during servicing.
+    pub dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 /// Parameters to [`UhProtoPartition::build`].
@@ -1160,6 +1164,8 @@ pub struct UhLateParams<'a> {
     pub isolated_memory_protector: Option<Arc<dyn ProtectIsolatedMemory>>,
     /// Allocator for shared visibility pages.
     pub shared_vis_pages_pool: Option<shared_pool_alloc::SharedPoolAllocator>,
+    /// Allocator for DMA pages to be preserved during servicing.
+    pub dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 /// Trait for CVM-related protections on guest memory.
@@ -1555,6 +1561,7 @@ impl<'a> UhProtoPartition<'a> {
             shared_vis_pages_pool: late_params.shared_vis_pages_pool,
             no_sidecar_hotplug: params.no_sidecar_hotplug.into(),
             use_mmio_hypercalls: params.use_mmio_hypercalls,
+            dma_pages_pool: None,
         });
 
         if cfg!(guest_arch = "x86_64") {

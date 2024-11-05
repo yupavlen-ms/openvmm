@@ -4,12 +4,12 @@
 //! Implementation of an admin or IO queue pair.
 
 use super::spec;
+use crate::driver::save_restore::PendingCommandsSavedState;
+use crate::driver::save_restore::QueuePairSavedState;
 use crate::page_allocator::PageAllocator;
 use crate::page_allocator::ScopedPages;
 use crate::queues::CompletionQueue;
-use crate::queues::CompletionQueueSavedState;
 use crate::queues::SubmissionQueue;
-use crate::queues::SubmissionQueueSavedState;
 use crate::registers::DeviceRegisters;
 use futures::StreamExt;
 use guestmem::ranges::PagedRange;
@@ -17,7 +17,6 @@ use guestmem::GuestMemory;
 use guestmem::GuestMemoryError;
 use inspect::Inspect;
 use inspect_counters::Counter;
-use mesh::payload::Protobuf;
 use mesh::rpc::Rpc;
 use mesh::rpc::RpcSend;
 use mesh::Cancel;
@@ -312,10 +311,6 @@ impl QueuePair {
 
         // Add more data to the returned response.
         let mut local_queue_data = queue_data.unwrap();
-        local_queue_data.sq_addr = self.sq_addr();
-        local_queue_data.cq_addr = self.cq_addr();
-
-        local_queue_data.base_va = self.mem.base_va();
         local_queue_data.mem_len = self.mem.len();
         local_queue_data.pfns = self.mem.pfns().to_vec();
 
@@ -691,9 +686,6 @@ impl QueueHandler {
             pending_cmds: self.commands.save(),
             cpu: 0,       // Will be updated by the caller.
             msix: 0,      // Will be updated by the caller.
-            sq_addr: 0,   // Will be updated by the caller.
-            cq_addr: 0,   // Will be updated by the caller.
-            base_va: 0,   // Will be updated by the caller.
             mem_len: 0,   // Will be updated by the caller.
             pfns: vec![], // Will be updated by the caller.
         })
@@ -702,8 +694,7 @@ impl QueueHandler {
     /// Restore queue data after servicing.
     pub fn restore(&mut self, saved_state: &QueuePairSavedState) -> anyhow::Result<()> {
         tracing::info!(
-            "YSP: QueueHandler::restore {:X}? qid={}/{} cpu={} msi={}",
-            saved_state.base_va,
+            "YSP: QueueHandler::restore qid={}/{} cpu={} msi={}",
             saved_state.sq_state.sqid,
             saved_state.cq_state.cqid,
             saved_state.cpu,
@@ -722,43 +713,4 @@ pub(crate) fn admin_cmd(opcode: spec::AdminOpcode) -> spec::Command {
         cdw0: spec::Cdw0::new().with_opcode(opcode.0),
         ..FromZeroes::new_zeroed()
     }
-}
-
-#[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "underhill")]
-pub struct PendingCommandsSavedState {
-    #[mesh(1)]
-    pub commands: Vec<spec::Command>, 
-    #[mesh(2)]
-    pub next_cid_high_bits: u16,
-    // TODO: Investigate
-    //    #[inspect(skip)]
-    //    respond: mesh::OneshotSender<spec::Completion>,
-}
-
-#[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "underhill")]
-pub struct QueuePairSavedState {
-    #[mesh(1)]
-    /// Which CPU handles requests.
-    pub cpu: u32,
-    #[mesh(2)]
-    /// Interrupt vector (MSI-X)
-    pub msix: u32,
-    #[mesh(3)]
-    pub sq_state: SubmissionQueueSavedState,
-    #[mesh(4)]
-    pub cq_state: CompletionQueueSavedState,
-    #[mesh(5)]
-    pub sq_addr: u64,
-    #[mesh(6)]
-    pub cq_addr: u64,
-    #[mesh(7)]
-    pub base_va: u64, // TODO: Would it be better to store const u8* ?
-    #[mesh(8)]
-    pub mem_len: usize, // TODO: Could be redundant with 'pfns'.
-    #[mesh(9)]
-    pub pfns: Vec<u64>, // This could be a duplicate of the queue saved state.
-    #[mesh(10)]
-    pub pending_cmds: PendingCommandsSavedState,
 }

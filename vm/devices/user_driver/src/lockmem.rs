@@ -50,8 +50,7 @@ impl Mapping {
         Ok(Self { addr, len })
     }
 
-    #[cfg(feature = "nvme_keepalive")]
-    fn new_in(addr_saved: u64, len: usize) -> std::io::Result<Self> {
+    fn new_in(len: usize) -> std::io::Result<Self> {
         // SAFETY: No file descriptor is being passed.
         // addr is saved across servicing (unsafe).
         // The result is being validated.
@@ -60,10 +59,10 @@ impl Mapping {
             // MAP_ANONYMOUS is documented as performing zeroinit. To remove it, fd must be set.
             // TODO: Check if MAP_UNINITIALIZED is needed.
             libc::mmap(
-                addr_saved as *mut c_void,
+                std::ptr::null_mut(),
                 len,
                 libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_LOCKED | libc::MAP_FIXED,
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_LOCKED, // YSP: FIXME: | libc::MAP_FIXED,
                 -1,
                 0,
             )
@@ -72,8 +71,7 @@ impl Mapping {
             return Err(std::io::Error::last_os_error());
         }
         tracing::info!(
-            "YSP: requested: {:X} actual {:X}",
-            addr_saved,
+            "YSP: requested: ? actual {:X}",
             addr as usize
         );
         Ok(Self { addr, len })
@@ -132,13 +130,12 @@ impl LockedMemory {
     }
 
     /// Restore locked memory region at the preserved address.
-    pub fn restore(addr: u64, len: usize) -> anyhow::Result<Self> {
-        let mapping = Mapping::new_in(addr, len).context("failed to create fixed mapping")?;
+    pub fn restore(len: usize) -> anyhow::Result<Self> {
+        let mapping = Mapping::new_in(len).context("failed to create fixed mapping")?;
         mapping.lock().context("failed to lock mapping")?;
         let pages = mapping.pages()?;
         tracing::info!(
-            "YSP: LockedMemory::restore {:X} {} [{:x} {:x} {:x} {:x}]",
-            addr,
+            "YSP: LockedMemory::restore UNKNOWN!!!! len={} [{:x} {:x} {:x} {:x}]",
             len,
             &pages[0],
             &pages[1],
@@ -181,13 +178,10 @@ impl crate::vfio::VfioDmaBuffer for LockedMemorySpawner {
     /// Restore mapped DMA memory at the same physical location which was used before.
     fn restore_dma_buffer(
         &self,
-        addr: u64,
         len: usize,
         _pfns: &[u64],
     ) -> anyhow::Result<crate::memory::MemoryBlock> {
-        tracing::error!("YSP: WRONG restore_dma_buffer {:X} {}", addr, len);
-        Ok(crate::memory::MemoryBlock::new(LockedMemory::restore(
-            addr, len,
-        )?))
+        tracing::error!("YSP: WRONG restore_dma_buffer len={}", len);
+        Ok(crate::memory::MemoryBlock::new(LockedMemory::restore(len)?))
     }
 }

@@ -239,7 +239,7 @@ disk_backend_resources = { path = "vm/devices/storage/disk_backend_resources" }
 disk_blob = { path = "vm/devices/storage/disk_blob" }
 disk_blockdevice = { path = "vm/devices/storage/disk_blockdevice" }
 disk_file = { path = "vm/devices/storage/disk_file" }
-disk_nvme = { path = "vm/devices/storage/disk_nvme", features = ["nvme_keepalive"] }
+disk_nvme = { path = "vm/devices/storage/disk_nvme" }
 disk_ramdisk = { path = "vm/devices/storage/disk_ramdisk" }
 disk_striped = { path = "vm/devices/storage/disk_striped" }
 disk_vhd1 = { path = "vm/devices/storage/disk_vhd1" }
@@ -274,7 +274,7 @@ tpm_resources = { path = "vm/devices/tpm_resources" }
 mcr_resources = { path = "vm/devices/mcr_resources" } # TODO MCR: move to closed-source
 uidevices = { path = "vm/devices/uidevices" }
 uidevices_resources = { path = "vm/devices/uidevices_resources" }
-user_driver = { path = "vm/devices/user_driver", features = ["nvme_keepalive"] }
+user_driver = { path = "vm/devices/user_driver" }
 video_core = { path = "vm/devices/video_core" }
 vga = { path = "vm/devices/vga" }
 vga_proxy = { path = "vm/devices/vga_proxy" }
