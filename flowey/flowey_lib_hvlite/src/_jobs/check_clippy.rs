@@ -35,7 +35,7 @@ impl SimpleFlowNode for Node {
         ctx.import::<crate::install_openvmm_rust_build_essential::Node>();
         ctx.import::<crate::init_cross_build::Node>();
         ctx.import::<flowey_lib_common::install_rust::Node>();
-        ctx.import::<flowey_lib_common::install_apt_pkg::Node>();
+        ctx.import::<flowey_lib_common::install_dist_pkg::Node>();
         ctx.import::<flowey_lib_common::run_cargo_clippy::Node>();
     }
 
@@ -103,7 +103,7 @@ impl SimpleFlowNode for Node {
         }
 
         pre_build_deps.push(
-            ctx.reqv(|v| flowey_lib_common::install_apt_pkg::Request::Install {
+            ctx.reqv(|v| flowey_lib_common::install_dist_pkg::Request::Install {
                 package_names: vec!["libssl-dev".into()],
                 done: v,
             }),
@@ -134,7 +134,7 @@ impl SimpleFlowNode for Node {
             },
             platform: match flowey_platform {
                 FlowPlatform::Windows => CommonPlatform::WindowsMsvc,
-                FlowPlatform::Linux => CommonPlatform::LinuxGnu,
+                FlowPlatform::Linux(_) => CommonPlatform::LinuxGnu,
                 FlowPlatform::MacOs => CommonPlatform::MacOs,
                 platform => anyhow::bail!("unsupported platform {platform}"),
             },

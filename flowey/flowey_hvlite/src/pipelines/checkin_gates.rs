@@ -3,6 +3,7 @@
 
 //! See [`CheckinGatesCli`]
 
+use flowey::node::prelude::FlowPlatformLinuxDistro;
 use flowey::node::prelude::GhPermission;
 use flowey::node::prelude::GhPermissionValue;
 use flowey::node::prelude::ReadVar;
@@ -166,9 +167,13 @@ impl IntoPipeline for CheckinGatesCli {
         // emit mdbook guide build job
         let (pub_guide, use_guide) = pipeline.new_artifact("guide");
         let job = pipeline
-            .new_job(FlowPlatform::Linux, FlowArch::X86_64, "build mdbook guide")
+            .new_job(
+                FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
+                FlowArch::X86_64,
+                "build mdbook guide",
+            )
             .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
-                FlowPlatform::Linux,
+                FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
             ))
             .dep_on(
                 |ctx| flowey_lib_hvlite::_jobs::build_and_publish_guide::Params {
@@ -191,7 +196,7 @@ impl IntoPipeline for CheckinGatesCli {
             ),
             (
                 CommonTriple::X86_64_LINUX_GNU,
-                FlowPlatform::Linux,
+                FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 pub_rustdoc_linux,
             ),
         ] {
@@ -230,9 +235,9 @@ impl IntoPipeline for CheckinGatesCli {
             };
 
             let job = pipeline
-                .new_job(FlowPlatform::Linux, FlowArch::X86_64, "publish openvmm.dev")
+                .new_job(FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu), FlowArch::X86_64, "publish openvmm.dev")
                 .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 ))
                 .dep_on(
                     |ctx| flowey_lib_hvlite::_jobs::consolidate_and_publish_gh_pages::Params {
@@ -270,9 +275,13 @@ impl IntoPipeline for CheckinGatesCli {
                 .finish();
 
             let linux_fmt_job = pipeline
-                .new_job(FlowPlatform::Linux, FlowArch::X86_64, "xtask fmt (linux)")
+                .new_job(
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
+                    FlowArch::X86_64,
+                    "xtask fmt (linux)",
+                )
                 .gh_set_pool(crate::pipelines_shared::gh_pools::default_x86_pool(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 ))
                 .dep_on(|ctx| flowey_lib_hvlite::_jobs::check_xtask_fmt::Request {
                     target: CommonTriple::X86_64_LINUX_GNU,
@@ -500,12 +509,12 @@ impl IntoPipeline for CheckinGatesCli {
 
             let mut job = pipeline
                 .new_job(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                     FlowArch::X86_64,
                     format!("build artifacts [{arch_tag}-linux]"),
                 )
                 .gh_set_pool(crate::pipelines_shared::gh_pools::default_x86_pool(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 ))
                 .dep_on(|ctx| {
                     flowey_lib_hvlite::_jobs::build_and_publish_openvmm::Params {
@@ -652,12 +661,12 @@ impl IntoPipeline for CheckinGatesCli {
 
             let job = pipeline
                 .new_job(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                     FlowArch::X86_64,
                     format!("build openhcl [{arch_tag}-linux]"),
                 )
                 .gh_set_pool(crate::pipelines_shared::gh_pools::default_x86_pool(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 ))
                 .dep_on(|ctx| {
                     flowey_lib_hvlite::_jobs::build_and_publish_openhcl_igvm_from_recipe::Params {
@@ -728,7 +737,7 @@ impl IntoPipeline for CheckinGatesCli {
                 )),
             },
             ClippyUnitTestJobParams {
-                platform: FlowPlatform::Linux,
+                platform: FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 arch: FlowArch::X86_64,
                 gh_pool: crate::pipelines_shared::gh_pools::linux_self_hosted(),
                 clippy_targets: Some((
@@ -745,7 +754,7 @@ impl IntoPipeline for CheckinGatesCli {
                 )),
             },
             ClippyUnitTestJobParams {
-                platform: FlowPlatform::Linux,
+                platform: FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 arch: FlowArch::X86_64,
                 gh_pool: crate::pipelines_shared::gh_pools::linux_self_hosted(),
                 clippy_targets: Some((
@@ -867,7 +876,7 @@ impl IntoPipeline for CheckinGatesCli {
                 resolve_vmm_tests_artifacts: vmm_tests_artifacts_windows_amd_x86,
             },
             VmmTestJobParams {
-                platform: FlowPlatform::Linux,
+                platform: FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 arch: FlowArch::X86_64,
                 gh_pool: crate::pipelines_shared::gh_pools::linux_self_hosted_largedisk(),
                 label: "x64-linux",
@@ -945,12 +954,12 @@ impl IntoPipeline for CheckinGatesCli {
         {
             let job = pipeline
                 .new_job(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                     FlowArch::X86_64,
                     "test flowey local backend",
                 )
                 .gh_set_pool(crate::pipelines_shared::gh_pools::default_x86_pool(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 ))
                 .dep_on(
                     |ctx| flowey_lib_hvlite::_jobs::test_local_flowey_build_igvm::Request {
@@ -974,12 +983,12 @@ impl IntoPipeline for CheckinGatesCli {
             // no-op.
             let all_good_job = pipeline
                 .new_job(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                     FlowArch::X86_64,
                     "openvmm checkin gates",
                 )
                 .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
-                    FlowPlatform::Linux,
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu),
                 ))
                 // always run this job, regardless whether or not any previous jobs failed
                 .gh_dangerous_override_if("${{ always() }}")

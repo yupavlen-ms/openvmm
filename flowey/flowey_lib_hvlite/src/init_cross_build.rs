@@ -19,7 +19,7 @@ impl FlowNode for Node {
     type Request = Request;
 
     fn imports(ctx: &mut ImportCtx<'_>) {
-        ctx.import::<flowey_lib_common::install_apt_pkg::Node>();
+        ctx.import::<flowey_lib_common::install_dist_pkg::Node>();
     }
 
     fn emit(requests: Vec<Self::Request>, ctx: &mut NodeCtx<'_>) -> anyhow::Result<()> {
@@ -29,7 +29,9 @@ impl FlowNode for Node {
         let native = |target: &target_lexicon::Triple| -> bool {
             let platform = match target.operating_system {
                 target_lexicon::OperatingSystem::Windows => FlowPlatform::Windows,
-                target_lexicon::OperatingSystem::Linux => FlowPlatform::Linux,
+                target_lexicon::OperatingSystem::Linux => {
+                    FlowPlatform::Linux(FlowPlatformLinuxDistro::Ubuntu)
+                }
                 target_lexicon::OperatingSystem::Darwin => FlowPlatform::MacOs,
                 _ => return false,
             };
@@ -51,7 +53,7 @@ impl FlowNode for Node {
 
             if !native(&target) {
                 match (ctx.platform(), target.operating_system) {
-                    (FlowPlatform::Linux, target_lexicon::OperatingSystem::Linux) => {
+                    (FlowPlatform::Linux(_), target_lexicon::OperatingSystem::Linux) => {
                         let (gcc_pkg, bin) = match target.architecture {
                             target_lexicon::Architecture::Aarch64(_) => {
                                 ("gcc-aarch64-linux-gnu", "aarch64-linux-gnu-gcc")
@@ -72,7 +74,7 @@ impl FlowNode for Node {
                         //   position-independent static ELF binaries with no std are
                         //   `aarch64-unknown-linux-*`.
                         pre_build_deps.push(ctx.reqv(|v| {
-                            flowey_lib_common::install_apt_pkg::Request::Install {
+                            flowey_lib_common::install_dist_pkg::Request::Install {
                                 package_names: vec![gcc_pkg.into()],
                                 done: v,
                             }
@@ -101,7 +103,7 @@ impl FlowNode for Node {
                     // allowing for compilation of Windows applications from Linux.
                     // For now, just silently continue regardless.
                     // TODO: Detect (and potentially install) these dependencies
-                    (FlowPlatform::Linux, target_lexicon::OperatingSystem::Windows) => {}
+                    (FlowPlatform::Linux(_), target_lexicon::OperatingSystem::Windows) => {}
                     (FlowPlatform::Windows, target_lexicon::OperatingSystem::Windows) => {}
                     (_, target_lexicon::OperatingSystem::None_) => {}
                     (_, target_lexicon::OperatingSystem::Uefi) => {}

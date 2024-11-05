@@ -42,7 +42,7 @@ impl FlowNode for Node {
 
         // -- end of req processing -- //
 
-        if !matches!(ctx.platform(), FlowPlatform::Linux) {
+        if !matches!(ctx.platform(), FlowPlatform::Linux(_)) {
             anyhow::bail!("step only available on linux systems");
         }
 

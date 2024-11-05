@@ -80,7 +80,7 @@ impl FlowNode for Node {
             },
             platform: match flowey_platform {
                 FlowPlatform::Windows => CommonPlatform::WindowsMsvc,
-                FlowPlatform::Linux => CommonPlatform::LinuxGnu,
+                FlowPlatform::Linux(_) => CommonPlatform::LinuxGnu,
                 FlowPlatform::MacOs => CommonPlatform::MacOs,
                 platform => anyhow::bail!("unsupported platform {platform}"),
             },
