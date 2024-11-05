@@ -151,7 +151,7 @@ impl FlowNode for Node {
 
                         for expected_target in additional_target_triples {
                             if !installed_target_triples.contains(expected_target.as_str()) {
-                                anyhow::bail!("missing required target-triple: {expected_target}")
+                                anyhow::bail!("missing required target-triple: {expected_target}; to intsall: `rustup target add {expected_target}`")
                             }
                         }
                     }
