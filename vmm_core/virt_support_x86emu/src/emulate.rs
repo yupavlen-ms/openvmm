@@ -397,7 +397,7 @@ pub async fn emulate<T: EmulatorSupport>(
                 ));
             }
             x86emu::Error::InstructionException(exception, error_code, cause) => {
-                tracelimit::error_ratelimited!(
+                tracing::trace!(
                     ?exception,
                     ?error_code,
                     ?cause,

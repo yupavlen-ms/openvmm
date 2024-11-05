@@ -37,6 +37,7 @@ use host_params::shim_params::IsolationType;
 use host_params::shim_params::ShimParams;
 use host_params::PartitionInfo;
 use host_params::COMMAND_LINE_SIZE;
+use hvdef::Vtl;
 use loader_defs::linux::setup_data;
 use loader_defs::linux::SETUP_DTB;
 use loader_defs::shim::ShimParamsRaw;
@@ -66,6 +67,7 @@ fn build_kernel_command_line(
     cmdline: &mut ArrayString<COMMAND_LINE_SIZE>,
     partition_info: &PartitionInfo,
     can_trust_host: bool,
+    sidecar: Option<&SidecarConfig<'_>>,
 ) -> Result<(), CommandLineTooLong> {
     // For reference:
     // https://www.kernel.org/doc/html/v5.15/admin-guide/kernel-parameters.html
@@ -176,6 +178,9 @@ fn build_kernel_command_line(
         "clearcpuid=pcid",
         // Disable all attempts to use an IOMMU, including swiotlb.
         "iommu=off",
+        // Don't probe for a PCI bus. PCI devices currently come from VPCI. When
+        // this changes, we will explicitly enumerate a PCI bus via devicetree.
+        "pci=off",
     ];
 
     const AARCH64_KERNEL_PARAMETERS: &[&str] = &[];
@@ -213,6 +218,10 @@ fn build_kernel_command_line(
             "{}=1 ",
             underhill_confidentiality::OPENHCL_CONFIDENTIAL_ENV_VAR_NAME
         )?;
+    }
+
+    if let Some(sidecar) = sidecar {
+        write!(cmdline, "{} ", sidecar.kernel_command_line())?;
     }
 
     // If we're isolated we can't trust the host-provided cmdline
@@ -313,7 +322,7 @@ fn reserved_memory_regions(
         }));
     }
 
-    // YSP: FIXME: Test. Testy test.
+    // YSP: FIXME: Test
     //reserved.push((MemoryRange::new(0x126000000..0x128000000), ReservedMemoryType::DmaBuffers));
 
     // YSP: FIXME: Debug
@@ -600,6 +609,27 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
         Err(e) => panic!("unable to read device tree params {}", e),
     };
 
+    // Fill out the non-devicetree derived parts of PartitionInfo.
+    if !p.isolation_type.is_hardware_isolated()
+        && hvcall().vtl() == Vtl::Vtl2
+        && hvdef::HvRegisterVsmCapabilities::from(
+            hvcall()
+                .get_register(hvdef::HvAllArchRegisterName::VsmCapabilities.into())
+                .expect("failed to query vsm capabilities")
+                .as_u64(),
+        )
+        .vtl0_alias_map_available()
+    {
+        // Disable the alias map on ARM because physical address size is not
+        // reliably reported. Since the position of the alias map bit is inferred
+        // from address size, the alias map is broken when the PA size is wrong.
+        // TODO: is this still true?
+        if !cfg!(target_arch = "aarch64") {
+            partition_info.vtl0_alias_map =
+                Some(1 << (arch::physical_address_bits(p.isolation_type) - 1));
+        }
+    }
+
     if can_trust_host {
         // Enable late log output if requested in the dynamic command line.
         // Confidential debug is only allowed in the static command line.
@@ -619,6 +649,7 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
         panic!("no cpus");
     }
 
+    validate_vp_hw_ids(partition_info);
     log!(
         "YSP: unwrapped: {}",
         partition_info.preserve_dma_4k_pages.unwrap_or(0)
@@ -638,7 +669,14 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
     );
 
     let mut cmdline = off_stack!(ArrayString<COMMAND_LINE_SIZE>, ArrayString::new_const());
-    build_kernel_command_line(&p, &mut cmdline, partition_info, can_trust_host).unwrap();
+    build_kernel_command_line(
+        &p,
+        &mut cmdline,
+        partition_info,
+        can_trust_host,
+        sidecar.as_ref(),
+    )
+    .unwrap();
 
     let mut fdt = off_stack!(Fdt, zeroed());
     fdt.header.len = fdt.data.len() as u32;
@@ -779,6 +817,58 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
     }
 }
 
+/// Ensure that mshv VP indexes for the CPUs listed in the partition info
+/// correspond to the N in the cpu@N devicetree node name. OpenVMM assumes that
+/// this will be the case.
+fn validate_vp_hw_ids(partition_info: &PartitionInfo) {
+    use host_params::MAX_CPU_COUNT;
+    use hypercall::HwId;
+
+    if partition_info.isolation.is_hardware_isolated() {
+        // TODO TDX SNP: we don't have a GHCB/GHCI page set up to communicate
+        // with the hypervisor here, so we can't easily perform the check. Since
+        // there is no security impact to this check, we can skip it for now; if
+        // the VM fails to boot, then this is due to a host contract violation.
+        //
+        // For TDX, we could use ENUM TOPOLOGY to validate that the TD VCPU
+        // indexes correspond to the APIC IDs in the right order. I am not
+        // certain if there are places where we depend on this mapping today.
+        return;
+    }
+
+    if hvcall().vtl() != Vtl::Vtl2 {
+        // If we're not using guest VSM, then the guest won't communicate
+        // directly with the hypervisor, so we can choose the VP indexes
+        // ourselves.
+        return;
+    }
+
+    // Ensure the host and hypervisor agree on VP index ordering.
+
+    let mut hw_ids = off_stack!(ArrayVec<HwId, MAX_CPU_COUNT>, ArrayVec::new_const());
+    hw_ids.clear();
+    hw_ids.extend(partition_info.cpus.iter().map(|c| c.reg as _));
+    let mut vp_indexes = off_stack!(ArrayVec<u32, MAX_CPU_COUNT>, ArrayVec::new_const());
+    vp_indexes.clear();
+    if let Err(err) = hvcall().get_vp_index_from_hw_id(&hw_ids, &mut vp_indexes) {
+        panic!(
+            "failed to get VP index for hardware ID {:#x}: {}",
+            hw_ids[vp_indexes.len().min(hw_ids.len() - 1)],
+            err
+        );
+    }
+    if let Some((i, &vp_index)) = vp_indexes
+        .iter()
+        .enumerate()
+        .find(|(i, &vp_index)| *i as u32 != vp_index)
+    {
+        panic!(
+            "CPU hardware ID {:#x} does not correspond to VP index {}",
+            hw_ids[i], vp_index
+        );
+    }
+}
+
 // See build.rs. See `mod rt` for the actual bootstrap code required to invoke
 // shim_main.
 #[cfg(not(minimal_rt))]
@@ -791,6 +881,7 @@ mod test {
     use super::x86_boot::build_e820_map;
     use super::x86_boot::E820Ext;
     use crate::dt::write_dt;
+    use crate::host_params::shim_params::IsolationType;
     use crate::host_params::PartitionInfo;
     use crate::host_params::MAX_CPU_COUNT;
     use crate::reserved_memory_regions;
@@ -834,6 +925,7 @@ mod test {
             vtl2_full_config_region: MemoryRange::EMPTY,
             vtl2_config_region_reclaim: MemoryRange::EMPTY,
             partition_ram: ArrayVec::new(),
+            isolation: IsolationType::None,
             bsp_reg: cpus[0].reg as u32,
             cpus,
             cmdline: ArrayString::new(),
@@ -849,6 +941,7 @@ mod test {
             gic: None,
             memory_allocation_mode: host_fdt_parser::MemoryAllocationMode::Host,
             entropy: None,
+            vtl0_alias_map: None,
         }
     }
 

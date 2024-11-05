@@ -26,7 +26,6 @@ use futures_concurrency::future::Join;
 use get_protocol::SaveGuestVtl2StateFlags;
 use guest_emulation_transport::api::GuestSaveRequest;
 use guid::Guid;
-use hcl::ioctl::IsolationType;
 use hyperv_ic_resources::shutdown::ShutdownParams;
 use hyperv_ic_resources::shutdown::ShutdownResult;
 use hyperv_ic_resources::shutdown::ShutdownRpc;
@@ -56,6 +55,7 @@ use tracing::instrument;
 use tracing::Instrument;
 use uevent::UeventListener;
 use underhill_threadpool::AffinitizedThreadpool;
+use virt::IsolationType;
 use virt_mshv_vtl::UhPartition;
 use virt_mshv_vtl::VtlCrash;
 use vm_resource::ResourceResolver;
@@ -130,7 +130,7 @@ pub(crate) struct LoadedVm {
     /// The various guest memory objects.
     pub memory: underhill_mem::MemoryMappings,
     pub firmware_type: FirmwareType,
-    pub isolation: Option<IsolationType>,
+    pub isolation: IsolationType,
     // contain task handles which must be kept live
     pub _chipset_devices: ChipsetDevices,
     // keep the unit task alive
@@ -473,7 +473,7 @@ impl LoadedVm {
         deadline: std::time::Instant,
         capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<ServicingState> {
-        if self.isolation.is_some() {
+        if self.isolation.is_isolated() {
             anyhow::bail!("Servicing is not yet supported for isolated VMs");
         }
 

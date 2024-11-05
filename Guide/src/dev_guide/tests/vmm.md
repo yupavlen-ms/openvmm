@@ -1,17 +1,14 @@
 # VMM Tests
 
-> Note: We recommend using [cargo-nextest](https://nexte.st/) to run unit / VMM
-> tests. It is a significant improvement over the built-in `cargo test` runner,
-> and is the test runner we use in all our CI pipelines.
->
-> You can install it locally by running:
->
-> ```bash
-> cargo install cargo-nextest --locked
-> ```
->
-> See the [cargo-nextest](https://nexte.st/) documentation for more info.
+```admonish tip
+Note: We recommend using [cargo-nextest](https://nexte.st/) to run unit / VMM
+tests. It is a significant improvement over the built-in `cargo test` runner,
+and is the test runner we use in all our CI pipelines.
 
+You can install it locally by running: `cargo install cargo-nextest --locked`
+
+See the [cargo-nextest](https://nexte.st/) documentation for more info.
+```
 
 The OpenVMM repo contains a set of "heavyweight" VMM tests that fully boot a
 virtual machine and run validation against it. Unlike Unit tests, these are all
@@ -23,7 +20,7 @@ VMM tests are run using standard Rust test infrastructure, and are invoked via
 `cargo test` / `cargo nextest`.
 
 ```bash
-cargo nextest run vmm_tests [TEST_FILTERS]
+cargo nextest run -p vmm_tests [TEST_FILTERS]
 ```
 
 For example, to run a simple VMM test that simply boots using UEFI:
@@ -39,7 +36,7 @@ and if the host machine OS and the guest machine OS are different, a setup
 is required for cross-building. The recommended approach is to use WSL2 and
 cross-compile using the freely available Microsoft Visual Studio Build Tools
 or Microsoft Visual Studio Community Edition as described in
-(\[WSL2] Cross Compiling from WSL2 to Windows)[../getting_started/suggested_dev_env.md#wsl2-cross-compiling-from-wsl2-to-windows]
+[\[WSL2\] Cross Compiling from WSL2 to Windows](../getting_started/suggested_dev_env.md#wsl2-cross-compiling-from-wsl2-to-windows)
 
 If that is not possible, here is another option that relies on [MinGW-w64](https://www.mingw-w64.org/)
 and doesn't require installing Windows:

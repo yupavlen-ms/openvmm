@@ -164,39 +164,38 @@ impl IntoPipeline for CheckinGatesCli {
         let mut all_jobs = Vec::new();
 
         // emit mdbook guide build job
-        let (pub_guide, _use_guide) = pipeline.new_artifact("guide");
+        let (pub_guide, use_guide) = pipeline.new_artifact("guide");
         let job = pipeline
-            .new_job(
-                FlowPlatform::Windows,
-                FlowArch::X86_64,
-                "build mdbook guide [x64-windows]",
-            )
-            .gh_set_pool(crate::pipelines_shared::gh_pools::default_x86_pool(
-                FlowPlatform::Windows,
+            .new_job(FlowPlatform::Linux, FlowArch::X86_64, "build mdbook guide")
+            .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
+                FlowPlatform::Linux,
             ))
             .dep_on(
                 |ctx| flowey_lib_hvlite::_jobs::build_and_publish_guide::Params {
                     artifact_dir: ctx.publish_artifact(pub_guide),
                     done: ctx.new_done_handle(),
-                    deploy_github_pages: matches!(config, PipelineConfig::Ci),
                 },
             )
-            .gh_grant_permissions::<flowey_lib_hvlite::_jobs::build_and_publish_guide::Node>([(
-                GhPermission::Pages,
-                GhPermissionValue::Write,
-            )])
             .finish();
 
         all_jobs.push(job);
 
         // emit rustdoc jobs
-        for (target, platform) in [
-            (CommonTriple::X86_64_WINDOWS_MSVC, FlowPlatform::Windows),
-            (CommonTriple::X86_64_LINUX_GNU, FlowPlatform::Linux),
+        let (pub_rustdoc_linux, use_rustdoc_linux) = pipeline.new_artifact("x64-linux-rustdoc");
+        let (pub_rustdoc_win, use_rustdoc_win) = pipeline.new_artifact("x64-windows-rustdoc");
+        for (target, platform, pub_rustdoc) in [
+            (
+                CommonTriple::X86_64_WINDOWS_MSVC,
+                FlowPlatform::Windows,
+                pub_rustdoc_win,
+            ),
+            (
+                CommonTriple::X86_64_LINUX_GNU,
+                FlowPlatform::Linux,
+                pub_rustdoc_linux,
+            ),
         ] {
             let deny_warnings = !matches!(backend_hint, PipelineBackendHint::Local);
-            let (pub_rustdoc, _use_rustdoc) =
-                pipeline.new_artifact(format!("x64-{platform}-rustdoc"));
             let job = pipeline
                 .new_job(
                     platform,
@@ -216,6 +215,38 @@ impl IntoPipeline for CheckinGatesCli {
                         done: ctx.new_done_handle(),
                     },
                 )
+                .finish();
+
+            all_jobs.push(job);
+        }
+
+        // emit consolidated gh pages publish job
+        if matches!(config, PipelineConfig::Ci) {
+            let artifact_dir = if matches!(backend_hint, PipelineBackendHint::Local) {
+                let (publish, _use) = pipeline.new_artifact("gh-pages");
+                Some(publish)
+            } else {
+                None
+            };
+
+            let job = pipeline
+                .new_job(FlowPlatform::Linux, FlowArch::X86_64, "publish openvmm.dev")
+                .gh_set_pool(crate::pipelines_shared::gh_pools::default_gh_hosted(
+                    FlowPlatform::Linux,
+                ))
+                .dep_on(
+                    |ctx| flowey_lib_hvlite::_jobs::consolidate_and_publish_gh_pages::Params {
+                        rustdoc_linux: ctx.use_artifact(&use_rustdoc_linux),
+                        rustdoc_windows: ctx.use_artifact(&use_rustdoc_win),
+                        guide: ctx.use_artifact(&use_guide),
+                        artifact_dir: artifact_dir.map(|x| ctx.publish_artifact(x)),
+                        done: ctx.new_done_handle(),
+                    },
+                )
+                .gh_grant_permissions::<flowey_lib_hvlite::_jobs::consolidate_and_publish_gh_pages::Node>([
+                    (GhPermission::IdToken, GhPermissionValue::Write),
+                    (GhPermission::Pages, GhPermissionValue::Write),
+                ])
                 .finish();
 
             all_jobs.push(job);
@@ -838,19 +869,12 @@ impl IntoPipeline for CheckinGatesCli {
             VmmTestJobParams {
                 platform: FlowPlatform::Linux,
                 arch: FlowArch::X86_64,
-                gh_pool: crate::pipelines_shared::gh_pools::linux_self_hosted(),
+                gh_pool: crate::pipelines_shared::gh_pools::linux_self_hosted_largedisk(),
                 label: "x64-linux",
                 target: CommonTriple::X86_64_LINUX_GNU,
                 resolve_vmm_tests_artifacts: vmm_tests_artifacts_linux_x86,
             },
         ] {
-            // TODO: Enable VMM tests for pull requests once the issues around
-            // using secret variables are resolved.
-            // This is tracked by https://github.com/microsoft/openvmm/issues/137.
-            if matches!(config, PipelineConfig::Pr) {
-                break;
-            }
-
             let pub_vmm_tests_junit_xml = if matches!(backend_hint, PipelineBackendHint::Local) {
                 Some(pipeline.new_artifact(format!("{label}-vmm-tests")).0)
             } else {
@@ -880,16 +904,6 @@ impl IntoPipeline for CheckinGatesCli {
                 _ => unreachable!(),
             };
 
-            // These secrets describe the HvLite-GitHub service principal and associated Azure subscription,
-            // which, along with the GITHUB_TOKEN, are used to authenticate GitHub Actions to Azure with OpenID Connect.
-            // The service principal has federated identity credentials configured describing which branches and
-            // scenarios can be authenticated.
-            // To learn more about these secrets and using OIDC, see
-            // <https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure?tabs=azure-portal%2Clinux#use-the-azure-login-action-with-openid-connect>
-            let client_id = pipeline.gh_use_secret("OPENVMM_CLIENT_ID");
-            let tenant_id = pipeline.gh_use_secret("OPENVMM_TENANT_ID");
-            let subscription_id = pipeline.gh_use_secret("OPENVMM_SUBSCRIPTION_ID");
-
             let mut vmm_tests_run_job = pipeline
                 .new_job(platform, arch, format!("run vmm-tests [{label}]"))
                 .gh_set_pool(gh_pool)
@@ -905,11 +919,6 @@ impl IntoPipeline for CheckinGatesCli {
                         fail_job_on_test_fail: true,
                         done: ctx.new_done_handle(),
                     }
-                })
-                .dep_on(|_| flowey_lib_hvlite::_jobs::cfg_gh_azure_login::Params {
-                    client_id: client_id.clone(),
-                    tenant_id: tenant_id.clone(),
-                    subscription_id: subscription_id.clone(),
                 });
 
             if let Some(pub_vmm_tests_junit_xml) = pub_vmm_tests_junit_xml {

@@ -27,6 +27,7 @@ use pal_async::task::Task;
 use safeatomic::AtomicSliceOps;
 use slab::Slab;
 use std::future::poll_fn;
+use std::num::Wrapping;
 use std::sync::Arc;
 use std::task::Poll;
 use thiserror::Error;
@@ -35,8 +36,6 @@ use user_driver::memory::MemoryBlock;
 use user_driver::memory::PAGE_SIZE;
 use user_driver::memory::PAGE_SIZE64;
 use user_driver::DeviceBacking;
-use zerocopy::AsBytes;
-use zerocopy::FromBytes;
 use zerocopy::FromZeroes;
 
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
@@ -58,6 +57,97 @@ impl Inspect for QueuePair {
             mem: _,
         } = self;
         issuer.send.send(Req::Inspect(req.defer()));
+    }
+}
+
+impl PendingCommands {
+    const CID_KEY_BITS: u32 = 10;
+    const CID_KEY_MASK: u16 = (1 << Self::CID_KEY_BITS) - 1;
+    const MAX_CIDS: usize = 1 << Self::CID_KEY_BITS;
+    const CID_SEQ_OFFSET: Wrapping<u16> = Wrapping(1 << Self::CID_KEY_BITS);
+
+    fn new() -> Self {
+        Self {
+            commands: Slab::new(),
+            next_cid_high_bits: Wrapping(0),
+        }
+    }
+
+    fn is_full(&self) -> bool {
+        self.commands.len() >= Self::MAX_CIDS
+    }
+
+    fn is_empty(&self) -> bool {
+        self.commands.is_empty()
+    }
+
+    /// Inserts a command into the pending list, updating it with a new CID.
+    fn insert(
+        &mut self,
+        command: &mut spec::Command,
+        respond: mesh::OneshotSender<spec::Completion>,
+    ) {
+        let entry = self.commands.vacant_entry();
+        assert!(entry.key() < Self::MAX_CIDS);
+        assert_eq!(self.next_cid_high_bits % Self::CID_SEQ_OFFSET, Wrapping(0));
+        let cid = entry.key() as u16 | self.next_cid_high_bits.0;
+        self.next_cid_high_bits += Self::CID_SEQ_OFFSET;
+        command.cdw0.set_cid(cid);
+        entry.insert(PendingCommand {
+            command: *command,
+            respond,
+        });
+    }
+
+    fn remove(&mut self, cid: u16) -> mesh::OneshotSender<spec::Completion> {
+        // tracing::info!("YSP: remove CID {}->{}", cid, cid & Self::CID_KEY_MASK);
+        let command = self
+            .commands
+            .try_remove((cid & Self::CID_KEY_MASK) as usize)
+            .expect("completion for unknown cid");
+        assert_eq!(
+            command.command.cdw0.cid(),
+            cid,
+            "cid sequence number mismatch"
+        );
+        command.respond
+    }
+
+    /// Save pending commands into a buffer.
+    pub fn save(&self) -> PendingCommandsSavedState {
+        let mut commands = Vec::new();
+        // Convert Slab into Vec.
+        for cmd in &self.commands {
+            commands.push(cmd.1.command.clone());
+        }
+        tracing::info!("YSP: save CID {}", self.next_cid_high_bits.0);
+        PendingCommandsSavedState {
+            commands: commands,
+            next_cid_high_bits: self.next_cid_high_bits.0,
+        }
+    }
+
+    /// Restore pending commands from the saved state.
+    pub fn restore(&mut self, saved_state: &PendingCommandsSavedState) -> anyhow::Result<()> {
+        let mut commands: Vec<(usize, PendingCommand)> = Vec::new();
+        for cmd in &saved_state.commands {
+            let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
+            let pending_command = PendingCommand {
+                command: cmd.clone(),
+                respond: send,
+            };
+            // Remove high CID bits to be used as a key.
+            let cid = cmd.cdw0.cid() & Self::CID_KEY_MASK;
+            commands.push((cid as usize, pending_command));
+        }
+        // Re-create identical Slab where CIDs are correctly mapped.
+        self.commands = commands
+            .into_iter()
+            .collect::<Slab<PendingCommand>>();
+        tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
+        self.next_cid_high_bits = Wrapping(saved_state.next_cid_high_bits);
+
+        Ok(())
     }
 }
 
@@ -139,8 +229,7 @@ impl QueuePair {
         let queue_handler = QueueHandler {
             sq,
             cq,
-            commands: Slab::new(),
-            max_cids: 1024,
+            commands: PendingCommands::new(),
             stats: Default::default(),
         };
 
@@ -452,7 +541,6 @@ impl Issuer {
         mem.write(data);
         let prp = mem.prp();
         command.dptr = prp.dptr;
-        // tracing::info!("YSP: before issue_raw (in) {:X} {}", mem.physical_address(0), mem.page_count());
         self.issue_raw(command).await
     }
 
@@ -469,7 +557,6 @@ impl Issuer {
 
         let prp = mem.prp();
         command.dptr = prp.dptr;
-        // tracing::info!("YSP: before issue_raw (out) {:X} {}", mem.physical_address(0), mem.page_count());
         let completion = self.issue_raw(command).await;
         mem.read(data);
         completion
@@ -496,18 +583,20 @@ struct Prp<'a> {
 }
 
 #[derive(Inspect)]
+struct PendingCommands {
+    /// Mapping from the low bits of cid to pending command.
+    #[inspect(iter_by_key)]
+    commands: Slab<PendingCommand>,
+    #[inspect(hex)]
+    next_cid_high_bits: Wrapping<u16>,
+}
+
+#[derive(Inspect)]
 struct PendingCommand {
     // Keep the command around for diagnostics.
     command: spec::Command,
     #[inspect(skip)]
     respond: mesh::OneshotSender<spec::Completion>,
-}
-
-// YSP: debug
-impl PendingCommand {
-    pub fn opcode(&self) -> u8 {
-        self.command.cdw0.opcode()
-    }
 }
 
 enum Req {
@@ -520,10 +609,7 @@ enum Req {
 struct QueueHandler {
     sq: SubmissionQueue,
     cq: CompletionQueue,
-    /// Mapping from cid to pending command.
-    #[inspect(iter_by_key)]
-    commands: Slab<PendingCommand>,
-    max_cids: usize,
+    commands: PendingCommands,
     stats: QueueStats,
 }
 
@@ -548,24 +634,16 @@ impl QueueHandler {
             }
 
             let event = poll_fn(|cx| {
-                if !self.sq.is_full() && self.commands.len() < self.max_cids {
+                if !self.sq.is_full() && !self.commands.is_full() {
                     if let Poll::Ready(Some(req)) = recv.poll_next_unpin(cx) {
                         return Event::Request(req).into();
                     }
                 }
                 while !self.commands.is_empty() {
                     if let Some(completion) = self.cq.read() {
-                        if self.cq._id() == 0 {
-                            tracing::info!(
-                                "YSP: completion cid {} q {}",
-                                &completion.cid,
-                                &self.cq._id()
-                            );
-                        }
                         return Event::Completion(completion).into();
                     }
                     if interrupt.poll(cx).is_pending() {
-                        //tracing::info!("YSP: interrupt pending");
                         break;
                     }
                     self.stats.interrupts.increment();
@@ -579,17 +657,7 @@ impl QueueHandler {
             match event {
                 Event::Request(req) => match req {
                     Req::Command(Rpc(mut command, respond)) => {
-                        let entry = self.commands.vacant_entry();
-                        command.cdw0.set_cid(entry.key() as u16);
-                        if self.sq.id() == 0 {
-                            tracing::info!(
-                                "YSP: Req::Command {:X} cid {} q {}",
-                                &command.cdw0.opcode(),
-                                &command.cdw0.cid(),
-                                &self.sq.id()
-                            );
-                        }
-                        entry.insert(PendingCommand { command, respond });
+                        self.commands.insert(&mut command, respond);
                         self.sq.write(command).unwrap();
                         self.stats.issued.increment();
                     }
@@ -599,26 +667,10 @@ impl QueueHandler {
                     }
                 },
                 Event::Completion(completion) => {
-                    // YSP: FIXME: changed remove() to try_remove()
-                    let command = self.commands.try_remove(completion.cid.into());
-                    // YSP: FIXME: debug code
-                    if command.is_none() {
-                        tracing::info!("YSP: Req::Completion oopsie cid {:X} my-q {} target-q {:X} capacity {} len {}", &completion.cid, &self.sq.id(), completion.sqid, self.commands.capacity(), self.commands.len());
-                    }
-                    // YSP: FIXME: restore the proper variable type. Crash here.
-                    let command = command.unwrap();
-                    if completion.sqid != self.sq.id() {
-                        tracing::info!(
-                            "YSP: Req::Completion opc {} cid {} my-q {} target-q {}",
-                            command.opcode(),
-                            &completion.cid,
-                            &self.sq.id(),
-                            completion.sqid
-                        );
-                    }
                     assert_eq!(completion.sqid, self.sq.id());
+                    let respond = self.commands.remove(completion.cid);
                     self.sq.update_head(completion.sqhd);
-                    command.respond.send(completion);
+                    respond.send(completion);
                     self.stats.completed.increment();
                 }
             }
@@ -632,32 +684,18 @@ impl QueueHandler {
             self.sq.id(),
             self.cq._id()
         );
-        let mut pending_cmds: Vec<PendingCommandSavedState> = Vec::new();
-        for cmd in &self.commands {
-            let mut command: [u8; 64] = [0; 64];
-            command.copy_from_slice(cmd.1.command.as_bytes());
-            let command = PendingCommandSavedState {
-                command,
-                cid: cmd.0 as u16,
-            };
-            pending_cmds.push(
-                //cmd.1.command.as_bytes().into()
-                command,
-            );
-        }
         // The data is collected from both QueuePair and QueueHandler.
         Ok(QueuePairSavedState {
-            max_cids: self.max_cids,
             sq_state: self.sq.save(),
             cq_state: self.cq.save(),
-            pending_cmds,
-            cpu: 0,         // Will be updated by the caller.
-            msix: 0,        // Will be updated by the caller.
-            sq_addr: 0,     // Will be updated by the caller.
-            cq_addr: 0,     // Will be updated by the caller.
-            base_va: 0, // Will be updated by the caller.
-            mem_len: 0,  // Will be updated by the caller.
-            pfns: vec![],     // Will be updated by the caller.
+            pending_cmds: self.commands.save(),
+            cpu: 0,       // Will be updated by the caller.
+            msix: 0,      // Will be updated by the caller.
+            sq_addr: 0,   // Will be updated by the caller.
+            cq_addr: 0,   // Will be updated by the caller.
+            base_va: 0,   // Will be updated by the caller.
+            mem_len: 0,   // Will be updated by the caller.
+            pfns: vec![], // Will be updated by the caller.
         })
     }
 
@@ -671,20 +709,7 @@ impl QueueHandler {
             saved_state.cpu,
             saved_state.msix,
         );
-        self.max_cids = saved_state.max_cids;
-
-        // Restore pending commands.
-        let mut pending: Vec<(usize, PendingCommand)> = Vec::new();
-        for cmd in &saved_state.pending_cmds {
-            let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
-            let pending_command = PendingCommand {
-                command: FromBytes::read_from_prefix(cmd.command.as_bytes()).unwrap(),
-                respond: send,
-            };
-            pending.push((cmd.cid as usize, pending_command));
-        }
-        self.commands = pending.into_iter().collect::<Slab<PendingCommand>>();
-
+        self.commands.restore(&saved_state.pending_cmds)?;
         self.sq.restore(&saved_state.sq_state)?;
         self.cq.restore(&saved_state.cq_state)?;
 
@@ -699,26 +724,16 @@ pub(crate) fn admin_cmd(opcode: spec::AdminOpcode) -> spec::Command {
     }
 }
 
-#[repr(C)]
-#[derive(Protobuf, Clone, Debug, AsBytes, FromBytes, FromZeroes)]
+#[derive(Protobuf, Clone, Debug)]
 #[mesh(package = "underhill")]
-pub struct PendingCommandSavedState {
+pub struct PendingCommandsSavedState {
     #[mesh(1)]
-    pub command: [u8; 64],
+    pub commands: Vec<spec::Command>, 
     #[mesh(2)]
-    pub cid: u16,
+    pub next_cid_high_bits: u16,
     // TODO: Investigate
     //    #[inspect(skip)]
     //    respond: mesh::OneshotSender<spec::Completion>,
-}
-
-impl From<&[u8]> for PendingCommandSavedState {
-    fn from(value: &[u8]) -> Self {
-        let mut command: [u8; 64] = [0; 64];
-        command.copy_from_slice(value);
-        let cid = ((command[0] as u16) << 8) | command[1] as u16;
-        Self { command, cid }
-    }
 }
 
 #[derive(Protobuf, Clone, Debug)]
@@ -731,21 +746,19 @@ pub struct QueuePairSavedState {
     /// Interrupt vector (MSI-X)
     pub msix: u32,
     #[mesh(3)]
-    pub max_cids: usize,
-    #[mesh(4)]
     pub sq_state: SubmissionQueueSavedState,
-    #[mesh(5)]
+    #[mesh(4)]
     pub cq_state: CompletionQueueSavedState,
-    #[mesh(6)]
+    #[mesh(5)]
     pub sq_addr: u64,
-    #[mesh(7)]
+    #[mesh(6)]
     pub cq_addr: u64,
-    #[mesh(8)]
+    #[mesh(7)]
     pub base_va: u64, // TODO: Would it be better to store const u8* ?
-    #[mesh(9)]
+    #[mesh(8)]
     pub mem_len: usize, // TODO: Could be redundant with 'pfns'.
-    #[mesh(10)]
+    #[mesh(9)]
     pub pfns: Vec<u64>, // This could be a duplicate of the queue saved state.
-    #[mesh(11)]
-    pub pending_cmds: Vec<PendingCommandSavedState>,
+    #[mesh(10)]
+    pub pending_cmds: PendingCommandsSavedState,
 }

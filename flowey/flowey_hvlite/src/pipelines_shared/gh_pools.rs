@@ -67,6 +67,14 @@ pub fn linux_self_hosted() -> GhRunner {
     ])
 }
 
+pub fn linux_self_hosted_largedisk() -> GhRunner {
+    GhRunner::SelfHosted(vec![
+        "self-hosted".to_string(),
+        "1ES.Pool=OpenVMM-GitHub-Linux-Pool-WestUS3".to_string(),
+        "1ES.ImageOverride=MMSUbuntu20.04-1TB-2".to_string(),
+    ])
+}
+
 pub fn gh_hosted_windows() -> GhRunner {
     GhRunner::GhHosted(GhRunnerOsLabel::WindowsLatest)
 }
