@@ -4030,6 +4030,7 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "safeatomic",
+ "static_assertions",
  "task_control",
  "test_with_tracing",
  "thiserror 2.0.0",
