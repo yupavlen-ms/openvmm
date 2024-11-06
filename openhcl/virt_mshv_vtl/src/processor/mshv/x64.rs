@@ -32,6 +32,8 @@ use hcl::ioctl::x64::MshvX64;
 use hcl::ioctl::ApplyVtlProtectionsError;
 use hcl::ioctl::ProcessorRunner;
 use hcl::protocol;
+use hv1_emulator::hv::ProcessorVtlHv;
+use hv1_emulator::synic::ProcessorSynic;
 use hvdef::hypercall;
 use hvdef::HvDeliverabilityNotificationsRegister;
 use hvdef::HvError;
@@ -89,6 +91,7 @@ use zerocopy::FromZeroes;
 #[derive(InspectMut)]
 pub struct HypervisorBackedX86 {
     pub(super) lapics: Option<VtlArray<LapicState, 2>>,
+    hv: Option<VtlArray<ProcessorVtlHv, 2>>,
     // TODO WHP GUEST VSM: To be completely correct here, when emulating the APICs
     // we would need two sets of deliverability notifications too. However currently
     // we don't support VTL 1 on WHP, and on the hypervisor we don't emulate the APIC,
@@ -157,6 +160,7 @@ impl BackingPrivate for HypervisorBackedX86 {
 
         Ok(Self {
             lapics,
+            hv: params.hv,
             deliverability_notifications: Default::default(),
             next_deliverability_notifications: Default::default(),
             stats: Default::default(),
@@ -369,6 +373,22 @@ impl BackingPrivate for HypervisorBackedX86 {
         _target_vtl: GuestVtl,
     ) {
         unreachable!("vtl switching should be managed by the hypervisor");
+    }
+
+    fn hv(&self, vtl: GuestVtl) -> Option<&ProcessorVtlHv> {
+        self.hv.as_ref().map(|arr| &arr[vtl])
+    }
+
+    fn hv_mut(&mut self, vtl: GuestVtl) -> Option<&mut ProcessorVtlHv> {
+        self.hv.as_mut().map(|arr| &mut arr[vtl])
+    }
+
+    fn untrusted_synic(&self) -> Option<&ProcessorSynic> {
+        None
+    }
+
+    fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic> {
+        None
     }
 }
 

@@ -19,6 +19,7 @@ cfg_if::cfg_if!(
         pub use processor::tdx::TdxBacked;
         pub use crate::processor::mshv::x64::HypervisorBackedX86 as HypervisorBacked;
         use devmsr::MsrDevice;
+        use hv1_emulator::hv::ProcessorVtlHv;
         use processor::snp::SnpBackedShared;
         use processor::tdx::TdxBackedShared;
         use std::arch::x86_64::CpuidResult;
@@ -309,15 +310,18 @@ pub struct UhCvmVpState {
     vtls_tlb_waiting: VtlArray<bool, 2>,
     /// Used in VTL 2 exit code to determine which VTL to exit to.
     exit_vtl: GuestVtl,
+    /// Hypervisor enlightenment emulator state.
+    hv: VtlArray<ProcessorVtlHv, 2>,
 }
 
 #[cfg(guest_arch = "x86_64")]
 impl UhCvmVpState {
     /// Creates a new CVM VP state.
-    pub fn new() -> Self {
+    pub fn new(hv: VtlArray<ProcessorVtlHv, 2>) -> Self {
         Self {
             vtls_tlb_waiting: VtlArray::new(false),
             exit_vtl: GuestVtl::Vtl0,
+            hv,
         }
     }
 }
