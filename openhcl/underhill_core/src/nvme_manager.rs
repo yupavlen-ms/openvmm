@@ -164,7 +164,7 @@ impl NvmeManager {
 
     /// Save NVMe manager's state during servicing.
     pub async fn save(&self) -> anyhow::Result<NvmeManagerSavedState> {
-        tracing::info!("YSP: NvmeManager::save");
+        tracing::info!("YSP: NvmeManager::save keepalive={}", self.nvme_keepalive);
         // NVMe manager has no own data to save, everything will be done
         // in the Worker task which can be contacted through Client.
         if self.nvme_keepalive {
@@ -298,6 +298,7 @@ impl NvmeManagerWorker {
                     span,
                     nvme_keepalive,
                 } => {
+                    self.nvme_keepalive = nvme_keepalive;
                     // Update the flag for all connected devices.
                     for (_s, dev) in self.devices.iter_mut() {
                         // Prevent devices from originating controller reset in drop().

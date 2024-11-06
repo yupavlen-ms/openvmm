@@ -352,6 +352,11 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
 
         // YSP: FIXME: Debug code
+        unsafe {
+            std::ptr::write_bytes(mapping.as_ptr(), 0, len);
+        }
+        
+        // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mapping.read_at(0, checker.as_mut_slice())?;
         tracing::info!(
@@ -413,7 +418,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         // No need to set bit 63 because this buffer is visible to VTL2 only.
         let file_offset = gpa;
 
-        tracing::trace!(gpa, file_offset, len, "mapping dma buffer");
         mapping
             .map_file(0, len, gpa_fd.get(), file_offset, true)
             .context("unable to map allocation")?;

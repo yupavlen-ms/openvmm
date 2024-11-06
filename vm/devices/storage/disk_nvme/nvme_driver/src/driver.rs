@@ -208,11 +208,10 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 .map_bar(0)
                 .context("failed to map device registers")?,
         );
-        let bar0_va = bar0.base_va();
-        tracing::info!("YSP: bar0_va: {:X}", bar0_va);
 
         let cc = bar0.cc();
         if cc.en() || bar0.csts().rdy() {
+            tracing::info!("YSP: already enabled - will reset");
             if !bar0
                 .reset(&driver)
                 .instrument(tracing::info_span!(
