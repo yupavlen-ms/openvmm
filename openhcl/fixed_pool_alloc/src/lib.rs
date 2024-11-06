@@ -211,6 +211,7 @@ impl FixedPool {
     pub fn new(fixed_pool: &[MemoryRange]) -> anyhow::Result<Self> {
         let mut pages = Vec::new();
         for range in fixed_pool {
+            tracing::info!("YSP: FixedPool::new pfn={:X} len={}", range.start() / HV_PAGE_SIZE, range.len());
             pages.push(State::Free {
                 base_pfn: range.start() / HV_PAGE_SIZE,
                 size_pages: range.len() / HV_PAGE_SIZE,
@@ -327,13 +328,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         }
 
         let size_pages = len as u64 / HV_PAGE_SIZE;
-
-        // This is another hack until we have proper memory mapping.
-        // Assign from PFN 0x126000 upwards which is free on my test setup.
-        // Mark it as YSP: FIXME: HACK:
-        self.prealloc_at(0x126000, size_pages)?;
-        tracing::info!("YSP: HACK: prealloc_at 0x126000 len={} pages", size_pages);
-
         let alloc = self
             .alloc(
                 size_pages.try_into().expect("already checked nonzero"),

@@ -400,7 +400,6 @@ impl NvmeManagerWorker {
         let nvme_state = NvmeManagerSavedState {
             cpu_count: self.vp_count,
             mem_buffer: Some(NvmeDmaBufferSavedState {
-                dma_base: self.mem_block.base_va(),
                 dma_size: self.mem_block.len(),
                 pfns: self.mem_block.pfns().to_vec(),
             }),
@@ -537,13 +536,10 @@ pub struct NvmeSavedDiskConfig {
 #[derive(Protobuf)]
 #[mesh(package = "underhill")]
 pub struct NvmeDmaBufferSavedState {
-    /// GVA (TODO: or GPA?) of the DMA buffer assigned to NVMe device(s).
-    #[mesh(1)]
-    pub dma_base: u64,
     /// Total size of DMA buffer in bytes.
-    #[mesh(2)]
+    #[mesh(1)]
     pub dma_size: usize,
     /// List of PFNs for this DMA buffer.
-    #[mesh(3)]
+    #[mesh(2)]
     pub pfns: Vec<u64>,
 }
