@@ -302,17 +302,6 @@ impl FixedPoolAllocator {
             size_pages,
         })
     }
-
-    /// Allocate contiguous pool from starting PFN.
-    /// This is still under research so mark it as a hack.
-    /// YSP: FIXME: HACK: Test. Just testing.
-    pub fn prealloc_at(&self, base_pfn: u64, size_pages: u64) -> Result<(), FixedPoolOutOfMemory> {
-        let mut inner = self.inner.lock();
-
-        inner.add(base_pfn, size_pages);
-
-        Ok(())
-    }
 }
 
 impl VfioDmaBuffer for FixedPoolAllocator {
@@ -342,11 +331,8 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
         // No need to set bit 63 because this buffer is visible to VTL2 only.
-        let file_offset = gpa;
-
-        tracing::trace!(gpa, file_offset, len, "mapping dma buffer");
         mapping
-            .map_file(0, len, gpa_fd.get(), file_offset, true)
+            .map_file(0, len, gpa_fd.get(), gpa, true)
             .context("sparse mapping failed")?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
@@ -399,9 +385,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         let size_pages = len as u64 / HV_PAGE_SIZE;
         assert_eq!(size_pages as usize, pfns.len());
 
-        // This is another hack until we have proper memory mapping.
-        // Mark it as YSP: FIXME: HACK:
-        self.prealloc_at(pfns[0], size_pages)?;
         let alloc = self
             .alloc(
                 size_pages.try_into().expect("already checked nonzero"),
@@ -410,7 +393,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
             .context("failed to allocate fixed mem")?;
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
-        let mapping = sparse_mmap::SparseMapping::new_at(len, None) // YSP: FIXME: Attn
+        let mapping = sparse_mmap::SparseMapping::new(len)
             .context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
