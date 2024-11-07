@@ -167,23 +167,20 @@ impl FlowNode for Node {
 
         let terminate_job_on_fail = terminate_job_on_fail.unwrap_or(false);
 
-        for (
-            i,
-            Run {
-                friendly_name,
-                run_kind,
-                working_dir,
-                config_file,
-                tool_config_files,
-                nextest_profile,
-                extra_env,
-                with_rlimit_unlimited_core_size,
-                nextest_filter_expr,
-                run_ignored,
-                pre_run_deps,
-                results,
-            },
-        ) in run.into_iter().enumerate()
+        for Run {
+            friendly_name,
+            run_kind,
+            working_dir,
+            config_file,
+            tool_config_files,
+            nextest_profile,
+            extra_env,
+            with_rlimit_unlimited_core_size,
+            nextest_filter_expr,
+            run_ignored,
+            pre_run_deps,
+            results,
+        } in run
         {
             let run_kind_deps = match run_kind {
                 NextestRunKind::BuildAndRun(params) => {
@@ -547,62 +544,10 @@ impl FlowNode for Node {
                 }
             });
 
-            let (crash_dumps_exist_read, crash_dumps_exist_write) = ctx.new_var();
-
-            let crash_dumps_path = ctx.emit_rust_stepv("checking for crash dumps", |ctx| {
-                all_tests_passed_read.clone().claim(ctx);
-                let crash_dumps_exist_write = crash_dumps_exist_write.claim(ctx);
-                |rt| {
-                    // TODO Linux
-                    let path = match rt.platform().kind() {
-                        FlowPlatformKind::Windows => {
-                            r#"C:\Users\cloudtest\AppData\Local\CrashDumps"#
-                        }
-                        FlowPlatformKind::Unix => "/will/not/exist",
-                    }
-                    .to_owned();
-
-                    rt.write(crash_dumps_exist_write, &Path::new(&path).exists());
-                    Ok(path)
-                }
-            });
-
-            let (published_dumps_read, published_dumps_write) = ctx.new_var::<SideEffect>();
-
-            // TODO Github
-            match ctx.backend() {
-                FlowBackend::Ado => ctx.emit_ado_step_with_condition(
-                    format!("upload crash dumps for {friendly_name}"),
-                    crash_dumps_exist_read,
-                    |ctx| {
-                        published_dumps_write.claim(ctx);
-                        let crash_dumps_path = crash_dumps_path.claim(ctx);
-                        move |rt| {
-                            let path_var = rt.get_var(crash_dumps_path).as_raw_var_name();
-                            format!(
-                                r#"
-                                - publish: $({path_var})
-                                  artifact: crash-dumps-{friendly_name}-$(Build.BuildNumber)-{i}"#,
-                            )
-                        }
-                    },
-                ),
-                _ => {
-                    ctx.emit_side_effect_step(
-                        [
-                            crash_dumps_path.into_side_effect(),
-                            crash_dumps_exist_read.into_side_effect(),
-                        ],
-                        [published_dumps_write],
-                    );
-                }
-            }
-
             ctx.emit_rust_step("write results", |ctx| {
                 let all_tests_passed = all_tests_passed_read.claim(ctx);
                 let junit_xml = junit_xml_read.claim(ctx);
                 let results = results.claim(ctx);
-                published_dumps_read.claim(ctx);
 
                 move |rt| {
                     let all_tests_passed = rt.read(all_tests_passed);

@@ -1498,6 +1498,10 @@ pub mod steps {
             /// `System.AccessToken`
             pub const SYSTEM__ACCESS_TOKEN: AdoRuntimeVar =
                 AdoRuntimeVar::new_secret("System.AccessToken");
+
+            /// `System.System.JobAttempt`
+            pub const SYSTEM__JOB_ATTEMPT: AdoRuntimeVar =
+                AdoRuntimeVar::new_secret("System.JobAttempt");
         }
 
         impl AdoRuntimeVar {
