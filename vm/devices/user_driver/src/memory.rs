@@ -3,7 +3,6 @@
 
 //! Traits and types for sharing host memory with the device.
 
-use inspect::Inspect; // YSP
 use safeatomic::AtomicSliceOps;
 use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
@@ -178,30 +177,5 @@ impl MemoryBlock {
     /// Returns base address of the memory block.
     pub fn base_va(&self) -> u64 {
         self.base as u64
-    }
-}
-
-// YSP
-impl Inspect for MemoryBlock {
-    fn inspect(&self, req: inspect::Request<'_>) {
-        req.respond()
-            .hex("base", self.mem.base() as u64)
-            .field("len", self.mem.len())
-            .field("pfns", inspect::iter_by_index(self.mem.pfns()))
-            .field_with("contents", || {
-                // SAFETY: Reading from valid const pointer not exceeding the block size.
-                let slice = unsafe {
-                    std::slice::from_raw_parts(
-                        self.mem.base().cast::<u32>(),
-                        std::cmp::min(self.mem.len() / 4, 256),
-                    )
-                };
-                slice
-                    .to_vec()
-                    .iter()
-                    .map(|b| format!("{:08x}", b))
-                    .collect::<Vec<String>>()
-                    .join(" ")
-            });
     }
 }

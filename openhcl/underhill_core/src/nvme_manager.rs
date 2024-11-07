@@ -97,6 +97,7 @@ impl NvmeManager {
         vp_count: u32,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         mem_block: MemoryBlock,
+        nvme_keepalive: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
         let (send, recv) = mesh::channel();
@@ -117,7 +118,7 @@ impl NvmeManager {
             dma_buffer: dma_buffer.clone(),
             mem_block,
             mem_next_offset: 0,
-            nvme_keepalive: false, // Will be set to true after save completed.
+            nvme_keepalive,
         };
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
@@ -137,7 +138,7 @@ impl NvmeManager {
             client: NvmeManagerClient {
                 sender: Arc::new(send),
             },
-            nvme_keepalive: true,
+            nvme_keepalive,
         }
     }
 
@@ -163,7 +164,7 @@ impl NvmeManager {
 
     /// Save NVMe manager's state during servicing.
     pub async fn save(&self) -> anyhow::Result<NvmeManagerSavedState> {
-        tracing::info!("YSP: NvmeManager::save");
+        tracing::info!("YSP: NvmeManager::save keepalive={}", self.nvme_keepalive);
         // NVMe manager has no own data to save, everything will be done
         // in the Worker task which can be contacted through Client.
         if self.nvme_keepalive {
@@ -252,7 +253,7 @@ struct NvmeManagerWorker {
     dma_buffer: Arc<dyn VfioDmaBuffer>,
     vp_count: u32,
     /// Contiguous DMA memory block to be sliced per queue.
-    // YSP #[inspect(skip)]
+    #[inspect(skip)]
     mem_block: MemoryBlock,
     /// Next available offset to use.
     mem_next_offset: usize,
@@ -297,6 +298,7 @@ impl NvmeManagerWorker {
                     span,
                     nvme_keepalive,
                 } => {
+                    self.nvme_keepalive = nvme_keepalive;
                     // Update the flag for all connected devices.
                     for (_s, dev) in self.devices.iter_mut() {
                         // Prevent devices from originating controller reset in drop().
@@ -335,14 +337,7 @@ impl NvmeManagerWorker {
         let driver = match self.devices.entry(pci_id.to_owned()) {
             hash_map::Entry::Occupied(entry) => {
                 tracing::info!("YSP: existing entry");
-                let existing_driver = entry.into_mut();
-                let _ = existing_driver
-                    .attach()
-                    .instrument(tracing::info_span!("nvme_driver_attach", pci_id = pci_id))
-                    .await
-                    .map_err(InnerError::Vfio);
-
-                existing_driver
+                entry.into_mut()
             }
             hash_map::Entry::Vacant(entry) => {
                 let device =
@@ -406,7 +401,6 @@ impl NvmeManagerWorker {
         let nvme_state = NvmeManagerSavedState {
             cpu_count: self.vp_count,
             mem_buffer: Some(NvmeDmaBufferSavedState {
-                dma_base: self.mem_block.base_va(),
                 dma_size: self.mem_block.len(),
                 pfns: self.mem_block.pfns().to_vec(),
             }),
@@ -441,7 +435,7 @@ impl NvmeManagerWorker {
                     &self.driver_source,
                     &disk.pci_id.clone(),
                     dma_buffer.clone(),
-                    Some(&disk.driver_state.vfio_state),
+                    true,
                 )
                 .instrument(tracing::info_span!("vfio_device_restore", pci_id = disk.pci_id.clone()))
                 .await?;
@@ -543,13 +537,10 @@ pub struct NvmeSavedDiskConfig {
 #[derive(Protobuf)]
 #[mesh(package = "underhill")]
 pub struct NvmeDmaBufferSavedState {
-    /// GVA (TODO: or GPA?) of the DMA buffer assigned to NVMe device(s).
-    #[mesh(1)]
-    pub dma_base: u64,
     /// Total size of DMA buffer in bytes.
-    #[mesh(2)]
+    #[mesh(1)]
     pub dma_size: usize,
     /// List of PFNs for this DMA buffer.
-    #[mesh(3)]
+    #[mesh(2)]
     pub pfns: Vec<u64>,
 }

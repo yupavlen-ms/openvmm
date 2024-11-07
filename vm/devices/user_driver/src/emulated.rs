@@ -12,6 +12,7 @@ use crate::memory::PAGE_SIZE;
 use crate::DeviceBacking;
 use crate::DeviceRegisterIo;
 use crate::HostDmaAllocator;
+use crate::vfio::VfioDmaBuffer;
 use anyhow::Context;
 use chipset_device::mmio::MmioIntercept;
 use chipset_device::pci::PciConfigSpace;
@@ -254,7 +255,6 @@ impl HostDmaAllocator for EmulatedDmaAllocator {
 
     fn restore_dma_buffer(
         &mut self,
-        _addr: u64,
         len: usize,
         _pfns: &[u64],
     ) -> anyhow::Result<MemoryBlock> {
@@ -271,7 +271,7 @@ impl<T: 'static + Send + InspectMut + MmioIntercept> DeviceBacking for EmulatedD
         "emulated"
     }
 
-    fn map_bar(&mut self, n: u8, _addr_fixed: Option<u64>) -> anyhow::Result<Self::Registers> {
+    fn map_bar(&mut self, n: u8) -> anyhow::Result<Self::Registers> {
         Ok(Mapping {
             device: self.device.clone(),
             addr: (n as u64) << 32,

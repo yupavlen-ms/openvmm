@@ -743,7 +743,7 @@ impl UhVmNetworkSettings {
             vps_count as u32,
             nic_max_sub_channels,
             servicing_netvsp_state,
-            vfio_dma_buffer(shared_vis_pages_pool, false),
+            vfio_dma_buffer(shared_vis_pages_pool, None),
         )
         .await?;
 
@@ -1062,33 +1062,22 @@ fn round_up_to_2mb(bytes: u64) -> u64 {
     (bytes + (2 * 1024 * 1024) - 1) & !((2 * 1024 * 1024) - 1)
 }
 
-/// Depending on requested configuration, return allocator from
-/// either shared (with VTL0) memory pool, or locked DMA-mapped
-/// memory, or deterministic contiguous memory slicer.
+/// Return appropriate allocator in the following order:
+///  - use SharedPoolAllocator if shared_vis_page_pool is provided.
+///  - use FixedPoolAllocator if fixed_mem_range is provided.
+///  - use LockedMemorySpawner in all other cases.
 fn vfio_dma_buffer(
     shared_vis_pages_pool: &Option<SharedPool>,
-    contiguous: bool,
+    fixed_mem_pool: Option<&FixedPool>,
 ) -> Arc<dyn VfioDmaBuffer> {
     shared_vis_pages_pool
         .as_ref()
         .map(|p| -> Arc<dyn VfioDmaBuffer> { Arc::new(p.allocator()) })
-        .unwrap_or(match contiguous {
-            true => {
-                tracing::info!("YSP: Fixed pool allocator");
-                // Start with empty ranges.
-                // The actual calculation is deferred to the later boot stages,
-                // but this can be revisited if needed.
-                let mem_range = Vec::<MemoryRangeWithNode>::new();
-                let pool = FixedPool::new(&mem_range)
-                    .context("unable to allocate fixed dma pool")
-                    .unwrap();
-                Arc::new(pool.allocator())
-            }
-            false => {
-                tracing::info!("YSP: Locked spawner");
-                Arc::new(LockedMemorySpawner)
-            }
-        })
+        .unwrap_or(
+            fixed_mem_pool
+                .map(|f| -> Arc<dyn VfioDmaBuffer> { Arc::new(f.allocator()) })
+                .unwrap_or(Arc::new(LockedMemorySpawner)),
+        )
 }
 
 /// Preallocate or restore DMA memory range for VFIO device.
@@ -1104,11 +1093,11 @@ fn vfio_prealloc_or_restore(
         //
         Some(dma) => {
             tracing::info!(
-                "YSP: Restoring DMA state {:X} {}",
-                dma.dma_base,
-                dma.dma_size
+                "YSP: Restoring DMA state len={} pfn[0]={:X}",
+                dma.dma_size,
+                dma.pfns[0],
             );
-            allocator.restore_dma_buffer(dma.dma_base, dma.dma_size, dma.pfns.as_slice())
+            allocator.restore_dma_buffer(dma.dma_size, dma.pfns.as_slice())
         }
 
         // Cold boot - calculate amount of DMA memory based on the number of
@@ -1495,6 +1484,7 @@ async fn new_underhill_vm(
         no_sidecar_hotplug: env_cfg.no_sidecar_hotplug,
         use_mmio_hypercalls,
         intercept_debug_exceptions: env_cfg.gdbstub,
+        dma_pages_pool: None,
     };
 
     let proto_partition = UhProtoPartition::new(params, |cpu| tp.driver(cpu).clone())
@@ -1733,6 +1723,7 @@ async fn new_underhill_vm(
         vmtime: &vmtime_source,
         isolated_memory_protector: gm.isolated_memory_protector()?,
         shared_vis_pages_pool: shared_vis_pages_pool.as_ref().map(|p| p.allocator()),
+        dma_pages_pool: None,
     };
 
     let (partition, vps) = proto_partition
@@ -1812,24 +1803,36 @@ async fn new_underhill_vm(
         crate::inspect_proc::periodic_telemetry_task(driver_source.simple()),
     );
 
+    // Allocate fixed pool for DMA-capable devices if size hint was provided by host,
+    // otherwise use default heap allocator.
+    // Contents of fixed pool will be preserved during servicing.
+    let fixed_mem_pool = if !runtime_params.dma_preserve_memory_map().is_empty() {
+        let pools = runtime_params.dma_preserve_memory_map(); // YSP: FIXME: .to_vec();
+        Some(FixedPool::new(pools)?)
+    } else {
+        None
+    };
+
     let nvme_manager = if env_cfg.nvme_vfio {
         let nvme_saved_state = servicing_state.nvme_state.unwrap_or(None);
         let nvme_dma_buffer = nvme_saved_state
             .as_ref()
             .and_then(|n| n.nvme_state.mem_buffer.as_ref());
-        let dma_buffer = vfio_dma_buffer(&shared_vis_pages_pool, true);
+        let dma_buffer = vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref());
         let nvme_dma_memory = vfio_prealloc_or_restore(
             dma_buffer.clone(),
             &dps,
             processor_topology.vp_count(),
             nvme_dma_buffer,
         )?;
+        let nvme_keepalive = fixed_mem_pool.is_some();
         let manager = NvmeManager::new(
             &driver_source,
             processor_topology.vp_count(),
-            dma_buffer,
+            vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref()),
             nvme_dma_memory,
-            nvme_saved_state,
+            nvme_keepalive,
+            nvme_saved_state, // YSP: FIXME: servicing_state.nvme_state.unwrap_or(None),
         );
 
         resolver.add_async_resolver::<DiskHandleKind, _, NvmeDiskConfig, _>(NvmeDiskResolver::new(
