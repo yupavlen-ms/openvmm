@@ -29,8 +29,8 @@ pub trait DeviceBacking: 'static + Send + Inspect {
     /// Returns a device ID for diagnostics.
     fn id(&self) -> &str;
 
-    /// Maps a BAR, optionally to a predefined VA address.
-    fn map_bar(&mut self, n: u8, addr_fixed: Option<u64>) -> anyhow::Result<Self::Registers>;
+    /// Maps a BAR.
+    fn map_bar(&mut self, n: u8) -> anyhow::Result<Self::Registers>;
 
     /// Returns an object that can allocate host memory to be shared with the device.
     fn host_allocator(&self) -> Self::DmaAllocator;
@@ -72,22 +72,7 @@ pub trait HostDmaAllocator: Send + Sync {
     /// Restore DMA bufer at pre-existing location.
     fn restore_dma_buffer(
         &mut self,
-        addr: u64,
         len: usize,
         pfns: &[u64],
     ) -> anyhow::Result<MemoryBlock>;
-}
-
-pub mod save_restore {
-    use mesh::payload::Protobuf;
-
-    /// Saved state for the VFIO device user mode driver.
-    #[derive(Protobuf, Clone, Debug)]
-    #[mesh(package = "underhill")]
-    pub struct VfioDeviceSavedState {
-        #[mesh(1)]
-        pub pci_id: String,
-        #[mesh(2)]
-        pub msix_info_count: u32,
-    }
 }

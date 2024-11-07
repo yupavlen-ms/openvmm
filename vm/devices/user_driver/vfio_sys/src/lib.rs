@@ -97,14 +97,6 @@ impl Container {
         Ok(Self { file })
     }
 
-    /// This is temporary for testing.
-    pub fn new_from_fd(fd: i32) -> anyhow::Result<Self> {
-        // SAFETY: Test code, to be removed.
-        let file = unsafe { File::from_raw_fd(fd) };
-
-        Ok(Self { file })
-    }
-
     pub fn set_iommu(&self, iommu: IommuType) -> anyhow::Result<()> {
         // SAFETY: The file descriptor is valid.
         unsafe {
@@ -210,14 +202,6 @@ impl Group {
                 .context("failed to set keep-alive")?;
         }
         Ok(())
-    }
-
-    /// This is temporary for testing.
-    pub fn new_from_fd(fd: i32) -> anyhow::Result<Self> {
-        // SAFETY: Test code, to be removed.
-        let file = unsafe { File::from_raw_fd(fd) };
-
-        Ok(Self { file })
     }
 }
 
@@ -445,13 +429,6 @@ impl Device {
         Ok(())
     }
 
-    /// This is temporary for testing.
-    pub fn new_from_fd(fd: i32) -> anyhow::Result<Self> {
-        // SAFETY: Test code, to be removed.
-        let file = unsafe { File::from_raw_fd(fd) };
-
-        Ok(Self { file })
-    }
 }
 
 impl AsRef<File> for Device {

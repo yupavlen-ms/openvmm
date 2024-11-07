@@ -12,7 +12,6 @@ pub mod nvm;
 
 use bitfield_struct::bitfield;
 use inspect::Inspect;
-use mesh::payload::DefaultEncoding;
 use mesh::payload::encoding::Fixed32Field;
 use mesh::payload::encoding::FixedNumber;
 use mesh::payload::Protobuf;
@@ -178,10 +177,6 @@ pub struct Cdw0 {
 
 impl DescribeField<Cdw0> for Fixed32Field {
     const FIELD_TYPE: FieldType<'static> = FieldType::builtin("uint32");
-}
-
-impl DefaultEncoding for Cdw0 {
-    type Encoding = Fixed32Field;
 }
 
 impl FixedNumber for Cdw0 {

@@ -101,14 +101,6 @@ impl SparseMapping {
     /// The range will be aligned to the largest system page size that's smaller
     /// or equal to `len`.
     pub fn new(len: usize) -> Result<Self, Error> {
-        Self::new_at(len, None)
-    }
-
-    /// Reserves a sparse mapping range with the given size at specific GPA.
-    ///
-    /// The range will be aligned to the largest system page size that's smaller
-    /// or equal to `len`.
-    pub fn new_at(len: usize, fixed_addr: Option<u64>) -> Result<Self, Error> {
         super::initialize_try_copy();
 
         // Length of 0 return an OS error, so we need to handle it explicitly.
@@ -150,16 +142,10 @@ impl SparseMapping {
                 )
             })?;
 
-        let libc_addr = fixed_addr.map_or(null_mut(), |a| a as *mut c_void);
-        tracing::info!(
-            "YSP: SparseMapping::new_at {:X} len={}",
-            libc_addr as usize,
-            len
-        );
         // SAFETY: calling mmap to allocate a new range.
         let address = unsafe {
             mmap(
-                libc_addr,
+                null_mut(),
                 alloc_len,
                 libc::PROT_NONE,
                 libc::MAP_PRIVATE | libc::MAP_ANONYMOUS, // YSP: FIXME: MAP_FIXED maybe?...
@@ -180,6 +166,7 @@ impl SparseMapping {
             // SAFETY: freeing VA just allocated above.
             unsafe { munmap(aligned_end as *mut _, end - aligned_end).unwrap() };
         }
+        tracing::info!("YSP: SparseMapping::new addr={:X} len={}", aligned_address, len);
         Ok(Self {
             address: aligned_address as *mut _,
             len,

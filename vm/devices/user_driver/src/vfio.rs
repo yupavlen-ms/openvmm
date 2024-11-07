@@ -9,7 +9,6 @@
 use crate::interrupt::DeviceInterrupt;
 use crate::interrupt::DeviceInterruptSource;
 use crate::memory::MemoryBlock;
-use crate::save_restore::VfioDeviceSavedState;
 use crate::DeviceBacking;
 use crate::DeviceRegisterIo;
 use anyhow::Context;
@@ -43,7 +42,6 @@ pub trait VfioDmaBuffer: 'static + Send + Sync {
     /// Restore a dma buffer in the predefined location with the given `len` in bytes.
     fn restore_dma_buffer(
         &self,
-        addr: u64,
         len: usize,
         pfns: &[u64],
     ) -> anyhow::Result<MemoryBlock>;
@@ -85,7 +83,7 @@ impl VfioDevice {
         pci_id: &str,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
     ) -> anyhow::Result<Self> {
-        Self::restore(driver_source, pci_id, dma_buffer, None).await
+        Self::restore(driver_source, pci_id, dma_buffer, false).await
     }
 
     /// Creates a new VFIO-backed device for the PCI device with `pci_id`.
@@ -94,10 +92,9 @@ impl VfioDevice {
         driver_source: &VmTaskDriverSource,
         pci_id: &str,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
-        _saved_state: Option<&VfioDeviceSavedState>,
+        keepalive: bool,
     ) -> anyhow::Result<Self> {
-        let is_restoring = _saved_state.is_some();
-        tracing::info!("YSP: VFIO new/restore {}", is_restoring);
+        tracing::info!("YSP: VFIO new/restore {}", keepalive);
         let path = Path::new("/sys/bus/pci/devices").join(pci_id);
 
         // YSP: FIXME: Looks like we can try vfio_set_device_reset_method()
@@ -108,7 +105,6 @@ impl VfioDevice {
         let instance_path = Path::new("/sys").join(vmbus_device.strip_prefix("../../..")?);
         let vfio_arrived_path = instance_path.join("vfio-dev");
         let uevent_listener = UeventListener::new(&driver_source.simple())?;
-        tracing::info!("YSP: VFIO: checkpoint 1");
         let wait_for_vfio_device = uevent_listener
             .wait_for_matching_child(&vfio_arrived_path, move |_, _| async move { Some(()) });
         let mut ctx = mesh::CancelContext::new().with_timeout(Duration::from_secs(1));
@@ -118,14 +114,13 @@ impl VfioDevice {
         let container = vfio_sys::Container::new()?;
         let group_id = vfio_sys::Group::find_group_for_device(&path)?;
         let group = vfio_sys::Group::open_noiommu(group_id)?;
-        tracing::info!("YSP: VFIO: checkpoint 2");
         group.set_container(&container)?;
         if !group.status()?.viable() {
             anyhow::bail!("group is not viable");
         }
 
         container.set_iommu(IommuType::NoIommu)?;
-        if is_restoring {
+        if keepalive {
             // Prevent physical hardware interaction when restoring.
             group.set_keep_alive(path.file_name().unwrap().to_str().unwrap())?;
             tracing::info!("YSP: VFIO: keep-alive was set");
@@ -149,18 +144,13 @@ impl VfioDevice {
         })
     }
 
-    /// Maps PCI BAR[n] to VA space, optionally to a fixed address.
-    fn map_bar(&self, n: u8, addr_fixed: Option<u64>) -> anyhow::Result<MappedRegionWithFallback> {
+    /// Maps PCI BAR[n] to VA space.
+    fn map_bar(&self, n: u8) -> anyhow::Result<MappedRegionWithFallback> {
         if n >= 6 {
             anyhow::bail!("invalid bar");
         }
         let info = self.device.region_info(n.into())?;
-        let mapping = if addr_fixed.is_none() {
-            self.device.map(info.offset, info.size as usize, true)?
-        } else {
-            self.device
-                .map_to(addr_fixed.unwrap(), info.offset, info.size as usize, true)?
-        };
+        let mapping = self.device.map(info.offset, info.size as usize, true)?;
         sparse_mmap::initialize_try_copy();
         tracing::info!(
             "YSP: map_bar off={:X} size={} addr={:X}",
@@ -177,16 +167,6 @@ impl VfioDevice {
         })
     }
 }
-
-// YSP: FIXME: ???
-//impl Drop for VfioDevice {
-//    fn drop(&mut self) {
-//        std::mem::forget(self._container);
-//        std::mem::forget(self._group);
-//        std::mem::forget(self.device);
-//       tracing::info!("YSP: oopsie!");
-//    }
-//}
 
 /// A mapped region that falls back to read/write if the memory mapped access
 /// fails.
@@ -212,8 +192,8 @@ impl DeviceBacking for VfioDevice {
         &self.pci_id
     }
 
-    fn map_bar(&mut self, n: u8, addr_fixed: Option<u64>) -> anyhow::Result<Self::Registers> {
-        (*self).map_bar(n, addr_fixed)
+    fn map_bar(&mut self, n: u8) -> anyhow::Result<Self::Registers> {
+        (*self).map_bar(n)
     }
 
     fn host_allocator(&self) -> Self::DmaAllocator {
@@ -527,11 +507,10 @@ impl crate::HostDmaAllocator for LockedMemoryAllocator {
 
     fn restore_dma_buffer(
         &mut self,
-        _addr: u64,
         len: usize,
         _pfns: &[u64],
     ) -> anyhow::Result<MemoryBlock> {
-        tracing::info!("YSP: NOT THAT restore_dma_buffer {:X} {}", _addr, len);
+        tracing::info!("YSP: NOT THAT restore_dma_buffer len={}", len);
         // FIXME: Just using regular allocate until we have memory mapping restore.
         self.dma_buffer.create_dma_buffer(len)
     }

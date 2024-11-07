@@ -20,9 +20,6 @@ openssl-vendored = ["underhill_attestation/openssl-vendored"]
 # Enable VPCI device support
 vpci = []
 
-# Enable NVMe-keepalive for servicing
-nvme_keepalive = []
-
 [target.'cfg(target_os = "linux")'.dependencies]
 vmotherboard = { workspace = true, features = [
     "encryption",
