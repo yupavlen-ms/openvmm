@@ -9,10 +9,10 @@ use crate::interrupt::DeviceInterruptSource;
 use crate::memory::MappedDmaTarget;
 use crate::memory::MemoryBlock;
 use crate::memory::PAGE_SIZE;
+use crate::vfio::VfioDmaBuffer;
 use crate::DeviceBacking;
 use crate::DeviceRegisterIo;
 use crate::HostDmaAllocator;
-use crate::vfio::VfioDmaBuffer;
 use anyhow::Context;
 use chipset_device::mmio::MmioIntercept;
 use chipset_device::pci::PciConfigSpace;
@@ -248,18 +248,17 @@ impl HostDmaAllocator for EmulatedDmaAllocator {
             self.shared_mem.alloc(len).context("out of memory")?,
         ))
     }
+}
 
-    fn reserve_dma_buffer(&self, _offset: usize, len: usize) -> anyhow::Result<MemoryBlock> {
-        self.allocate_dma_buffer(len)
+impl VfioDmaBuffer for EmulatedDmaAllocator {
+    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        Ok(MemoryBlock::new(
+            self.shared_mem.alloc(len).context("out of memory")?,
+        ))
     }
 
-    fn restore_dma_buffer(
-        &mut self,
-        len: usize,
-        _pfns: &[u64],
-    ) -> anyhow::Result<MemoryBlock> {
-        tracing::info!("YSP: unsup restore_dma_buffer");
-        self.allocate_dma_buffer(len)
+    fn restore_dma_buffer(&self, len: usize, _pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
+        self.create_dma_buffer(len)
     }
 }
 

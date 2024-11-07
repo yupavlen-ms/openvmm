@@ -148,7 +148,7 @@ impl SparseMapping {
                 null_mut(),
                 alloc_len,
                 libc::PROT_NONE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS, // YSP: FIXME: MAP_FIXED maybe?...
+                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS,
                 -1,
                 0,
             )? as usize

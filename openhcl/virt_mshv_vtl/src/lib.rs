@@ -218,8 +218,6 @@ struct UhPartitionInner {
     #[inspect(with = "inspect::AtomicMut")]
     no_sidecar_hotplug: AtomicBool,
     use_mmio_hypercalls: bool,
-    #[inspect(skip)]
-    dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 #[derive(Clone, Inspect)]
@@ -1561,7 +1559,6 @@ impl<'a> UhProtoPartition<'a> {
             shared_vis_pages_pool: late_params.shared_vis_pages_pool,
             no_sidecar_hotplug: params.no_sidecar_hotplug.into(),
             use_mmio_hypercalls: params.use_mmio_hypercalls,
-            dma_pages_pool: None,
         });
 
         if cfg!(guest_arch = "x86_64") {

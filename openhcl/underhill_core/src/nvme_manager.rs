@@ -24,7 +24,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::Instrument;
-use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDevice;
 use user_driver::vfio::VfioDmaBuffer;
 use vm_resource::kind::DiskHandleKind;
@@ -330,17 +329,14 @@ impl NvmeManagerWorker {
                         .map_err(InnerError::Vfio)?;
 
 
-                let driver = nvme_driver::NvmeDriver::new(
-                    &self.driver_source,
-                    self.vp_count,
-                    device,
-                )
-                .instrument(tracing::info_span!(
-                    "nvme_driver_init",
-                    pci_id = entry.key()
-                ))
-                .await
-                .map_err(InnerError::DeviceInitFailed)?;
+                let driver =
+                    nvme_driver::NvmeDriver::new(&self.driver_source, self.vp_count, device)
+                        .instrument(tracing::info_span!(
+                            "nvme_driver_init",
+                            pci_id = entry.key()
+                        ))
+                        .await
+                        .map_err(InnerError::DeviceInitFailed)?;
 
                 entry.insert(driver)
             }
@@ -490,15 +486,4 @@ pub struct NvmeSavedDiskConfig {
     pub pci_id: String,
     #[mesh(2)]
     pub driver_state: nvme_driver::NvmeDriverSavedState,
-}
-
-#[derive(Protobuf)]
-#[mesh(package = "underhill")]
-pub struct NvmeDmaBufferSavedState {
-    /// Total size of DMA buffer in bytes.
-    #[mesh(1)]
-    pub dma_size: usize,
-    /// List of PFNs for this DMA buffer.
-    #[mesh(2)]
-    pub pfns: Vec<u64>,
 }

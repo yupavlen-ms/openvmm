@@ -30,12 +30,12 @@ use std::num::Wrapping;
 use std::sync::Arc;
 use std::task::Poll;
 use thiserror::Error;
-use user_driver::HostDmaAllocator;
 use user_driver::interrupt::DeviceInterrupt;
 use user_driver::memory::MemoryBlock;
 use user_driver::memory::PAGE_SIZE;
 use user_driver::memory::PAGE_SIZE64;
 use user_driver::DeviceBacking;
+use user_driver::HostDmaAllocator;
 use zerocopy::FromZeroes;
 
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
@@ -122,7 +122,7 @@ impl PendingCommands {
         }
         tracing::info!("YSP: save CID {}", self.next_cid_high_bits.0);
         PendingCommandsSavedState {
-            commands: commands,
+            commands,
             next_cid_high_bits: self.next_cid_high_bits.0,
         }
     }
@@ -141,9 +141,7 @@ impl PendingCommands {
             commands.push((cid as usize, pending_command));
         }
         // Re-create identical Slab where CIDs are correctly mapped.
-        self.commands = commands
-            .into_iter()
-            .collect::<Slab<PendingCommand>>();
+        self.commands = commands.into_iter().collect::<Slab<PendingCommand>>();
         tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
         self.next_cid_high_bits = Wrapping(saved_state.next_cid_high_bits);
 

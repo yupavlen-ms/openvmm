@@ -7,8 +7,6 @@
 
 #![cfg(unix)]
 #![warn(missing_docs)]
-// SAFETY: Send, Sync, and *nix calls mmap() munmap() require unsafe keyword.
-#![allow(unsafe_code)]
 
 mod mapped_dma;
 
@@ -23,10 +21,7 @@ use std::num::NonZeroU64;
 use std::sync::Arc;
 use thiserror::Error;
 use user_driver::memory::MemoryBlock;
-use vm_topology::memory::MemoryRangeWithNode;
 use user_driver::vfio::VfioDmaBuffer;
-use std::ffi::c_void;
-use std::os::fd::AsRawFd;
 
 /// Error returned when unable to allocate memory.
 #[derive(Debug, Error)]
@@ -54,95 +49,10 @@ enum State {
     },
 }
 
-// SAFETY: The result of mmap call is safe to share between threads.
-unsafe impl Send for FixedMapping {}
-// SAFETY: The result of mmap call is safe to share between threads.
-unsafe impl Sync for FixedMapping {}
-
-struct FixedMapping {
-    addr: *mut c_void,
-    len: usize,
-}
-
-impl FixedMapping {
-    fn new(len: usize) -> std::io::Result<Self> {
-        // SAFETY: calling mmap as documented to create a new mapping.
-        let addr = unsafe {
-            libc::mmap(
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_LOCKED,
-                -1,
-                0,
-            )
-        };
-        if addr == libc::MAP_FAILED {
-            return Err(std::io::Error::last_os_error());
-        }
-        Ok(Self { addr, len })
-    }
-
-    fn new_in(len: usize, file_mapping: impl AsRawFd) -> std::io::Result<Self> {
-        // SAFETY: addr_fixed and len are restored after servicing.
-        let addr = unsafe {
-            // MAP_UNINITIALIZED is documented but not defined in MapFlags.
-            // MAP_ANONYMOUS is documented as performing zeroinit. Otherwise, fd must be set.
-            // TODO: Check if MAP_UNINITIALIZED is needed.
-            libc::mmap(
-                // YSP: FIXME: addr_fixed as *mut c_void,
-                std::ptr::null_mut(),
-                len,
-                libc::PROT_READ | libc::PROT_WRITE,
-                libc::MAP_PRIVATE | libc::MAP_ANONYMOUS | libc::MAP_LOCKED, // YSP: FIXME: | libc::MAP_FIXED,
-                file_mapping.as_raw_fd(),
-                0,
-            )
-        };
-        tracing::info!(
-            "YSP: requested: ??? actual {:X}",
-            addr as usize
-        );
-        if addr == libc::MAP_FAILED {
-            return Err(std::io::Error::last_os_error());
-        }
-        Ok(Self { addr, len })
-    }
-
-    fn lock(&self) -> std::io::Result<()> {
-        // SAFETY: calling mlock with a validated result of mmap.
-        if unsafe { libc::mlock(self.addr, self.len) } < 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        Ok(())
-    }
-}
-
-impl Drop for FixedMapping {
-    fn drop(&mut self) {
-        if !self.addr.is_null() {
-            // SAFETY: The address and length are a valid mmap result.
-            unsafe {
-                libc::munmap(self.addr, self.len);
-            }
-        }
-    }
-}
-
 #[derive(Inspect, Debug)]
 struct FixedPoolInner {
     #[inspect(iter_by_index)]
     state: Vec<State>,
-}
-
-impl FixedPoolInner {
-    /// Add another range to the set of ranges.
-    pub(crate) fn add(&mut self, base_pfn: u64, size_pages: u64) {
-        self.state.push(State::Free {
-            base_pfn,
-            size_pages,
-        });
-    }
 }
 
 /// A handle for fixed pool allocation. When dropped, the allocation is freed.
@@ -360,11 +270,8 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         }))
     }
 
-    fn restore_dma_buffer(
-        &self,
-        len: usize,
-        pfns: &[u64],
-    ) -> anyhow::Result<MemoryBlock> {
+    /// Restore DMA buffer at the same location after servicing.
+    fn restore_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
         tracing::info!(
             "YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]",
             len,
@@ -389,8 +296,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
             .context("failed to allocate fixed mem")?;
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
-        let mapping = sparse_mmap::SparseMapping::new(len)
-            .context("failed to create mapping")?;
+        let mapping = sparse_mmap::SparseMapping::new(len).context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
@@ -423,7 +329,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         }))
     }
 }
-
 
 // YSP: rewrite
 #[cfg(test)]
