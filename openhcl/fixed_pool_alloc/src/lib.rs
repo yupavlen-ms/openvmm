@@ -207,7 +207,7 @@ pub struct FixedPool {
 
 impl FixedPool {
     /// Create a fixed pool allocator, with the specified memory.
-    // YSP: FIXME: See if we need MemoryRangeWithNode
+    // YSP: FIXME: See if we need MemoryRangeWithNode?
     pub fn new(fixed_pool: &[MemoryRange]) -> anyhow::Result<Self> {
         let mut pages = Vec::new();
         for range in fixed_pool {
@@ -223,7 +223,7 @@ impl FixedPool {
         })
     }
 
-    /// Create an allocator instance that can be used to allocate pages.
+    /// Return an allocator instance that can be used to allocate pages.
     pub fn allocator(&self) -> FixedPoolAllocator {
         FixedPoolAllocator {
             inner: self.inner.clone(),
@@ -326,7 +326,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
         let mapping = sparse_mmap::SparseMapping::new(len).context("failed to create mapping")?;
-
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 

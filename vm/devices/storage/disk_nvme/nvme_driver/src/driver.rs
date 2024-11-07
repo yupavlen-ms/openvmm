@@ -36,7 +36,7 @@ use user_driver::backoff::Backoff;
 use user_driver::interrupt::DeviceInterrupt;
 use user_driver::memory::MemoryBlock;
 use user_driver::DeviceBacking;
-use user_driver::DeviceRegisterIo;
+use user_driver::vfio::VfioDmaBuffer;
 use vmcore::vm_task::VmTaskDriver;
 use vmcore::vm_task::VmTaskDriverSource;
 use zerocopy::AsBytes;
@@ -80,9 +80,6 @@ struct DriverWorkerTask<T: DeviceBacking> {
     io_issuers: Arc<IoIssuers>,
     #[inspect(skip)]
     recv: mesh::Receiver<NvmeWorkerRequest>,
-    /// Contiguous memory block to be sliced per queue pairs.
-    #[inspect(skip)]
-    mem_block: Option<MemoryBlock>,
 }
 
 #[derive(Inspect)]
@@ -168,12 +165,11 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     pub async fn new(
         driver_source: &VmTaskDriverSource,
         cpu_count: u32,
-        mem_block: MemoryBlock,
         device: T,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: NvmeDriver::new");
         let pci_id = device.id().to_owned();
-        let mut this = Self::new_disabled(driver_source, cpu_count, mem_block, device)
+        let mut this = Self::new_disabled(driver_source, cpu_count, device)
             .instrument(tracing::info_span!("nvme_new_disabled", pci_id))
             .await?;
         match this
@@ -198,7 +194,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     async fn new_disabled(
         driver_source: &VmTaskDriverSource,
         cpu_count: u32,
-        mem_block: MemoryBlock,
         mut device: T,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: new_disabled");
@@ -250,7 +245,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 io: Vec::new(),
                 io_issuers: io_issuers.clone(),
                 recv,
-                mem_block: Some(mem_block),
             })),
             admin: None,
             identify: None,
@@ -278,31 +272,20 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let admin_sqes = admin_len;
         let admin_cqes = admin_len;
 
-        // DMA buffer must exist at this moment.
-        if worker.mem_block.is_none() {
-            anyhow::bail!("attempt to create queues without dma block");
-        }
-        let mem_block = worker.mem_block.as_ref().unwrap();
-
         let interrupt0 = worker
             .device
             .map_interrupt(0, 0)
             .context("failed to map interrupt 0")?;
 
-        let q_mem0 = mem_block.subblock(
-            (ADMIN_QID as usize) * QueuePair::required_dma_size(),
-            QueuePair::required_dma_size(),
-        );
-
         // Start the admin queue pair.
         let admin = QueuePair::new(
             self.driver.clone(),
+            &worker.device,
             ADMIN_QID,
             admin_sqes,
             admin_cqes,
             interrupt0,
             worker.registers.clone(),
-            q_mem0,
         )
         .context("failed to create admin queue pair")?;
 
@@ -443,15 +426,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // Pre-create the IO queue 1 for CPU 0. The other queues will be created
         // lazily. Numbering for I/O queues starts with 1 (0 is Admin).
-        let qid1 = worker.io.len() as u16 + 1;
-        // DMA buffer must exist at this point.
-        let q_mem1 = mem_block.subblock(
-            (qid1 as usize) * QueuePair::required_dma_size(),
-            QueuePair::required_dma_size(),
-        );
-
         let issuer = worker
-            .create_io_queue(&mut state, qid1, 0, q_mem1)
+            .create_io_queue(&mut state, 0)
             .await
             .context("failed to create io queue 1")?;
 
@@ -555,8 +531,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     Ok(s)
                 },
                 Err(e) => {
-                     Err(e)
-                }
+                    Err(e)
+                },
         };
 
         save_state
@@ -566,7 +542,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     pub async fn restore(
         driver_source: &VmTaskDriverSource,
         cpu_count: u32,
-        mem_block: MemoryBlock,
+        dma_buffer: Arc<dyn VfioDmaBuffer>,
         mut device: T,
         saved_state: &NvmeDriverSavedState,
     ) -> anyhow::Result<Self> {
@@ -575,9 +551,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let bar0_mapping = device
             .map_bar(0)
             .context("failed to map device registers")?;
-        let bar0_va = bar0_mapping.base_va();
         let bar0 = Bar0(bar0_mapping);
-        tracing::info!("YSP: bar0_va: {:X}", bar0_va);
 
         // It is expected the device to be alive when restoring.
         if !bar0.csts().rdy() {
@@ -602,7 +576,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 io: Vec::new(),
                 io_issuers: io_issuers.clone(),
                 recv,
-                mem_block: Some(mem_block.subblock(0, mem_block.len())), // YSP: TODO: Check this.
             })),
             admin: None, // Updated below.
             identify: Some(Arc::new(
@@ -613,7 +586,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             io_issuers,
             rescan_event: Default::default(),
             namespace: vec![], // YSP: FIXME: check this and below
-            nvme_keepalive: false,
+            nvme_keepalive: true,
         };
 
         const ADMIN_QID: u16 = 0;
@@ -621,25 +594,24 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let task = &mut this.task.as_mut().unwrap();
         let worker = task.task_mut();
 
+        // Interrupt 0 is shared between admin queue and I/O queue 1.
         let interrupt0 = worker
             .device
             .map_interrupt(0, 0)
             .context("failed to map interrupt 0")?;
-
-        let q_mem0 = mem_block.subblock(
-            (ADMIN_QID as usize) * QueuePair::required_dma_size(),
-            QueuePair::required_dma_size(),
-        );
 
         // Restore the admin queue pair.
         let admin = saved_state
             .admin
             .as_ref()
             .map(|a| {
-                QueuePair::restore(driver.clone(), interrupt0, registers.clone(), q_mem0, a)
+                // Restore memory block for admin queue pair.
+                let mem_block = dma_buffer
+                    .restore_dma_buffer(a.mem_len, a.pfns.as_slice())
+                    .expect("unable to restore mem block");
+                QueuePair::restore(driver.clone(), interrupt0, registers.clone(), mem_block, a)
                     .unwrap()
-            })
-            .unwrap();
+            }).unwrap();
 
         let admin = worker.admin.insert(admin);
 
@@ -674,18 +646,13 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 q_state.sq_state.sqid,
                 q_state.cq_state.cqid
             );
-            // Using 1:1 mapping for SQ and CQ IDs.
-            let qid = q_state.sq_state.sqid;
             let interrupt = worker
                 .device
                 .map_interrupt(q_state.msix, q_state.cpu)
                 .context("failed to map interrupt")?;
-            let q_mem = mem_block.subblock(
-                (qid as usize) * QueuePair::required_dma_size(),
-                QueuePair::required_dma_size(),
-            );
 
-            let q = IoQueue::restore(driver.clone(), interrupt, registers.clone(), q_mem, q_state)
+            let mem_block = dma_buffer.restore_dma_buffer(q_state.mem_len, q_state.pfns.as_slice())?;
+            let q = IoQueue::restore(driver.clone(), interrupt, registers.clone(), mem_block, q_state)
                 .unwrap();
 
             let issuer = IoIssuer {
@@ -852,18 +819,8 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             return;
         }
 
-        // Provide next available queue ID.
-        // TODO: Check if conflict is possible for multi-CPU parallel access.
-        let qid = self.io.len() as u16 + 1;
-
-        let mem_block = self.mem_block.as_ref().unwrap();
-        let q_mem = mem_block.subblock(
-            (qid as usize) * QueuePair::required_dma_size(),
-            QueuePair::required_dma_size(),
-        );
-
         let issuer = match self
-            .create_io_queue(state, qid, cpu, q_mem)
+            .create_io_queue(state, cpu)
             .instrument(info_span!("create_nvme_io_queue", cpu))
             .await
         {
@@ -896,13 +853,13 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
     async fn create_io_queue(
         &mut self,
         state: &mut WorkerState,
-        qid: u16,
         cpu: u32,
-        mem_block: MemoryBlock,
     ) -> anyhow::Result<IoIssuer> {
         if self.io.len() >= state.max_io_queues as usize {
             anyhow::bail!("no more io queues available");
         }
+
+        let qid = self.io.len() as u16 + 1;
 
         tracing::debug!(cpu, qid, "creating io queue");
         tracing::info!("YSP: create_io_queue cpu={} qid={}", cpu, qid);
@@ -916,12 +873,12 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
 
         let queue = QueuePair::new(
             self.driver.clone(),
+            &self.device,
             qid,
             state.qsize,
             state.qsize,
             interrupt,
             self.registers.clone(),
-            mem_block,
         )
         .with_context(|| format!("failed to create io queue pair {qid}"))?;
 
@@ -1013,16 +970,9 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             io.push(io_q.save().await?);
         }
 
-        // YSP: FIXME: Review this.
-        let mem_block = self.mem_block.as_ref();
-        let (_dma_base, dma_len, dma_pfns) = mem_block.map_or((None, None, vec![]), |m| {
-            (Some(m.base_va()), Some(m.len()), m.pfns().to_vec())
-        });
         let save_state = NvmeDriverSavedState {
             admin: Some(admin),
             io,
-            dma_len,
-            dma_pfns,
             identify_ctrl: [0; 4096],  // Will be updated by the caller.
             device_id: "".to_string(), // Will be updated by the caller.
             namespace: vec![],         // Will be updated by the caller.
@@ -1068,12 +1018,7 @@ pub mod save_restore {
         /// Max number of IO queue pairs.
         #[mesh(7)]
         pub max_io_queues: u16,
-        /// DMA block length in bytes.
-        #[mesh(8)]
-        pub dma_len: Option<usize>, // TODO: Could be redundant with 'pfns'.
-        /// Vector of PFNs of this DMA block.
-        #[mesh(9)]
-        pub dma_pfns: Vec<u64>,
+
         //registers: Arc<DeviceRegisters<T>>,
         //interrupts: Vec<NotifyChannel>,
         //io_issuers: Arc<Vec<Arc<Issuer>>>,

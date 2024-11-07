@@ -1080,57 +1080,6 @@ fn vfio_dma_buffer(
         )
 }
 
-/// Preallocate or restore DMA memory range for VFIO device.
-fn vfio_prealloc_or_restore(
-    allocator: Arc<dyn VfioDmaBuffer>,
-    dps: &DevicePlatformSettings,
-    vp_count: u32,
-    nvme_dma_state: Option<&NvmeDmaBufferSavedState>,
-) -> Result<MemoryBlock, anyhow::Error> {
-    match nvme_dma_state {
-        //
-        // Restore the previously saved amount of DMA memory.
-        //
-        Some(dma) => {
-            tracing::info!(
-                "YSP: Restoring DMA state len={} pfn[0]={:X}",
-                dma.dma_size,
-                dma.pfns[0],
-            );
-            allocator.restore_dma_buffer(dma.dma_size, dma.pfns.as_slice())
-        }
-
-        // Cold boot - calculate amount of DMA memory based on the number of
-        // configured devices. This calculation just enumerates NVMe controllers and
-        // SCSI disks so the resulting value may be higher than it should,
-        // but otherwise we must dig deep into VTL2 settings structure which is
-        // not the right place here.
-        None => {
-            let mut nvme_disks = 0;
-            let vtl2_settings = dps
-                .general
-                .vtl2_settings
-                .as_ref()
-                .map_or_else(Default::default, |settings| settings.dynamic.clone());
-
-            nvme_disks += vtl2_settings.nvme_controllers.len();
-            for scsi in &vtl2_settings.scsi_controllers {
-                nvme_disks += scsi.disks.len();
-            }
-
-            tracing::info!("YSP: found {} disks", nvme_disks);
-            // Allocate or pre-allocate 1 MB per each (potential) NVMe disk and each VP.
-            // There are multiple choices:
-            //   - Pre-calculate the amount based on heuristic formula, and then adjust queue sizes at runtime if won't fit;
-            //   - Get host hint about amount;
-            //   - Allocate multiple ranges.
-            // Mark it as a YSP: FIXME: HACK: for now.
-            let dma_buf_len = (nvme_disks * vp_count as usize) * 1024 * 1024;
-            allocator.create_dma_buffer(dma_buf_len)
-        }
-    }
-}
-
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
 fn new_x86_topology(
     cpus: &[bootloader_fdt_parser::Cpu],
@@ -1807,32 +1756,20 @@ async fn new_underhill_vm(
     // otherwise use default heap allocator.
     // Contents of fixed pool will be preserved during servicing.
     let fixed_mem_pool = if !runtime_params.dma_preserve_memory_map().is_empty() {
-        let pools = runtime_params.dma_preserve_memory_map(); // YSP: FIXME: .to_vec();
+        let pools = runtime_params.dma_preserve_memory_map();
         Some(FixedPool::new(pools)?)
     } else {
         None
     };
 
     let nvme_manager = if env_cfg.nvme_vfio {
-        let nvme_saved_state = servicing_state.nvme_state.unwrap_or(None);
-        let nvme_dma_buffer = nvme_saved_state
-            .as_ref()
-            .and_then(|n| n.nvme_state.mem_buffer.as_ref());
-        let dma_buffer = vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref());
-        let nvme_dma_memory = vfio_prealloc_or_restore(
-            dma_buffer.clone(),
-            &dps,
-            processor_topology.vp_count(),
-            nvme_dma_buffer,
-        )?;
         let nvme_keepalive = fixed_mem_pool.is_some();
         let manager = NvmeManager::new(
             &driver_source,
             processor_topology.vp_count(),
             vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref()),
-            nvme_dma_memory,
             nvme_keepalive,
-            nvme_saved_state, // YSP: FIXME: servicing_state.nvme_state.unwrap_or(None),
+            servicing_state.nvme_state.unwrap_or(None),
         );
 
         resolver.add_async_resolver::<DiskHandleKind, _, NvmeDiskConfig, _>(NvmeDiskResolver::new(

@@ -30,6 +30,7 @@ use std::num::Wrapping;
 use std::sync::Arc;
 use std::task::Poll;
 use thiserror::Error;
+use user_driver::HostDmaAllocator;
 use user_driver::interrupt::DeviceInterrupt;
 use user_driver::memory::MemoryBlock;
 use user_driver::memory::PAGE_SIZE;
@@ -184,15 +185,17 @@ impl QueuePair {
 
     pub fn new(
         spawner: impl SpawnDriver,
+        device: &impl DeviceBacking,
         qid: u16,
         sq_size: u16, // Requested SQ size in entries.
         cq_size: u16, // Requested CQ size in entries.
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
-        mem_block: MemoryBlock,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::new qid={}", qid);
-        assert!(mem_block.len() >= Self::required_dma_size());
+        let mem_block = device
+            .host_allocator()
+            .allocate_dma_buffer(QueuePair::required_dma_size())?;
 
         let (queue_handler, alloc, mem) = QueuePair::allocate(qid, sq_size, cq_size, mem_block)?;
 

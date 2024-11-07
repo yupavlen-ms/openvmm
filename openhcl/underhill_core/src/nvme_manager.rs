@@ -96,28 +96,16 @@ impl NvmeManager {
         driver_source: &VmTaskDriverSource,
         vp_count: u32,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
-        mem_block: MemoryBlock,
         nvme_keepalive: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
         let (send, recv) = mesh::channel();
         let driver = driver_source.simple();
-        let pages = mem_block.pfns();
-        tracing::info!(
-            "YSP: NvmeManager::new {:X} [{:x} {:x} {:x} {:x}]",
-            mem_block.base_va(),
-            pages[0],
-            pages[1],
-            pages[2],
-            pages[3]
-        );
         let mut worker = NvmeManagerWorker {
             driver_source: driver_source.clone(),
             devices: HashMap::new(),
             vp_count,
             dma_buffer: dma_buffer.clone(),
-            mem_block,
-            mem_next_offset: 0,
             nvme_keepalive,
         };
         let task = driver.spawn("nvme-manager", async move {
@@ -252,11 +240,6 @@ struct NvmeManagerWorker {
     #[inspect(skip)]
     dma_buffer: Arc<dyn VfioDmaBuffer>,
     vp_count: u32,
-    /// Contiguous DMA memory block to be sliced per queue.
-    #[inspect(skip)]
-    mem_block: MemoryBlock,
-    /// Next available offset to use.
-    mem_next_offset: usize,
     /// Bypass device shutdown.
     nvme_keepalive: bool,
 }
@@ -346,18 +329,10 @@ impl NvmeManagerWorker {
                         .await
                         .map_err(InnerError::Vfio)?;
 
-                // TODO: This is temporary way to obtain the DMA buffer size.
-                //       Alternatives: use VTL2 configuation data for fixed size
-                //       or for the target queue count.
-                let mem_required_size = nvme_driver::NvmeDriver::<VfioDevice>::required_dma_size(
-                    self.vp_count as usize + 1,
-                );
-                let next_offset = self.mem_next_offset;
 
                 let driver = nvme_driver::NvmeDriver::new(
                     &self.driver_source,
                     self.vp_count,
-                    self.mem_block.subblock(next_offset, mem_required_size),
                     device,
                 )
                 .instrument(tracing::info_span!(
@@ -367,7 +342,6 @@ impl NvmeManagerWorker {
                 .await
                 .map_err(InnerError::DeviceInitFailed)?;
 
-                self.mem_next_offset += mem_required_size;
                 entry.insert(driver)
             }
         };
@@ -400,11 +374,6 @@ impl NvmeManagerWorker {
 
         let nvme_state = NvmeManagerSavedState {
             cpu_count: self.vp_count,
-            mem_buffer: Some(NvmeDmaBufferSavedState {
-                dma_size: self.mem_block.len(),
-                pfns: self.mem_block.pfns().to_vec(),
-            }),
-            mem_next_offset: self.mem_next_offset,
             nvme_disks,
         };
 
@@ -439,15 +408,11 @@ impl NvmeManagerWorker {
                 )
                 .instrument(tracing::info_span!("vfio_device_restore", pci_id = disk.pci_id.clone()))
                 .await?;
-            tracing::info!("YSP: after VfioDevice::restore");
 
-            // YSP: FIXME: Count for multiple drivers.
-            let driver_block_len = self.mem_block.len();
-            let driver_mem_block = self.mem_block.subblock(0, driver_block_len);
             let nvme_driver = nvme_driver::NvmeDriver::restore(
                 &self.driver_source,
                 saved_state.cpu_count,
-                driver_mem_block,
+                dma_buffer.clone(),
                 vfio_device,
                 &disk.driver_state,
             )
@@ -457,7 +422,6 @@ impl NvmeManagerWorker {
 
             self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
-        self.mem_next_offset = saved_state.mem_next_offset;
         tracing::info!("YSP: NvmeManagerWorker::restore - done");
         Ok(())
     }
@@ -515,13 +479,7 @@ impl ResourceId<DiskHandleKind> for NvmeDiskConfig {
 pub struct NvmeManagerSavedState {
     #[mesh(1)]
     pub cpu_count: u32,
-    /// NVMe DMA buffer saved state.
     #[mesh(2)]
-    pub mem_buffer: Option<NvmeDmaBufferSavedState>,
-    /// NVMe DMA buffer next offset.
-    #[mesh(3)]
-    pub mem_next_offset: usize,
-    #[mesh(4)]
     pub nvme_disks: Vec<NvmeSavedDiskConfig>,
 }
 
