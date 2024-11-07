@@ -334,14 +334,11 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         mapping
             .map_file(0, len, gpa_fd.get(), gpa, true)
             .context("sparse mapping failed")?;
+        // Zeroinit the memory, there are servicing cases where this is needed.
+        mapping.fill_at(0, 0, len)?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
 
-        // YSP: FIXME: Debug code
-        unsafe {
-            std::ptr::write_bytes(mapping.as_ptr(), 0, len);
-        }
-        
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mapping.read_at(0, checker.as_mut_slice())?;
@@ -399,10 +396,8 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
         // No need to set bit 63 because this buffer is visible to VTL2 only.
-        let file_offset = gpa;
-
         mapping
-            .map_file(0, len, gpa_fd.get(), file_offset, true)
+            .map_file(0, len, gpa_fd.get(), gpa, true)
             .context("unable to map allocation")?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();

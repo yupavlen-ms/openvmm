@@ -166,6 +166,7 @@ impl SparseMapping {
             // SAFETY: freeing VA just allocated above.
             unsafe { munmap(aligned_end as *mut _, end - aligned_end).unwrap() };
         }
+        tracing::info!("YSP: SparseMapping::new addr={:X} len={}", aligned_address, len);
         Ok(Self {
             address: aligned_address as *mut _,
             len,
