@@ -1717,11 +1717,15 @@ async fn new_underhill_vm(
         ))
     };
 
+    // ARM64 always bounces, as the OpenHCL kernel does not
+    // have access to VTL0 pages. Necessary until #273 is resolved.
+    let always_bounce = cfg!(guest_arch = "aarch64");
     resolver.add_async_resolver::<DiskHandleKind, _, OpenBlockDeviceConfig, _>(
         BlockDeviceResolver::new(
             Arc::new(tp.clone()),
             Some(uevent_listener.clone()),
             bounce_buffer_tracker,
+            always_bounce,
         ),
     );
 
