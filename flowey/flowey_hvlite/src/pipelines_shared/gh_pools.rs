@@ -77,10 +77,11 @@ pub fn gh_hosted_linux() -> GhRunner {
     GhRunner::GhHosted(GhRunnerOsLabel::UbuntuLatest)
 }
 
-pub fn windows_arm_self_hosted() -> GhRunner {
+pub fn windows_arm_self_hosted_baremetal() -> GhRunner {
     GhRunner::SelfHosted(vec![
         "self-hosted".to_string(),
         "Windows".to_string(),
         "ARM64".to_string(),
+        "Baremetal".to_string(),
     ])
 }

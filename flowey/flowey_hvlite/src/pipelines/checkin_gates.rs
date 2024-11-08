@@ -766,6 +766,16 @@ impl IntoPipeline for CheckinGatesCli {
                 )),
                 unit_test_target: Some(("x64-linux-musl", openhcl_musl_target(CommonArch::X86_64))),
             },
+            ClippyUnitTestJobParams {
+                platform: FlowPlatform::Windows,
+                arch: FlowArch::Aarch64,
+                gh_pool: crate::pipelines_shared::gh_pools::windows_arm_self_hosted_baremetal(),
+                clippy_targets: None,
+                unit_test_target: Some((
+                    "aarch64-windows",
+                    target_lexicon::triple!("aarch64-pc-windows-msvc"),
+                )),
+            },
         ] {
             let mut job_name = Vec::new();
             if let Some((label, _)) = &clippy_targets {
@@ -846,7 +856,7 @@ impl IntoPipeline for CheckinGatesCli {
             vmm_tests_artifacts_linux_x86.finish().map_err(|missing| {
                 anyhow::anyhow!("missing required linux vmm_tests artifact: {missing}")
             })?;
-        let _vmm_tests_artifacts_windows_aarch64 = vmm_tests_artifacts_windows_aarch64
+        let vmm_tests_artifacts_windows_aarch64 = vmm_tests_artifacts_windows_aarch64
             .finish()
             .map_err(|missing| {
                 anyhow::anyhow!("missing required windows-aarch64 vmm_tests artifact: {missing}")
@@ -893,6 +903,14 @@ impl IntoPipeline for CheckinGatesCli {
                 label: "x64-linux",
                 target: CommonTriple::X86_64_LINUX_GNU,
                 resolve_vmm_tests_artifacts: vmm_tests_artifacts_linux_x86,
+            },
+            VmmTestJobParams {
+                platform: FlowPlatform::Windows,
+                arch: FlowArch::Aarch64,
+                gh_pool: crate::pipelines_shared::gh_pools::windows_arm_self_hosted_baremetal(),
+                label: "aarch64-windows",
+                target: CommonTriple::AARCH64_WINDOWS_MSVC,
+                resolve_vmm_tests_artifacts: vmm_tests_artifacts_windows_aarch64,
             },
         ] {
             let test_label = format!("{label}-vmm-tests");

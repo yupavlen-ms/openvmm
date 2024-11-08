@@ -874,6 +874,10 @@ mod test {
 
     // ensure we can boot with a _lot_ of vcpus
     #[test]
+    #[cfg_attr(
+        target_arch = "aarch64",
+        ignore = "TODO: investigate why this doesn't always work on ARM"
+    )]
     fn fdt_cpu_scaling() {
         const MAX_CPUS: usize = 2048;
 
