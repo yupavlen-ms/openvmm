@@ -8,7 +8,6 @@ use crate::driver::save_restore::CompletionQueueSavedState;
 use crate::driver::save_restore::SubmissionQueueSavedState;
 use crate::registers::DeviceRegisters;
 use inspect::Inspect;
-use mesh::payload::Protobuf;
 use user_driver::memory::MemoryBlock;
 use user_driver::DeviceBacking;
 

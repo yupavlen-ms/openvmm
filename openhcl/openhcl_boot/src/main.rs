@@ -301,7 +301,7 @@ enum ReservedMemoryType {
     /// A reserved range per sidecar node.
     SidecarNode,
     /// Preserved DMA buffers and hardware queues.
-    DmaBuffers, // YSP:
+    DmaBuffers,
 }
 
 /// Construct a slice representing the reserved memory ranges to be reported to
@@ -334,9 +334,6 @@ fn reserved_memory_regions(
             ReservedMemoryType::Vtl2Reserved,
         ));
     }
-
-    // YSP: FIXME: Test
-    //reserved.push((MemoryRange::new(0x126000000..0x128000000), ReservedMemoryType::DmaBuffers));
 
     // YSP: FIXME: Debug
     for ra in &partition_info.vtl2_ram {
