@@ -532,6 +532,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 Ok(s)
             }
             Err(e) => {
+                tracing::info!("YSP: save ERROR");
                 Err(e)
             }
         };
