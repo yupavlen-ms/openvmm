@@ -64,7 +64,7 @@ impl FlowNode for Node {
         ctx.import::<crate::init_openvmm_magicpath_lxutil::Node>();
         ctx.import::<crate::install_openvmm_rust_build_essential::Node>();
         ctx.import::<crate::run_cargo_nextest_run::Node>();
-        ctx.import::<flowey_lib_common::install_apt_pkg::Node>();
+        ctx.import::<crate::init_cross_build::Node>();
         ctx.import::<flowey_lib_common::run_cargo_nextest_archive::Node>();
     }
 
@@ -80,7 +80,7 @@ impl FlowNode for Node {
             },
             platform: match flowey_platform {
                 FlowPlatform::Windows => CommonPlatform::WindowsMsvc,
-                FlowPlatform::Linux => CommonPlatform::LinuxGnu,
+                FlowPlatform::Linux(_) => CommonPlatform::LinuxGnu,
                 FlowPlatform::MacOs => CommonPlatform::MacOs,
                 platform => anyhow::bail!("unsupported platform {platform}"),
             },
@@ -209,6 +209,11 @@ impl FlowNode for Node {
                 FeatureSet::All
             };
 
+            let injected_env = ctx.reqv(|v| crate::init_cross_build::Request {
+                target: target.clone(),
+                injected_env: v,
+            });
+
             let build_params =
                 flowey_lib_common::run_cargo_nextest_run::build_params::NextestBuildParams {
                     packages: test_packages.clone(),
@@ -220,6 +225,7 @@ impl FlowNode for Node {
                         CommonProfile::Release => CargoBuildProfile::Release,
                         CommonProfile::Debug => CargoBuildProfile::Debug,
                     },
+                    extra_env: injected_env,
                 };
 
             match build_mode {

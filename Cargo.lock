@@ -21,7 +21,7 @@ dependencies = [
  "inspect",
  "pal_async",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
 ]
 
@@ -42,7 +42,7 @@ dependencies = [
  "bitfield-struct",
  "open_enum",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -178,7 +178,7 @@ checksum = "c980ee35e870bd1a4d2c8294d4c04d0499e67bca1e4b5cefcc693c2fa00caea9"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -271,7 +271,7 @@ checksum = "6c2ce686adbebce0ee484a502c440b4657739adbad65eadf06d64f5816ee9765"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -389,7 +389,7 @@ name = "cache_topology"
 version = "0.0.0"
 dependencies = [
  "fs-err",
- "thiserror",
+ "thiserror 2.0.0",
  "windows-sys 0.52.0",
 ]
 
@@ -400,7 +400,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "190baaad529bcfbde9e1a19022c42781bdb6ff9de25721abdb8fd98c0807730b"
 dependencies = [
  "libc",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -454,7 +454,7 @@ dependencies = [
  "pal_async",
  "power_resources",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "time",
  "tracelimit",
  "tracing",
@@ -472,7 +472,7 @@ dependencies = [
  "closeable_mutex",
  "parking_lot",
  "range_map_vec",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
 ]
 
@@ -528,7 +528,7 @@ dependencies = [
  "pal_async",
  "pci_bus",
  "pci_core",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vmcore",
@@ -619,7 +619,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -695,7 +695,7 @@ dependencies = [
  "resolv-conf",
  "smoltcp",
  "socket2",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "windows-sys 0.52.0",
 ]
@@ -921,7 +921,7 @@ checksum = "5fe87ce4529967e0ba1dcf8450bab64d97dfd5010a6256187ffe2e43e6f0e049"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -952,7 +952,7 @@ checksum = "67e77553c4162a157adbf834ebae5b415acbecbeafc7a74b0e886657506a7611"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -974,7 +974,7 @@ dependencies = [
  "mesh_rpc",
  "pal_async",
  "socket2",
- "thiserror",
+ "thiserror 2.0.0",
  "unix_socket",
  "vmsocket",
  "windows-sys 0.52.0",
@@ -1069,7 +1069,7 @@ dependencies = [
  "inspect",
  "scsi_buffers",
  "stackfuture",
- "thiserror",
+ "thiserror 2.0.0",
  "vm_resource",
 ]
 
@@ -1100,7 +1100,7 @@ dependencies = [
  "once_cell",
  "scsi_buffers",
  "stackfuture",
- "thiserror",
+ "thiserror 2.0.0",
  "tokio",
  "vhd1_defs",
  "vm_resource",
@@ -1136,7 +1136,7 @@ dependencies = [
  "scsi_buffers",
  "stackfuture",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "uevent",
  "vm_resource",
@@ -1203,7 +1203,7 @@ dependencies = [
  "parking_lot",
  "scsi_buffers",
  "stackfuture",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "zerocopy",
@@ -1225,7 +1225,7 @@ dependencies = [
  "pal_async",
  "scsi_buffers",
  "stackfuture",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_resource",
@@ -1245,7 +1245,7 @@ dependencies = [
  "scsi_buffers",
  "stackfuture",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.0",
  "vhd1_defs",
  "vm_resource",
  "zerocopy",
@@ -1265,7 +1265,7 @@ dependencies = [
  "scsi_buffers",
  "stackfuture",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.0",
  "vm_resource",
  "winapi",
 ]
@@ -1285,7 +1285,7 @@ dependencies = [
  "libc",
  "nix 0.26.4",
  "smallvec",
- "thiserror",
+ "thiserror 1.0.68",
  "tracing",
  "zerocopy",
 ]
@@ -1351,7 +1351,7 @@ checksum = "f95e2801cd355d4a1a3e3953ce6ee5ae9603a5c833455343a8bfe3f44d418246"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -1460,6 +1460,7 @@ dependencies = [
 name = "fdt"
 version = "0.0.0"
 dependencies = [
+ "thiserror 2.0.0",
  "zerocopy",
  "zerocopy_helpers",
 ]
@@ -1488,7 +1489,7 @@ dependencies = [
  "mesh",
  "open_enum",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_topology",
@@ -1516,7 +1517,7 @@ dependencies = [
  "openssl",
  "pal_async",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "time",
  "tracelimit",
  "tracing",
@@ -1536,7 +1537,7 @@ version = "0.0.0"
 dependencies = [
  "guid",
  "mesh_protobuf",
- "thiserror",
+ "thiserror 2.0.0",
  "uefi_specs",
 ]
 
@@ -1551,7 +1552,7 @@ dependencies = [
  "memory_range",
  "parking_lot",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "user_driver",
 ]
@@ -1585,7 +1586,7 @@ dependencies = [
  "mesh",
  "open_enum",
  "scsi_buffers",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vmcore",
@@ -1786,7 +1787,7 @@ dependencies = [
  "parking_lot",
  "tempfile",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "zerocopy",
 ]
@@ -1870,7 +1871,7 @@ checksum = "87750cf4b7a4c0625b1529e4c543c2182106e4dedc60a2a6455e00d212c489ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -2069,7 +2070,7 @@ dependencies = [
  "pci_resources",
  "slab",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "vmcore",
@@ -2147,7 +2148,7 @@ name = "get_resources"
 version = "0.0.0"
 dependencies = [
  "mesh",
- "thiserror",
+ "thiserror 2.0.0",
  "vm_resource",
 ]
 
@@ -2197,7 +2198,7 @@ dependencies = [
  "crc",
  "nix 0.26.4",
  "serde",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -2273,7 +2274,7 @@ dependencies = [
  "power_resources",
  "serde_json",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "time",
  "tracing",
  "video_core",
@@ -2297,7 +2298,7 @@ dependencies = [
  "serde",
  "serde_json",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "vmbus_async",
@@ -2330,7 +2331,7 @@ dependencies = [
  "serde_json",
  "shared_pool_alloc",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "tracing_helpers",
  "underhill_config",
@@ -2371,7 +2372,7 @@ dependencies = [
  "inspect",
  "pal_event",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -2382,7 +2383,7 @@ dependencies = [
  "getrandom",
  "inspect",
  "mesh_protobuf",
- "thiserror",
+ "thiserror 2.0.0",
  "winapi",
  "windows-sys 0.52.0",
  "zerocopy",
@@ -2439,7 +2440,7 @@ dependencies = [
  "sidecar_client",
  "signal-hook",
  "tdcall",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vtl_array",
@@ -2458,7 +2459,7 @@ dependencies = [
  "open_enum",
  "pal_async",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "ucs2 0.0.0",
  "uefi_nvram_storage",
@@ -2584,7 +2585,7 @@ dependencies = [
  "open_enum",
  "sparse_mmap",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "zerocopy",
@@ -2657,7 +2658,7 @@ dependencies = [
  "sparse_mmap",
  "state_unit",
  "storvsp",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "tracing_helpers",
  "uefi_nvram_storage",
@@ -2704,7 +2705,7 @@ dependencies = [
  "mesh",
  "mesh_worker",
  "net_backend_resources",
- "thiserror",
+ "thiserror 2.0.0",
  "unix_socket",
  "virt",
  "virt_whp",
@@ -2771,7 +2772,7 @@ dependencies = [
  "sparse_mmap",
  "storvsp_resources",
  "term",
- "thiserror",
+ "thiserror 2.0.0",
  "tpm_resources",
  "tracelimit",
  "tracing",
@@ -2911,7 +2912,7 @@ dependencies = [
  "inspect",
  "mesh",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "vmbus_async",
@@ -2931,7 +2932,7 @@ dependencies = [
  "inspect",
  "mesh",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vmbus_async",
@@ -2981,7 +2982,7 @@ dependencies = [
  "serde",
  "serde_helpers",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -3018,7 +3019,7 @@ dependencies = [
  "static_assertions",
  "tempfile",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "tracing_helpers",
@@ -3064,7 +3065,7 @@ dependencies = [
  "igvm_defs",
  "open-enum",
  "range_map_vec",
- "thiserror",
+ "thiserror 1.0.68",
  "tracing",
  "zerocopy",
 ]
@@ -3100,7 +3101,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "tracing-subscriber",
  "underhill_confidentiality",
@@ -3162,7 +3163,7 @@ dependencies = [
  "mesh",
  "pal_async",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -3179,7 +3180,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -3202,7 +3203,7 @@ dependencies = [
  "cfg-if",
  "inspect",
  "libc",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -3262,7 +3263,7 @@ dependencies = [
 name = "kmsg"
 version = "0.0.0"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -3279,7 +3280,7 @@ dependencies = [
  "pal",
  "parking_lot",
  "signal-hook",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -3296,7 +3297,7 @@ checksum = "9baa9eeb6e315942429397e617a190f4fdc696ef1ee0342939d641029cbb4ea7"
 dependencies = [
  "enumflags2",
  "libc",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -3360,7 +3361,7 @@ checksum = "04e542a18c94a9b6fcc7adb090fa3ba6b79ee220a16404f325672729f32a66ff"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -3393,7 +3394,7 @@ dependencies = [
  "object",
  "open_enum",
  "page_table",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_topology",
  "x86defs",
@@ -3441,7 +3442,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 name = "lx"
 version = "0.0.0"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -3523,7 +3524,7 @@ dependencies = [
  "bitvec",
  "serde",
  "serde-big-array",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -3550,7 +3551,7 @@ dependencies = [
  "parking_lot",
  "slab",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "virt",
  "vm_topology",
@@ -3578,7 +3579,7 @@ version = "0.0.0"
 dependencies = [
  "inspect",
  "mesh_protobuf",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -3599,7 +3600,7 @@ dependencies = [
  "proc-macro2",
  "prost-build",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -3616,7 +3617,7 @@ dependencies = [
  "pal_event",
  "parking_lot",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
 ]
 
@@ -3627,7 +3628,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -3643,7 +3644,7 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "zerocopy",
 ]
@@ -3681,7 +3682,7 @@ dependencies = [
  "prost-build",
  "prost-types",
  "socket2",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -3703,7 +3704,7 @@ dependencies = [
  "parking_lot",
  "socket2",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "tracing_helpers",
  "unicycle",
@@ -3730,7 +3731,7 @@ dependencies = [
  "prost-build",
  "prost-types",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tokio",
  "tracing",
  "unicycle",
@@ -3923,7 +3924,7 @@ dependencies = [
  "guid",
  "inspect",
  "mesh",
- "thiserror",
+ "thiserror 2.0.0",
  "vm_resource",
 ]
 
@@ -3940,7 +3941,7 @@ dependencies = [
  "net_backend_resources",
  "pal_async",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
 ]
@@ -4018,7 +4019,7 @@ dependencies = [
  "net_backend_resources",
  "pal_async",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
 ]
@@ -4047,9 +4048,10 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "safeatomic",
+ "static_assertions",
  "task_control",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_resource",
@@ -4179,7 +4181,7 @@ dependencies = [
  "pci_resources",
  "scsi_buffers",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "unicycle",
@@ -4195,7 +4197,7 @@ version = "0.0.0"
 dependencies = [
  "disk_backend",
  "nvme_spec",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -4222,7 +4224,7 @@ dependencies = [
  "slab",
  "task_control",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "user_driver",
  "vmcore",
@@ -4279,7 +4281,7 @@ dependencies = [
  "pal_async",
  "socket2",
  "term",
- "thiserror",
+ "thiserror 2.0.0",
  "unicycle",
 ]
 
@@ -4312,7 +4314,7 @@ checksum = "8d1296fab5231654a5aec8bf9e87ba4e3938c502fc4c3c0425a00084c78944be"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -4367,7 +4369,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -4409,7 +4411,7 @@ dependencies = [
  "libc",
  "openssl",
  "openssl-sys",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -4539,7 +4541,7 @@ dependencies = [
  "pal_event",
  "seccompiler",
  "socket2",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "widestring",
  "win_import_lib",
@@ -4579,7 +4581,7 @@ version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -4690,7 +4692,7 @@ checksum = "1fc1f139757b058f9f37b76c48501799d12c9aa0aa4c0d4c980b062ee925d1b2"
 dependencies = [
  "byteorder_slice",
  "derive-into-owned",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -4701,7 +4703,7 @@ dependencies = [
  "chipset_device",
  "inspect",
  "mesh",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vmcore",
@@ -4719,7 +4721,7 @@ dependencies = [
  "mesh",
  "open_enum",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vmcore",
@@ -4862,7 +4864,7 @@ checksum = "4359fd9c9171ec6e8c62926d6faaf553a8dc3f64e1507e76da7911b4f6a04405"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -4998,9 +5000,9 @@ dependencies = [
 
 [[package]]
 name = "proc-macro2"
-version = "1.0.76"
+version = "1.0.89"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95fc56cda0b5c3325f5fbbd7ff9fda9e02bb00bb3dac51252d2f1bfa1cb8cc8c"
+checksum = "f139b0662de085916d1fb67d2b4169d1addddda1919e696f3252b740b629986e"
 dependencies = [
  "unicode-ident",
 ]
@@ -5167,7 +5169,7 @@ checksum = "a18479200779601e498ada4e8c1e1f50e3ee19deb0259c25825a98b5603b2cb4"
 dependencies = [
  "getrandom",
  "libredox",
- "thiserror",
+ "thiserror 1.0.68",
 ]
 
 [[package]]
@@ -5303,7 +5305,7 @@ checksum = "e5af959c8bf6af1aff6d2b463a57f71aae53d1332da58419e30ad8dc7011d951"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -5337,7 +5339,7 @@ name = "save_restore_derive"
 version = "0.0.0"
 dependencies = [
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -5418,7 +5420,7 @@ dependencies = [
  "scsi_defs",
  "scsidisk_resources",
  "stackfuture",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "tracing_helpers",
@@ -5501,7 +5503,7 @@ checksum = "46fe8f8603d81ba86327b23a2e9cdf49e1255fb94a4c5f297f6ee0547178ea2c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -5562,7 +5564,7 @@ dependencies = [
  "open_enum",
  "serial_16550_resources",
  "serial_core",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_resource",
@@ -5605,7 +5607,7 @@ dependencies = [
  "pal_async",
  "serial_core",
  "serial_pl011_resources",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_resource",
@@ -5642,7 +5644,7 @@ dependencies = [
  "bitfield-struct",
  "nix 0.26.4",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -5676,7 +5678,7 @@ dependencies = [
  "inspect",
  "parking_lot",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "user_driver",
  "vm_topology",
@@ -5713,7 +5715,7 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "sidecar_defs",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "zerocopy",
 ]
@@ -5816,7 +5818,7 @@ dependencies = [
  "libc",
  "pal",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "windows-sys 0.52.0",
  "zerocopy",
@@ -5841,7 +5843,7 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vmcore",
 ]
@@ -5858,7 +5860,7 @@ version = "0.0.0"
 dependencies = [
  "inspect",
  "mesh_protobuf",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -5891,7 +5893,7 @@ dependencies = [
  "storvsp_resources",
  "task_control",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "tracing_helpers",
@@ -5933,9 +5935,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.48"
+version = "2.0.87"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f3531638e407dfc0814761abb7c00a5b54992b849452a0646b7f65c9f770f3f"
+checksum = "25aa4ce346d03a6dcd68dd8b4010bcb74e54e62c90c573f394c46eae99aba32d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -5984,7 +5986,7 @@ version = "0.0.0"
 dependencies = [
  "nix 0.26.4",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -5995,7 +5997,7 @@ dependencies = [
  "sev_guest_device",
  "static_assertions",
  "tdx_guest_device",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -6053,27 +6055,47 @@ version = "0.0.0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
 name = "thiserror"
-version = "1.0.56"
+version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d54378c645627613241d077a3a79db965db602882668f9136ac42af9ecb730ad"
+checksum = "02dd99dc800bbb97186339685293e1cc5d9df1f8fae2d0aecd9ff1c77efea892"
 dependencies = [
- "thiserror-impl",
+ "thiserror-impl 1.0.68",
+]
+
+[[package]]
+name = "thiserror"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15291287e9bff1bc6f9ff3409ed9af665bec7a5fc8ac079ea96be07bca0e2668"
+dependencies = [
+ "thiserror-impl 2.0.0",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.56"
+version = "1.0.68"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fa0faa943b50f3db30a20aa7e265dbc66076993efed8463e8de414e5d06d3471"
+checksum = "a7c61ec9a6f64d2793d8a45faba21efbe3ced62a886d44c36a009b2b519b4c7e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
+]
+
+[[package]]
+name = "thiserror-impl"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22efd00f33f93fa62848a7cab956c3d38c8d43095efda1decfc2b3a5dc0b8972"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -6246,7 +6268,7 @@ dependencies = [
  "open_enum",
  "pal_async",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tpm_resources",
  "tracelimit",
  "tracing",
@@ -6292,7 +6314,7 @@ checksum = "34704c8d6ebcbc939824180af020566b01a7c01f80641264eba0999f6c2b6be7"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -6390,7 +6412,7 @@ name = "ucs2"
 version = "0.0.0"
 dependencies = [
  "mesh_protobuf",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -6426,7 +6448,7 @@ checksum = "c19ee3a01d435eda42cb9931269b349d28a1762f91ddf01c68d276f74b957cc3"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -6445,7 +6467,7 @@ name = "uefi_nvram_specvars"
 version = "0.0.0"
 dependencies = [
  "guid",
- "thiserror",
+ "thiserror 2.0.0",
  "ucs2 0.0.0",
  "uefi_specs",
  "zerocopy",
@@ -6460,7 +6482,7 @@ dependencies = [
  "guid",
  "inspect",
  "pal_async",
- "thiserror",
+ "thiserror 2.0.0",
  "ucs2 0.0.0",
  "uefi_specs",
  "wchar",
@@ -6493,7 +6515,7 @@ dependencies = [
  "mesh",
  "pal_async",
  "socket2",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
 ]
 
@@ -6519,7 +6541,7 @@ dependencies = [
  "static_assertions",
  "task_control",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "tracing_helpers",
@@ -6565,7 +6587,7 @@ dependencies = [
  "static_assertions",
  "tdx_guest_device",
  "tee_call",
- "thiserror",
+ "thiserror 2.0.0",
  "time",
  "tracing",
  "vmgs",
@@ -6586,7 +6608,7 @@ dependencies = [
  "prost",
  "serde",
  "serde_json",
- "thiserror",
+ "thiserror 2.0.0",
  "vtl2_settings_proto",
 ]
 
@@ -6685,7 +6707,7 @@ dependencies = [
  "storvsp",
  "storvsp_resources",
  "tee_call",
- "thiserror",
+ "thiserror 2.0.0",
  "time",
  "tpm",
  "tpm_resources",
@@ -6744,7 +6766,7 @@ dependencies = [
  "guid",
  "libc",
  "pal_async",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "tracing-subscriber",
  "vergen",
@@ -6808,7 +6830,7 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "underhill_threadpool",
  "virt",
@@ -6828,7 +6850,7 @@ dependencies = [
  "pal_async",
  "pal_uring",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
 ]
 
@@ -6998,7 +7020,7 @@ dependencies = [
  "parking_lot",
  "pci_core",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "video_core",
  "vmcore",
@@ -7051,7 +7073,7 @@ dependencies = [
  "parking_lot",
  "pci_core",
  "slab",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_topology",
@@ -7074,7 +7096,7 @@ dependencies = [
  "memory_range",
  "open_enum",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "virt",
@@ -7102,7 +7124,7 @@ dependencies = [
  "parking_lot",
  "pci_core",
  "safe_x86_intrinsics",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "virt",
@@ -7131,7 +7153,7 @@ dependencies = [
  "parking_lot",
  "signal-hook",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "virt",
@@ -7174,7 +7196,7 @@ dependencies = [
  "safe_x86_intrinsics",
  "shared_pool_alloc",
  "sidecar_client",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "virt",
@@ -7197,7 +7219,7 @@ dependencies = [
  "aarch64emu",
  "guestmem",
  "hvdef",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "virt",
  "vm_topology",
@@ -7213,7 +7235,7 @@ dependencies = [
  "inspect",
  "inspect_counters",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "virt",
@@ -7241,7 +7263,7 @@ dependencies = [
  "hvdef",
  "iced-x86",
  "pal_async",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "virt",
@@ -7273,7 +7295,7 @@ dependencies = [
  "pci_core",
  "range_map_vec",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "tracing_helpers",
@@ -7311,7 +7333,7 @@ dependencies = [
  "pci_core",
  "task_control",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_resource",
@@ -7338,7 +7360,7 @@ dependencies = [
  "pal_async",
  "parking_lot",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "virtio",
  "virtio_resources",
@@ -7453,7 +7475,7 @@ dependencies = [
  "serial_16550_resources",
  "serial_core",
  "serial_pl011_resources",
- "thiserror",
+ "thiserror 2.0.0",
  "vm_resource",
  "vmotherboard",
 ]
@@ -7467,7 +7489,7 @@ dependencies = [
  "linkme",
  "mesh",
  "pal_async",
- "thiserror",
+ "thiserror 2.0.0",
 ]
 
 [[package]]
@@ -7481,7 +7503,7 @@ dependencies = [
  "memory_range",
  "mesh_protobuf",
  "safe_x86_intrinsics",
- "thiserror",
+ "thiserror 2.0.0",
  "x86defs",
 ]
 
@@ -7495,7 +7517,7 @@ dependencies = [
  "inspect",
  "open_enum",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "vmbfs_resources",
@@ -7524,7 +7546,7 @@ dependencies = [
  "inspect_counters",
  "pal_async",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.0",
  "vmbus_channel",
  "vmbus_ring",
  "zerocopy",
@@ -7545,7 +7567,7 @@ dependencies = [
  "pal_event",
  "parking_lot",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vm_resource",
@@ -7565,7 +7587,7 @@ dependencies = [
  "mesh",
  "pal_async",
  "parking_lot",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vmbus_async",
  "vmbus_channel",
@@ -7585,7 +7607,7 @@ dependencies = [
  "mesh",
  "open_enum",
  "static_assertions",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
  "zerocopy_helpers",
 ]
@@ -7669,7 +7691,7 @@ dependencies = [
  "inspect",
  "safeatomic",
  "smallvec",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -7687,7 +7709,7 @@ dependencies = [
  "pal_async",
  "serial_core",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "unix_socket",
  "vm_resource",
@@ -7708,7 +7730,7 @@ dependencies = [
  "inspect_counters",
  "serial_core",
  "task_control",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "vmbus_async",
@@ -7757,7 +7779,7 @@ dependencies = [
  "safeatomic",
  "slab",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "unicycle",
@@ -7784,7 +7806,7 @@ dependencies = [
  "parking_lot",
  "safeatomic",
  "sparse_mmap",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vmbus_async",
  "vmbus_channel",
@@ -7809,7 +7831,7 @@ dependencies = [
  "parking_lot",
  "save_restore_derive",
  "slab",
- "thiserror",
+ "thiserror 2.0.0",
  "time",
  "tracelimit",
  "tracing",
@@ -7840,7 +7862,7 @@ dependencies = [
  "openssl",
  "pal_async",
  "tempfile_helpers",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vhd1_defs",
  "vmgs_format",
@@ -7856,7 +7878,7 @@ dependencies = [
  "inspect",
  "mesh_channel",
  "pal_async",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vm_resource",
  "vmcore",
@@ -7909,7 +7931,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
- "thiserror",
+ "thiserror 2.0.0",
  "ucs2 0.0.0",
  "uefi_nvram_specvars",
  "uefi_nvram_storage",
@@ -7957,7 +7979,7 @@ dependencies = [
  "power_resources",
  "slab",
  "state_unit",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "virt",
  "virt_support_x86emu",
@@ -7999,7 +8021,7 @@ dependencies = [
  "petri_artifacts_vmm_test",
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -8079,7 +8101,7 @@ dependencies = [
  "pci_bus",
  "range_map_vec",
  "state_unit",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "uefi_nvram_storage",
@@ -8113,7 +8135,7 @@ dependencies = [
  "pal",
  "pal_async",
  "pal_event",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "widestring",
  "winapi",
@@ -8128,7 +8150,7 @@ dependencies = [
  "futures",
  "pal_async",
  "socket2",
- "thiserror",
+ "thiserror 2.0.0",
  "zerocopy",
 ]
 
@@ -8184,7 +8206,7 @@ dependencies = [
  "pci_core",
  "task_control",
  "test_with_tracing",
- "thiserror",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "vmbus_async",
@@ -8278,7 +8300,7 @@ dependencies = [
  "inspect",
  "mesh",
  "pal_async",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "vmcore",
 ]
@@ -8287,7 +8309,7 @@ dependencies = [
 name = "watchdog_vmgs_format"
 version = "0.0.0"
 dependencies = [
- "thiserror",
+ "thiserror 2.0.0",
  "vmcore",
 ]
 
@@ -8465,7 +8487,7 @@ checksum = "f6fc35f58ecd95a9b71c4f2329b911016e6bec66b3f2e6a4aad86bd2e99e2f9b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -8476,7 +8498,7 @@ checksum = "08990546bf4edef8f431fa6326e032865f27138718c587dc21bc0265bbcb57cc"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]
@@ -8683,7 +8705,7 @@ dependencies = [
  "arbitrary",
  "futures",
  "iced-x86",
- "thiserror",
+ "thiserror 2.0.0",
  "tracing",
  "x86defs",
  "zerocopy",
@@ -8761,7 +8783,7 @@ checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.48",
+ "syn 2.0.87",
 ]
 
 [[package]]

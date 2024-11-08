@@ -25,6 +25,8 @@ use crate::UhPartitionInner;
 use crate::WakeReason;
 use guestmem::GuestMemory;
 use hcl::vmsa::VmsaWrapper;
+use hv1_emulator::hv::ProcessorVtlHv;
+use hv1_emulator::synic::ProcessorSynic;
 use hv1_hypercall::HypercallIo;
 use hvdef::hypercall::HvFlushFlags;
 use hvdef::hypercall::HvGvaRange;
@@ -216,7 +218,7 @@ impl BackingPrivate for SnpBacked {
             hv_sint_notifications: 0,
             general_stats: Default::default(),
             exit_stats: Default::default(),
-            cvm: UhCvmVpState::new(),
+            cvm: UhCvmVpState::new(params.hv.unwrap()),
             shared: shared.clone(),
         })
     }
@@ -472,6 +474,22 @@ impl BackingPrivate for SnpBacked {
                     }
                 });
         });
+    }
+
+    fn hv(&self, vtl: GuestVtl) -> Option<&ProcessorVtlHv> {
+        Some(&self.cvm.hv[vtl])
+    }
+
+    fn hv_mut(&mut self, vtl: GuestVtl) -> Option<&mut ProcessorVtlHv> {
+        Some(&mut self.cvm.hv[vtl])
+    }
+
+    fn untrusted_synic(&self) -> Option<&ProcessorSynic> {
+        None
+    }
+
+    fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic> {
+        None
     }
 }
 
@@ -894,11 +912,10 @@ impl UhProcessor<'_, SnpBacked> {
 
     #[must_use]
     fn sync_lazy_eoi(&mut self, vtl: GuestVtl) -> bool {
-        if let Some(hv) = &mut self.hv[vtl] {
-            if self.backing.lapics[vtl].lapic.is_lazy_eoi_pending() {
-                return hv.set_lazy_eoi();
-            }
+        if self.backing.lapics[vtl].lapic.is_lazy_eoi_pending() {
+            return self.backing.cvm.hv[vtl].set_lazy_eoi();
         }
+
         false
     }
 
@@ -978,12 +995,7 @@ impl UhProcessor<'_, SnpBacked> {
         vmsa.v_intr_cntrl_mut().set_irq(false);
 
         // Clear lazy EOI before processing the exit.
-        if lazy_eoi
-            && self.hv[entered_from_vtl]
-                .as_mut()
-                .map(|hv| hv.clear_lazy_eoi())
-                .unwrap_or(false)
-        {
+        if lazy_eoi && self.backing.cvm.hv[entered_from_vtl].clear_lazy_eoi() {
             self.backing.lapics[entered_from_vtl]
                 .lapic
                 .access(&mut SnpApicClient {
@@ -1745,16 +1757,17 @@ impl AccessVpState for UhVpStateAccess<'_, '_, SnpBacked> {
     }
 
     fn activity(&mut self) -> Result<vp::Activity, Self::Error> {
-        let mp_state = if self.vp.backing.lapics[self.vtl].startup_suspend {
+        let lapic = &self.vp.backing.lapics[self.vtl];
+        let mp_state = if lapic.startup_suspend {
             vp::MpState::WaitForSipi
-        } else if self.vp.backing.lapics[self.vtl].halted {
+        } else if lapic.halted {
             vp::MpState::Halted
         } else {
             vp::MpState::Running
         };
         Ok(vp::Activity {
             mp_state,
-            nmi_pending: false,         // TODO SNP
+            nmi_pending: lapic.nmi_pending,
             nmi_masked: false,          // TODO SNP
             interrupt_shadow: false,    // TODO SNP
             pending_event: None,        // TODO SNP
@@ -1765,7 +1778,7 @@ impl AccessVpState for UhVpStateAccess<'_, '_, SnpBacked> {
     fn set_activity(&mut self, value: &vp::Activity) -> Result<(), Self::Error> {
         let &vp::Activity {
             mp_state,
-            nmi_pending: _,          // TODO SNP
+            nmi_pending,
             nmi_masked: _,           // TODO SNP
             interrupt_shadow: _,     // TODO SNP
             pending_event: _,        // TODO SNP
@@ -1777,8 +1790,10 @@ impl AccessVpState for UhVpStateAccess<'_, '_, SnpBacked> {
             vp::MpState::Halted => (true, false),
             vp::MpState::Idle => (false, false), // TODO SNP: idle support
         };
-        self.vp.backing.lapics[self.vtl].halted = halted;
-        self.vp.backing.lapics[self.vtl].startup_suspend = startup_suspend;
+        let lapic = &mut self.vp.backing.lapics[self.vtl];
+        lapic.halted = halted;
+        lapic.startup_suspend = startup_suspend;
+        lapic.nmi_pending = nmi_pending;
         Ok(())
     }
 

@@ -24,7 +24,6 @@ use crate::validate_vtl_gpa_flags;
 use crate::Error;
 use crate::GuestVsmState;
 use crate::GuestVsmVtl1State;
-use crate::GuestVsmVtl1StateInner;
 use crate::GuestVtl;
 use crate::UhPartitionInner;
 use crate::WakeReason;
@@ -33,6 +32,8 @@ use hcl::ioctl::x64::MshvX64;
 use hcl::ioctl::ApplyVtlProtectionsError;
 use hcl::ioctl::ProcessorRunner;
 use hcl::protocol;
+use hv1_emulator::hv::ProcessorVtlHv;
+use hv1_emulator::synic::ProcessorSynic;
 use hvdef::hypercall;
 use hvdef::HvDeliverabilityNotificationsRegister;
 use hvdef::HvError;
@@ -90,7 +91,7 @@ use zerocopy::FromZeroes;
 #[derive(InspectMut)]
 pub struct HypervisorBackedX86 {
     pub(super) lapics: Option<VtlArray<LapicState, 2>>,
-    nmi_pending: VtlArray<bool, 2>,
+    hv: Option<VtlArray<ProcessorVtlHv, 2>>,
     // TODO WHP GUEST VSM: To be completely correct here, when emulating the APICs
     // we would need two sets of deliverability notifications too. However currently
     // we don't support VTL 1 on WHP, and on the hypervisor we don't emulate the APIC,
@@ -159,7 +160,7 @@ impl BackingPrivate for HypervisorBackedX86 {
 
         Ok(Self {
             lapics,
-            nmi_pending: VtlArray::new(false),
+            hv: params.hv,
             deliverability_notifications: Default::default(),
             next_deliverability_notifications: Default::default(),
             stats: Default::default(),
@@ -320,8 +321,8 @@ impl BackingPrivate for HypervisorBackedX86 {
             interrupt,
         } = lapic.lapic.scan(&mut this.vmtime, scan_irr);
 
-        if nmi || this.backing.nmi_pending[vtl] {
-            this.backing.nmi_pending[vtl] = true;
+        if nmi || lapic.nmi_pending {
+            lapic.nmi_pending = true;
             this.handle_nmi(vtl)?;
         }
 
@@ -372,6 +373,22 @@ impl BackingPrivate for HypervisorBackedX86 {
         _target_vtl: GuestVtl,
     ) {
         unreachable!("vtl switching should be managed by the hypervisor");
+    }
+
+    fn hv(&self, vtl: GuestVtl) -> Option<&ProcessorVtlHv> {
+        self.hv.as_ref().map(|arr| &arr[vtl])
+    }
+
+    fn hv_mut(&mut self, vtl: GuestVtl) -> Option<&mut ProcessorVtlHv> {
+        self.hv.as_mut().map(|arr| &mut arr[vtl])
+    }
+
+    fn untrusted_synic(&self) -> Option<&ProcessorSynic> {
+        None
+    }
+
+    fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic> {
+        None
     }
 }
 
@@ -1019,8 +1036,9 @@ impl UhProcessor<'_, HypervisorBackedX86> {
             )
             .map_err(UhRunVpError::EmulationState)?;
 
-        self.backing.lapics.as_mut().unwrap()[vtl].halted = false;
-        self.backing.nmi_pending[vtl] = false;
+        let lapic = &mut self.backing.lapics.as_mut().unwrap()[vtl];
+        lapic.halted = false;
+        lapic.nmi_pending = false;
 
         tracing::trace!("nmi");
 
@@ -1160,19 +1178,15 @@ impl UhProcessor<'_, HypervisorBackedX86> {
             GuestVsmState::NotGuestEnabled => {
                 // TODO: check status
                 *guest_vsm_lock = GuestVsmState::Enabled {
-                    vtl1: GuestVsmVtl1State {
-                        enable_vtl_protection: false,
-                        inner: GuestVsmVtl1StateInner::SoftwareCvm {
-                            state: Default::default(),
-                        },
+                    vtl1: GuestVsmVtl1State::VbsIsolated {
+                        state: Default::default(),
                     },
                 };
             }
             GuestVsmState::Enabled { vtl1: _ } => {}
         }
 
-        let guest_vsm = guest_vsm_lock.get_vtl1_mut().unwrap();
-        let guest_vsm_inner = guest_vsm.inner.get_software_cvm_mut().unwrap();
+        let guest_vsm = guest_vsm_lock.get_vbs_isolated_mut().unwrap();
         let protections = HvMapGpaFlags::from(value.default_vtl_protection_mask() as u32);
 
         if value.reserved() != 0 {
@@ -1212,12 +1226,12 @@ impl UhProcessor<'_, HypervisorBackedX86> {
         }
 
         // Don't allow changing existing protections once set.
-        if let Some(current_protections) = guest_vsm_inner.default_vtl_protections {
+        if let Some(current_protections) = guest_vsm.default_vtl_protections {
             if protections != current_protections {
                 return Err(HvError::InvalidRegisterValue);
             }
         }
-        guest_vsm_inner.default_vtl_protections = Some(protections);
+        guest_vsm.default_vtl_protections = Some(protections);
 
         for ram_range in self.partition.lower_vtl_memory_layout.ram().iter() {
             self.partition
@@ -1896,6 +1910,65 @@ impl<T> hv1_hypercall::SetVpRegisters for UhHypercallHandler<'_, '_, T, Hypervis
                     .map_err(|e| (e, i))?;
             } else {
                 return Err((HvError::InvalidParameter, i));
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl<T> hv1_hypercall::ModifyVtlProtectionMask
+    for UhHypercallHandler<'_, '_, T, HypervisorBackedX86>
+{
+    fn modify_vtl_protection_mask(
+        &mut self,
+        partition_id: u64,
+        _map_flags: HvMapGpaFlags,
+        target_vtl: Option<Vtl>,
+        gpa_pages: &[u64],
+    ) -> hvdef::HvRepResult {
+        if partition_id != hvdef::HV_PARTITION_ID_SELF {
+            return Err((HvError::AccessDenied, 0));
+        }
+
+        let target_vtl = self
+            .target_vtl_no_higher(target_vtl.unwrap_or(self.intercepted_vtl.into()))
+            .map_err(|e| (e, 0))?;
+        if target_vtl == GuestVtl::Vtl0 {
+            return Err((HvError::InvalidParameter, 0));
+        }
+
+        // A VTL cannot change its own VTL permissions until it has enabled VTL protection and
+        // configured default permissions. Higher VTLs are not under this restriction (as they may
+        // need to apply default permissions before VTL protection is enabled).
+        if target_vtl == self.intercepted_vtl {
+            if !self
+                .vp
+                .partition
+                .guest_vsm
+                .read()
+                .get_vbs_isolated()
+                .ok_or((HvError::AccessDenied, 0))?
+                .enable_vtl_protection
+            {
+                return Err((HvError::AccessDenied, 0));
+            }
+        }
+
+        // TODO VBS GUEST VSM: verify this logic is correct
+        // TODO VBS GUEST VSM: validation on map_flags, similar to default
+        // protections mask changes
+        // Can receive an intercept on adjust permissions, and for isolated
+        // VMs if the page is unaccepted
+        if self.vp.partition.isolation.is_isolated() {
+            return Err((HvError::OperationDenied, 0));
+        } else {
+            if !gpa_pages.is_empty() {
+                if !self.vp.partition.is_gpa_lower_vtl_ram(gpa_pages[0]) {
+                    return Err((HvError::OperationDenied, 0));
+                } else {
+                    panic!("Should not be handling this hypercall for guest ram");
+                }
             }
         }
 

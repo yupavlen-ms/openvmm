@@ -19,6 +19,7 @@ cfg_if::cfg_if!(
         pub use processor::tdx::TdxBacked;
         pub use crate::processor::mshv::x64::HypervisorBackedX86 as HypervisorBacked;
         use devmsr::MsrDevice;
+        use hv1_emulator::hv::ProcessorVtlHv;
         use processor::snp::SnpBackedShared;
         use processor::tdx::TdxBackedShared;
         use std::arch::x86_64::CpuidResult;
@@ -309,15 +310,18 @@ pub struct UhCvmVpState {
     vtls_tlb_waiting: VtlArray<bool, 2>,
     /// Used in VTL 2 exit code to determine which VTL to exit to.
     exit_vtl: GuestVtl,
+    /// Hypervisor enlightenment emulator state.
+    hv: VtlArray<ProcessorVtlHv, 2>,
 }
 
 #[cfg(guest_arch = "x86_64")]
 impl UhCvmVpState {
     /// Creates a new CVM VP state.
-    pub fn new() -> Self {
+    pub fn new(hv: VtlArray<ProcessorVtlHv, 2>) -> Self {
         Self {
             vtls_tlb_waiting: VtlArray::new(false),
             exit_vtl: GuestVtl::Vtl0,
+            hv,
         }
     }
 }
@@ -357,61 +361,53 @@ enum GuestVsmState {
 
 impl GuestVsmState {
     #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
-    fn get_vtl1_mut(&mut self) -> Option<&mut GuestVsmVtl1State> {
+    fn get_vbs_isolated(&self) -> Option<&VbsIsolatedVtl1State> {
         match self {
-            GuestVsmState::Enabled { vtl1 } => Some(vtl1),
+            GuestVsmState::Enabled {
+                vtl1: GuestVsmVtl1State::VbsIsolated { state },
+            } => Some(state),
+
             _ => None,
         }
     }
 
     #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
-    fn get_vtl1(&self) -> Option<&GuestVsmVtl1State> {
+    fn get_vbs_isolated_mut(&mut self) -> Option<&mut VbsIsolatedVtl1State> {
         match self {
-            GuestVsmState::Enabled { vtl1 } => Some(vtl1),
+            GuestVsmState::Enabled {
+                vtl1: GuestVsmVtl1State::VbsIsolated { state },
+            } => Some(state),
+
             _ => None,
         }
     }
-}
 
-#[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
-#[derive(Clone, Copy, Inspect)]
-/// Partition-wide guest vsm state for vtl 1. Only applies to CVMs.
-struct GuestVsmVtl1State {
-    enable_vtl_protection: bool,
-    inner: GuestVsmVtl1StateInner,
+    #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
+    fn get_hardware_cvm_mut(&mut self) -> Option<&mut HardwareCvmVtl1State> {
+        match self {
+            GuestVsmState::Enabled {
+                vtl1: GuestVsmVtl1State::HardwareCvm { state },
+            } => Some(state),
+
+            _ => None,
+        }
+    }
 }
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
 #[derive(Clone, Copy, Inspect)]
 #[inspect(external_tag)]
-enum GuestVsmVtl1StateInner {
+enum GuestVsmVtl1State {
     HardwareCvm { state: HardwareCvmVtl1State },
-    SoftwareCvm { state: SoftwareCvmVtl1State },
-}
-
-#[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
-impl GuestVsmVtl1StateInner {
-    fn get_software_cvm_mut(&mut self) -> Option<&mut SoftwareCvmVtl1State> {
-        match self {
-            GuestVsmVtl1StateInner::SoftwareCvm { state } => Some(state),
-            _ => None,
-        }
-    }
-
-    fn get_hardware_cvm_mut(&mut self) -> Option<&mut HardwareCvmVtl1State> {
-        match self {
-            GuestVsmVtl1StateInner::HardwareCvm { state } => Some(state),
-            _ => None,
-        }
-    }
+    VbsIsolated { state: VbsIsolatedVtl1State },
 }
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
 #[derive(Clone, Copy, Default, Inspect)]
-struct SoftwareCvmVtl1State {
-    // TODO: inspect
-    #[inspect(skip)]
+struct VbsIsolatedVtl1State {
+    #[inspect(with = "|flags| flags.map(|f| inspect::AsHex(u32::from(f)))")]
     default_vtl_protections: Option<HvMapGpaFlags>,
+    enable_vtl_protection: bool,
 }
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
@@ -1210,6 +1206,14 @@ pub trait ProtectIsolatedMemory: Send + Sync {
 
     /// Disables the overlay for the hypercall code page for a target VTL.
     fn disable_hypercall_overlay(&self, vtl: GuestVtl);
+
+    /// Alerts the memory protector that vtl 1 is ready to set vtl protections
+    /// on lower-vtl memory, and that these protections should be enforced.
+    fn set_vtl1_protections_enabled(&self);
+
+    /// Whether VTL 1 is prepared to modify vtl protections on lower-vtl memory,
+    /// and therefore whether these protections should be enforced.
+    fn vtl1_protections_enabled(&self) -> bool;
 }
 
 /// A partially built partition. Used to allow querying partition capabilities

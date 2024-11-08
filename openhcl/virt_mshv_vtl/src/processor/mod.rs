@@ -37,9 +37,7 @@ use crate::GuestVtl;
 use crate::WakeReason;
 use hcl::ioctl;
 use hcl::ioctl::ProcessorRunner;
-use hv1_emulator::hv::ProcessorVtlHv;
 use hv1_emulator::message_queues::MessageQueues;
-use hv1_emulator::synic::ProcessorSynic;
 use hvdef::hypercall::HostVisibilityType;
 use hvdef::HvError;
 use hvdef::HvMessage;
@@ -96,8 +94,6 @@ pub struct UhProcessor<'a, T: Backing> {
     crash_reg: [u64; hvdef::HV_X64_GUEST_CRASH_PARAMETER_MSRS],
     #[inspect(with = "|x| inspect::AsHex(u64::from(*x))")]
     crash_control: hvdef::GuestCrashCtl,
-    hv: VtlArray<Option<ProcessorVtlHv>, 2>,
-    untrusted_synic: Option<ProcessorSynic>,
     vmtime: VmTimeAccess,
     #[inspect(skip)]
     timer: PollImpl<dyn PollTimer>,
@@ -154,6 +150,7 @@ pub struct LapicState {
     lapic: LocalApic,
     halted: bool,
     startup_suspend: bool,
+    nmi_pending: bool,
 }
 
 mod private {
@@ -165,6 +162,8 @@ mod private {
     use crate::GuestVtl;
     use crate::UhPartitionInner;
     use hcl::ioctl::ProcessorRunner;
+    use hv1_emulator::hv::ProcessorVtlHv;
+    use hv1_emulator::synic::ProcessorSynic;
     use inspect::InspectMut;
     use std::future::Future;
     use virt::io::CpuIo;
@@ -172,11 +171,13 @@ mod private {
     use virt::StopVp;
     use virt::VpHaltReason;
     use vm_topology::processor::TargetVpInfo;
+    use vtl_array::VtlArray;
 
     pub struct BackingParams<'a, 'b, T: BackingPrivate> {
         pub(crate) partition: &'a UhPartitionInner,
         #[cfg(guest_arch = "x86_64")]
-        pub(crate) lapics: Option<vtl_array::VtlArray<super::LapicState, 2>>,
+        pub(crate) lapics: Option<VtlArray<super::LapicState, 2>>,
+        pub(crate) hv: Option<VtlArray<ProcessorVtlHv, 2>>,
         pub(crate) vp_info: &'a TargetVpInfo,
         pub(crate) runner: &'a mut ProcessorRunner<'b, T::HclBacking>,
         pub(crate) backing_shared: &'a BackingShared,
@@ -240,6 +241,12 @@ mod private {
         }
 
         fn inspect_extra(_this: &mut UhProcessor<'_, Self>, _resp: &mut inspect::Response<'_>) {}
+
+        fn hv(&self, vtl: GuestVtl) -> Option<&ProcessorVtlHv>;
+        fn hv_mut(&mut self, vtl: GuestVtl) -> Option<&mut ProcessorVtlHv>;
+
+        fn untrusted_synic(&self) -> Option<&ProcessorSynic>;
+        fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic>;
     }
 }
 
@@ -455,12 +462,12 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
 
     fn update_synic(&mut self, vtl: GuestVtl, untrusted_synic: bool) {
         loop {
-            let hv = self.hv[vtl].as_mut().unwrap();
+            let hv = self.backing.hv_mut(vtl).unwrap();
 
             let ref_time_now = hv.ref_time_now();
             let synic = if untrusted_synic {
                 debug_assert_eq!(vtl, GuestVtl::Vtl0);
-                self.untrusted_synic.as_mut().unwrap()
+                self.backing.untrusted_synic_mut().unwrap()
             } else {
                 &mut hv.synic
             };
@@ -654,13 +661,13 @@ impl<'p, T: Backing> Processor for UhProcessor<'p, T> {
                     [false, false].into()
                 };
 
-                if self.untrusted_synic.is_some() {
+                if self.backing.untrusted_synic().is_some() {
                     self.update_synic(GuestVtl::Vtl0, true);
                 }
 
                 for vtl in [GuestVtl::Vtl1, GuestVtl::Vtl0] {
                     // Process interrupts.
-                    if self.hv[vtl].is_some() {
+                    if self.backing.hv(vtl).is_some() {
                         self.update_synic(vtl, false);
                     }
 
@@ -769,6 +776,7 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
                 let state = LapicState {
                     lapic,
                     halted: false,
+                    nmi_pending: false,
                     startup_suspend: first && !vp_info.base.is_bsp(),
                 };
                 first = false;
@@ -777,30 +785,21 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             lapic_states.into()
         });
 
+        let hv = partition.hv.as_ref().map(|hv| {
+            VtlArray::from_fn(|vtl| {
+                hv.add_vp(partition.gm[vtl].clone(), vp_info.base.vp_index, vtl)
+            })
+        });
+
         let backing = T::new(private::BackingParams {
             partition,
             #[cfg(guest_arch = "x86_64")]
             lapics,
+            hv,
             vp_info: &vp_info,
             runner: &mut runner,
             backing_shared,
         })?;
-
-        let hv = {
-            let vtl0_hv = partition.hv.as_ref().map(|hv| {
-                hv.add_vp(
-                    partition.gm[GuestVtl::Vtl0].clone(),
-                    vp_info.base.vp_index,
-                    Vtl::Vtl0,
-                )
-            });
-            VtlArray::from([vtl0_hv, None])
-        };
-
-        let untrusted_synic = partition
-            .untrusted_synic
-            .as_ref()
-            .map(|synic| synic.add_vp(vp_info.base.vp_index));
 
         let mut vp = Self {
             partition,
@@ -812,8 +811,6 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             crash_control: hvdef::GuestCrashCtl::new()
                 .with_crash_notify(true)
                 .with_crash_message(true),
-            hv,
-            untrusted_synic,
             _not_send: PhantomData,
             backing,
             vmtime: partition
@@ -852,7 +849,7 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
                         if pending_sints & (1 << sint) == 0 {
                             continue;
                         }
-                        let sint_msr = if let Some(hv) = self.hv[vtl].as_ref() {
+                        let sint_msr = if let Some(hv) = self.backing.hv(vtl).as_ref() {
                             hv.synic.sint(sint)
                         } else {
                             #[cfg(guest_arch = "x86_64")]
@@ -895,20 +892,8 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
 
                     if vtl == GuestVtl::Vtl1 {
                         assert!(self.partition.isolation.is_hardware_isolated());
-                        // Should not have already initialized the hv emulator for this vtl
-                        assert!(self.hv[vtl].is_none());
-
-                        self.hv[vtl] = Some(
-                            self.partition
-                                .hv
-                                .as_ref()
-                                .expect("has an hv emulator")
-                                .add_vp(
-                                    self.partition.gm[GuestVtl::Vtl1].clone(),
-                                    self.vp_index(),
-                                    Vtl::Vtl1,
-                                ),
-                        );
+                        // Should have already initialized the hv emulator for this vtl
+                        assert!(self.backing.hv(vtl).is_some());
 
                         // TODO CVM GUEST VSM: Revisit during AP startup if we need to exit to VTL 1 here
                     }
@@ -925,7 +910,7 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
         }
 
         // Send the SINT notifications to the local synic for non-proxied SINTs.
-        let untrusted_sints = if let Some(hv) = &mut self.hv[vtl] {
+        let untrusted_sints = if let Some(hv) = self.backing.hv_mut(vtl).as_mut() {
             let proxied_sints = hv.synic.proxied_sints();
             hv.synic.request_sint_readiness(sints & !proxied_sints);
             proxied_sints
@@ -945,7 +930,7 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
     #[cfg(guest_arch = "x86_64")]
     fn write_msr(&mut self, msr: u32, value: u64, vtl: GuestVtl) -> Result<(), MsrError> {
         if msr & 0xf0000000 == 0x40000000 {
-            if let Some(hv) = self.hv[vtl].as_mut() {
+            if let Some(hv) = self.backing.hv_mut(vtl).as_mut() {
                 let r = hv.msr_write(msr, value);
                 if !matches!(r, Err(MsrError::Unknown)) {
                     return r;
@@ -981,7 +966,7 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
     #[cfg(guest_arch = "x86_64")]
     fn read_msr(&mut self, msr: u32, vtl: GuestVtl) -> Result<u64, MsrError> {
         if msr & 0xf0000000 == 0x40000000 {
-            if let Some(hv) = self.hv[vtl].as_ref() {
+            if let Some(hv) = self.backing.hv(vtl).as_ref() {
                 let r = hv.msr_read(msr);
                 if !matches!(r, Err(MsrError::Unknown)) {
                     return r;
@@ -1062,13 +1047,15 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
     }
 
     fn deliver_synic_messages(&mut self, vtl: GuestVtl, sints: u16) {
-        let proxied_sints = self.hv[vtl]
+        let proxied_sints = self
+            .backing
+            .hv(vtl)
             .as_ref()
             .map_or(!0, |hv| hv.synic.proxied_sints());
         let pending_sints =
             self.inner.message_queues[vtl].post_pending_messages(sints, |sint, message| {
                 if proxied_sints & (1 << sint) != 0 {
-                    if let Some(synic) = &mut self.untrusted_synic {
+                    if let Some(synic) = self.backing.untrusted_synic_mut().as_mut() {
                         synic.post_message(
                             &self.partition.gm[vtl],
                             sint,
@@ -1085,14 +1072,19 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
                         )
                     }
                 } else {
-                    self.hv[vtl].as_mut().unwrap().synic.post_message(
-                        &self.partition.gm[vtl],
-                        sint,
-                        message,
-                        &mut self
-                            .partition
-                            .synic_interrupt(self.inner.vp_info.base.vp_index, vtl),
-                    )
+                    self.backing
+                        .hv_mut(vtl)
+                        .as_mut()
+                        .unwrap()
+                        .synic
+                        .post_message(
+                            &self.partition.gm[vtl],
+                            sint,
+                            message,
+                            &mut self
+                                .partition
+                                .synic_interrupt(self.inner.vp_info.base.vp_index, vtl),
+                        )
                 }
             });
 
@@ -1365,91 +1357,6 @@ impl<T: CpuIo, B: Backing> hv1_hypercall::ModifySparseGpaPageHostVisibility
             .as_ref()
             .ok_or((HvError::AccessDenied, 0))?
             .change_host_visibility(shared, gpa_pages)
-    }
-}
-
-impl<T: CpuIo, B: Backing> hv1_hypercall::ModifyVtlProtectionMask
-    for UhHypercallHandler<'_, '_, T, B>
-{
-    fn modify_vtl_protection_mask(
-        &mut self,
-        partition_id: u64,
-        map_flags: hvdef::HvMapGpaFlags,
-        target_vtl: Option<Vtl>,
-        gpa_pages: &[u64],
-    ) -> hvdef::HvRepResult {
-        if partition_id != hvdef::HV_PARTITION_ID_SELF {
-            return Err((HvError::AccessDenied, 0));
-        }
-
-        if let Some(vtl) = target_vtl {
-            let _target_vtl = self.target_vtl_no_higher(vtl).map_err(|e| (e, 0))?;
-        }
-
-        let target_vtl = GuestVtl::try_from(target_vtl.unwrap_or(self.intercepted_vtl.into()))
-            .map_err(|_| (HvError::InvalidParameter, 0))?;
-        if target_vtl == GuestVtl::Vtl0 {
-            return Err((HvError::InvalidParameter, 0));
-        }
-
-        // A VTL cannot change its own VTL permissions until it has enabled VTL protection and
-        // configured default permissions. Higher VTLs are not under this restriction (as they may
-        // need to apply default permissions before VTL protection is enabled).
-        if target_vtl == self.intercepted_vtl {
-            if let Some(guest_vsm) = self.vp.partition.guest_vsm.read().get_vtl1() {
-                if !guest_vsm.enable_vtl_protection {
-                    return Err((HvError::AccessDenied, 0));
-                }
-            } else {
-                return Err((HvError::AccessDenied, 0));
-            }
-        }
-
-        if self.vp.partition.isolation.is_hardware_isolated() {
-            // VTL 1 mut be enabled already.
-            let mut guest_vsm_lock = self.vp.partition.guest_vsm.write();
-            let guest_vsm = guest_vsm_lock
-                .get_vtl1_mut()
-                .ok_or((HvError::InvalidVtlState, 0))?;
-            let guest_vsm_inner = guest_vsm.inner.get_hardware_cvm_mut().unwrap();
-
-            if !crate::validate_vtl_gpa_flags(
-                map_flags,
-                guest_vsm_inner.mbec_enabled,
-                guest_vsm_inner.shadow_supervisor_stack_enabled,
-            ) {
-                return Err((HvError::InvalidRegisterValue, 0));
-            }
-
-            // The contract for VSM is that the VTL protections describe what
-            // the lower VTLs are allowed to access. Hardware CVMs set the
-            // protections on the VTL itself. Therefore, for a hardware CVM,
-            // given that only VTL 1 can set the protections, the default
-            // permissions should be changed for VTL 0.
-            self.vp
-                .partition
-                .isolated_memory_protector
-                .as_ref()
-                .expect("has a memory protector")
-                .change_vtl_protections(GuestVtl::Vtl0, gpa_pages, map_flags)?;
-        } else {
-            // TODO VBS GUEST VSM: verify this logic is correct
-            // TODO VBS GUEST VSM: validation on map_flags, similar to default
-            // protections mask changes
-            // Can receive an intercept on adjust permissions, and for isolated
-            // VMs if the page is unaccepted
-            if self.vp.partition.isolation.is_isolated() {
-                return Err((HvError::OperationDenied, 0));
-            } else {
-                if !gpa_pages.is_empty() && !self.vp.partition.is_gpa_lower_vtl_ram(gpa_pages[0]) {
-                    return Err((HvError::OperationDenied, 0));
-                } else {
-                    panic!("Should not be handling this hypercall for guest ram");
-                }
-            }
-        }
-
-        Ok(())
     }
 }
 
