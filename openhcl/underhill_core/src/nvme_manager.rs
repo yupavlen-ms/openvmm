@@ -98,6 +98,7 @@ impl NvmeManager {
         nvme_keepalive: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
+        tracing::info!("YSP: NvmeManager::new keepalive={}", nvme_keepalive);
         let (send, recv) = mesh::channel();
         let driver = driver_source.simple();
         let mut worker = NvmeManagerWorker {
@@ -134,13 +135,11 @@ impl NvmeManager {
     }
 
     pub async fn shutdown(self) {
-        // Early return would be the fastest way to skip shutdown.
-        // Unfortunately, then there is no good way to prevent
-        // controller reset in the drop() fn if we early return here.
-        // YSP: FIXME: Figure out how to prevent reset in drop() function.
+        // Early return is faster way to skip shutdown.
+        // but we need to thoroughly test the data integrity.
         if self.nvme_keepalive {
-            tracing::info!("YSP: skip shutdown");
-            return;
+            tracing::info!("YSP: FIXME: NO skip shutdown");
+            // return;
         }
         self.client.sender.send(Request::Shutdown {
             span: tracing::info_span!("shutdown_nvme_manager"),
@@ -179,8 +178,9 @@ impl NvmeManager {
         Ok(())
     }
 
-    /// Control servicing behavior: to keep the attached device intact or not.
-    pub fn set_nvme_keepalive(&mut self, nvme_keepalive: bool) {
+    /// Override (explicitly disable) the default behavior.
+    pub fn override_nvme_keepalive_flag(&mut self, nvme_keepalive: bool) {
+        tracing::info!("YSP: Override nvme_keepalive = {}", nvme_keepalive);
         self.nvme_keepalive = nvme_keepalive;
     }
 }
@@ -280,7 +280,8 @@ impl NvmeManagerWorker {
                     span,
                     nvme_keepalive,
                 } => {
-                    self.nvme_keepalive = nvme_keepalive;
+                    // YSP: FIXME: Disabled - not sure if needed. Remove?
+                    // self.nvme_keepalive = nvme_keepalive;
                     // Update the flag for all connected devices.
                     for (_s, dev) in self.devices.iter_mut() {
                         // Prevent devices from originating controller reset in drop().
@@ -327,7 +328,6 @@ impl NvmeManagerWorker {
                         .instrument(tracing::info_span!("vfio_device_open", pci_id))
                         .await
                         .map_err(InnerError::Vfio)?;
-
 
                 let driver =
                     nvme_driver::NvmeDriver::new(&self.driver_source, self.vp_count, device)
