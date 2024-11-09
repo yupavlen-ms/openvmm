@@ -111,13 +111,9 @@ impl NvmeManager {
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
             if saved_state.is_some() {
-                let _ = NvmeManager::restore(
-                    &mut worker,
-                    dma_buffer.clone(),
-                    saved_state.as_ref().unwrap(),
-                )
-                .instrument(tracing::info_span!("nvme_manager_restore"))
-                .await;
+                let _ = NvmeManager::restore(&mut worker, saved_state.as_ref().unwrap())
+                    .instrument(tracing::info_span!("nvme_manager_restore"))
+                    .await;
             };
             worker.run(recv).await
         });
@@ -166,10 +162,10 @@ impl NvmeManager {
     /// Restore NVMe manager's state after servicing.
     async fn restore(
         worker: &mut NvmeManagerWorker,
-        dma_buffer: Arc<dyn VfioDmaBuffer>,
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManager::restore");
+        let dma_buffer = worker.dma_buffer.clone();
         worker
             .restore(dma_buffer, &saved_state.nvme_state)
             .instrument(tracing::info_span!("nvme_worker_restore"))
@@ -408,7 +404,6 @@ impl NvmeManagerWorker {
             let nvme_driver = nvme_driver::NvmeDriver::restore(
                 &self.driver_source,
                 saved_state.cpu_count,
-                dma_buffer.clone(),
                 vfio_device,
                 &disk.driver_state,
             )

@@ -11,6 +11,7 @@ use crate::interrupt::DeviceInterruptSource;
 use crate::memory::MemoryBlock;
 use crate::DeviceBacking;
 use crate::DeviceRegisterIo;
+use crate::HostDmaAllocator;
 use anyhow::Context;
 use futures::FutureExt;
 use futures_concurrency::future::Race;
@@ -193,6 +194,7 @@ impl DeviceBacking for VfioDevice {
     }
 
     fn host_allocator(&self) -> Self::DmaAllocator {
+        tracing::info!("YSP: host_allocator A");
         LockedMemoryAllocator {
             dma_buffer: self.dma_buffer.clone(),
         }
@@ -489,9 +491,15 @@ pub struct LockedMemoryAllocator {
     dma_buffer: Arc<dyn VfioDmaBuffer>,
 }
 
-impl crate::HostDmaAllocator for LockedMemoryAllocator {
+impl HostDmaAllocator for LockedMemoryAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
-        tracing::info!("YSP: allocate_dma_buffer {}", len);
+        tracing::info!("YSP: WRONG allocate_dma_buffer {}", len);
         self.dma_buffer.create_dma_buffer(len)
+    }
+
+    fn attach_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG attach_dma_buffer len={} pfn[0]={:X}", len, pfns[0]);
+        // Return error 'Not supported'?
+        self.dma_buffer.restore_dma_buffer(len, pfns)
     }
 }

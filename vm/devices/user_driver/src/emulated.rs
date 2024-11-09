@@ -247,6 +247,11 @@ impl HostDmaAllocator for EmulatedDmaAllocator {
             self.shared_mem.alloc(len).context("out of memory")?,
         ))
     }
+
+    fn attach_dma_buffer(&self, len: usize, _pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
+        // For emulated allocator (unit tests) reuse the regular alloc.
+        self.allocate_dma_buffer(len)
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -280,6 +285,7 @@ impl<T: 'static + Send + InspectMut + MmioIntercept> DeviceBacking for EmulatedD
 
     /// Returns an object that can allocate host memory to be shared with the device.
     fn host_allocator(&self) -> Self::DmaAllocator {
+        tracing::info!("YSP: host_allocator B");
         EmulatedDmaAllocator {
             shared_mem: self.shared_mem.clone(),
         }

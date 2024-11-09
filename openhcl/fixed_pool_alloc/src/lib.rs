@@ -20,6 +20,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDmaBuffer;
+use user_driver::HostDmaAllocator;
 
 /// Error returned when unable to allocate memory.
 #[derive(Debug, Error)]
@@ -212,6 +213,7 @@ impl FixedPoolAllocator {
     }
 }
 
+#[cfg(feature = "vfio")]
 impl VfioDmaBuffer for FixedPoolAllocator {
     /// Create new DMA buffer in heap memory.
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
@@ -325,6 +327,18 @@ impl VfioDmaBuffer for FixedPoolAllocator {
             _alloc: alloc,
             pfns,
         }))
+    }
+}
+
+impl HostDmaAllocator for FixedPoolAllocator {
+    fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT allocate_dma_buffer {}", len);
+        self.create_dma_buffer(len)
+    }
+
+    fn attach_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT attach_dma_buffer len={} pfn[0]={:X}", len, pfns[0]);
+        self.restore_dma_buffer(len, pfns)
     }
 }
 
