@@ -911,7 +911,7 @@ mod tests {
                 mmio_size: 0x2000,
             },
             isolation: IsolationType::Vbs,
-            dma_preserve_ranges: vec![MemoryRange::new(0x1E000..0x20000)],
+            dma_preserve_ranges: vec![],
         };
 
         let dt = build_dt(&orig_info).unwrap();
