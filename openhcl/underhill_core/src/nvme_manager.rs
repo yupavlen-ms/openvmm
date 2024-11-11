@@ -414,6 +414,7 @@ impl NvmeManagerWorker {
             self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
         tracing::info!("YSP: NvmeManagerWorker::restore - done");
+
         Ok(())
     }
 }
