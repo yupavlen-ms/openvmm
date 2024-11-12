@@ -88,9 +88,6 @@ impl Namespace {
                 .await
                 .map_err(NamespaceError::Request)?,
         };
-        //let identify = identify_namespace(&admin, nsid)
-        //    .await
-        //    .map_err(NamespaceError::Request)?;
         if identify.nsze == 0 {
             return Err(NamespaceError::NotFound);
         }

@@ -8,7 +8,6 @@ use crate::driver::save_restore::CompletionQueueSavedState;
 use crate::driver::save_restore::SubmissionQueueSavedState;
 use crate::registers::DeviceRegisters;
 use inspect::Inspect;
-use mesh::payload::Protobuf;
 use user_driver::memory::MemoryBlock;
 use user_driver::DeviceBacking;
 
@@ -98,7 +97,6 @@ impl SubmissionQueue {
             saved_state.tail,
             saved_state.committed_tail,
         );
-
         // YSP: TODO: See if we can create object here instead.
 
         self.sqid = saved_state.sqid;
@@ -173,7 +171,6 @@ impl CompletionQueue {
             self.committed_head,
             self.phase,
         );
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         self.mem.read_at(0, checker.as_mut_slice());
@@ -209,7 +206,6 @@ impl CompletionQueue {
             saved_state.committed_head,
             saved_state.phase,
         );
-
         // YSP: TODO: See if we can create object here instead.
 
         self.cqid = saved_state.cqid;
@@ -219,7 +215,6 @@ impl CompletionQueue {
         self.phase = saved_state.phase;
 
         // YSP: FIXME: Restore memory block.
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         self.mem.read_at(0, checker.as_mut_slice());

@@ -154,16 +154,15 @@ pub async fn request_vmgs_encryption_keys(
             Ok(WrappedKeyVmgsEncryptionKeys {
                 rsa_aes_wrapped_key: _,
                 wrapped_des_key: _,
-            }) if i == (max_retry - 1) => break,
+            }) if i == (max_retry - 1) => {
+                tracing::error!("VMGS key-encryption failed after max number of attempts");
+                break;
+            }
             Ok(WrappedKeyVmgsEncryptionKeys {
                 rsa_aes_wrapped_key: _,
                 wrapped_des_key: _,
             }) => {
-                tracing::warn!(
-                    CVM_ALLOWED,
-                    retry = i,
-                    "VMGS key-encryption key is not released"
-                )
+                tracing::warn!(CVM_ALLOWED, retry = i, "Failed to get VMGS key-encryption")
             }
             Err(e) if i == (max_retry - 1) => Err(e)?,
             Err(e) => {
@@ -171,7 +170,7 @@ pub async fn request_vmgs_encryption_keys(
                     CVM_ALLOWED,
                     retry = i,
                     error = &e as &dyn std::error::Error,
-                    "VMGS key-encryption key request failed",
+                    "VMGS key-encryption key request failed due to error",
                 )
             }
         }
@@ -186,7 +185,11 @@ pub async fn request_vmgs_encryption_keys(
                 .map_err(RequestVmgsEncryptionKeysError::Pkcs11RsaAesKeyUnwrap)?,
         )
     } else {
-        tracing::warn!(CVM_ALLOWED, "tenant vmgs ingress key is not released");
+        tracing::error!(CVM_ALLOWED, "failed to unwrap VMGS key-encryption key");
+
+        get.event_log_fatal(guest_emulation_transport::api::EventLogId::KEY_NOT_RELEASED)
+            .await;
+
         None
     };
 

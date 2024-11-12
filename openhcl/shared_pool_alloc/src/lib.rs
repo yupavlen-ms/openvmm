@@ -19,7 +19,6 @@ use parking_lot::Mutex;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use thiserror::Error;
-use user_driver::memory::MemoryBlock;
 use vm_topology::memory::MemoryRangeWithNode;
 
 /// Error returned when unable to allocate memory.
@@ -234,7 +233,7 @@ impl SharedPoolAllocator {
 
 #[cfg(feature = "vfio")]
 impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
-    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+    fn create_dma_buffer(&self, len: usize) -> anyhow::Result<user_driver::memory::MemoryBlock> {
         tracing::info!("YSP: SharedPoolAllocator::create_dma_buffer");
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
@@ -270,19 +269,19 @@ impl user_driver::vfio::VfioDmaBuffer for SharedPoolAllocator {
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
 
-        Ok(MemoryBlock::new(SharedDmaBuffer {
+        Ok(user_driver::memory::MemoryBlock::new(SharedDmaBuffer {
             mapping,
             _alloc: alloc,
             pfns,
         }))
     }
 
-    /// Restore pool allocation from saved PFNs and/or GPA.
+    /// Restore pool allocation from saved PFNs.
     fn restore_dma_buffer(
         &self,
         len: usize,
         _pfns: &[u64],
-    ) -> anyhow::Result<MemoryBlock> {
+    ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
         tracing::info!("YSP: unsupported restore_dma_buffer");
         // Restore is not yet supported for shared pool, just call regular create.
         self.create_dma_buffer(len)

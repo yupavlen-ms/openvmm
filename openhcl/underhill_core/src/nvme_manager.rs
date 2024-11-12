@@ -24,7 +24,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::Instrument;
-use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDevice;
 use user_driver::vfio::VfioDmaBuffer;
 use vm_resource::kind::DiskHandleKind;
@@ -96,40 +95,25 @@ impl NvmeManager {
         driver_source: &VmTaskDriverSource,
         vp_count: u32,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
-        mem_block: MemoryBlock,
         nvme_keepalive: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
+        tracing::info!("YSP: NvmeManager::new keepalive={}", nvme_keepalive);
         let (send, recv) = mesh::channel();
         let driver = driver_source.simple();
-        let pages = mem_block.pfns();
-        tracing::info!(
-            "YSP: NvmeManager::new {:X} [{:x} {:x} {:x} {:x}]",
-            mem_block.base_va(),
-            pages[0],
-            pages[1],
-            pages[2],
-            pages[3]
-        );
         let mut worker = NvmeManagerWorker {
             driver_source: driver_source.clone(),
             devices: HashMap::new(),
             vp_count,
             dma_buffer: dma_buffer.clone(),
-            mem_block,
-            mem_next_offset: 0,
             nvme_keepalive,
         };
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
             if saved_state.is_some() {
-                let _ = NvmeManager::restore(
-                    &mut worker,
-                    dma_buffer.clone(),
-                    saved_state.as_ref().unwrap(),
-                )
-                .instrument(tracing::info_span!("nvme_manager_restore"))
-                .await;
+                let _ = NvmeManager::restore(&mut worker, saved_state.as_ref().unwrap())
+                    .instrument(tracing::info_span!("nvme_manager_restore"))
+                    .await;
             };
             worker.run(recv).await
         });
@@ -147,13 +131,11 @@ impl NvmeManager {
     }
 
     pub async fn shutdown(self) {
-        // Early return would be the fastest way to skip shutdown.
-        // Unfortunately, then there is no good way to prevent
-        // controller reset in the drop() fn if we early return here.
-        // YSP: FIXME: Figure out how to prevent reset in drop() function.
+        // Early return is faster way to skip shutdown.
+        // but we need to thoroughly test the data integrity.
         if self.nvme_keepalive {
-            tracing::info!("YSP: skip shutdown");
-            return;
+            tracing::info!("YSP: FIXME: NO skip shutdown");
+            // return;
         }
         self.client.sender.send(Request::Shutdown {
             span: tracing::info_span!("shutdown_nvme_manager"),
@@ -180,10 +162,10 @@ impl NvmeManager {
     /// Restore NVMe manager's state after servicing.
     async fn restore(
         worker: &mut NvmeManagerWorker,
-        dma_buffer: Arc<dyn VfioDmaBuffer>,
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManager::restore");
+        let dma_buffer = worker.dma_buffer.clone();
         worker
             .restore(dma_buffer, &saved_state.nvme_state)
             .instrument(tracing::info_span!("nvme_worker_restore"))
@@ -192,8 +174,9 @@ impl NvmeManager {
         Ok(())
     }
 
-    /// Control servicing behavior: to keep the attached device intact or not.
-    pub fn set_nvme_keepalive(&mut self, nvme_keepalive: bool) {
+    /// Override (explicitly disable) the default behavior.
+    pub fn override_nvme_keepalive_flag(&mut self, nvme_keepalive: bool) {
+        tracing::info!("YSP: Override nvme_keepalive = {}", nvme_keepalive);
         self.nvme_keepalive = nvme_keepalive;
     }
 }
@@ -252,11 +235,6 @@ struct NvmeManagerWorker {
     #[inspect(skip)]
     dma_buffer: Arc<dyn VfioDmaBuffer>,
     vp_count: u32,
-    /// Contiguous DMA memory block to be sliced per queue.
-    #[inspect(skip)]
-    mem_block: MemoryBlock,
-    /// Next available offset to use.
-    mem_next_offset: usize,
     /// Bypass device shutdown.
     nvme_keepalive: bool,
 }
@@ -298,7 +276,8 @@ impl NvmeManagerWorker {
                     span,
                     nvme_keepalive,
                 } => {
-                    self.nvme_keepalive = nvme_keepalive;
+                    // YSP: FIXME: Disabled - not sure if needed. Remove?
+                    // self.nvme_keepalive = nvme_keepalive;
                     // Update the flag for all connected devices.
                     for (_s, dev) in self.devices.iter_mut() {
                         // Prevent devices from originating controller reset in drop().
@@ -346,28 +325,15 @@ impl NvmeManagerWorker {
                         .await
                         .map_err(InnerError::Vfio)?;
 
-                // TODO: This is temporary way to obtain the DMA buffer size.
-                //       Alternatives: use VTL2 configuation data for fixed size
-                //       or for the target queue count.
-                let mem_required_size = nvme_driver::NvmeDriver::<VfioDevice>::required_dma_size(
-                    self.vp_count as usize + 1,
-                );
-                let next_offset = self.mem_next_offset;
+                let driver =
+                    nvme_driver::NvmeDriver::new(&self.driver_source, self.vp_count, device)
+                        .instrument(tracing::info_span!(
+                            "nvme_driver_init",
+                            pci_id = entry.key()
+                        ))
+                        .await
+                        .map_err(InnerError::DeviceInitFailed)?;
 
-                let driver = nvme_driver::NvmeDriver::new(
-                    &self.driver_source,
-                    self.vp_count,
-                    self.mem_block.subblock(next_offset, mem_required_size),
-                    device,
-                )
-                .instrument(tracing::info_span!(
-                    "nvme_driver_init",
-                    pci_id = entry.key()
-                ))
-                .await
-                .map_err(InnerError::DeviceInitFailed)?;
-
-                self.mem_next_offset += mem_required_size;
                 entry.insert(driver)
             }
         };
@@ -400,11 +366,6 @@ impl NvmeManagerWorker {
 
         let nvme_state = NvmeManagerSavedState {
             cpu_count: self.vp_count,
-            mem_buffer: Some(NvmeDmaBufferSavedState {
-                dma_size: self.mem_block.len(),
-                pfns: self.mem_block.pfns().to_vec(),
-            }),
-            mem_next_offset: self.mem_next_offset,
             nvme_disks,
         };
 
@@ -439,15 +400,10 @@ impl NvmeManagerWorker {
                 )
                 .instrument(tracing::info_span!("vfio_device_restore", pci_id = disk.pci_id.clone()))
                 .await?;
-            tracing::info!("YSP: after VfioDevice::restore");
 
-            // YSP: FIXME: Count for multiple drivers.
-            let driver_block_len = self.mem_block.len();
-            let driver_mem_block = self.mem_block.subblock(0, driver_block_len);
             let nvme_driver = nvme_driver::NvmeDriver::restore(
                 &self.driver_source,
                 saved_state.cpu_count,
-                driver_mem_block,
                 vfio_device,
                 &disk.driver_state,
             )
@@ -457,7 +413,6 @@ impl NvmeManagerWorker {
 
             self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
-        self.mem_next_offset = saved_state.mem_next_offset;
         tracing::info!("YSP: NvmeManagerWorker::restore - done");
         Ok(())
     }
@@ -515,13 +470,7 @@ impl ResourceId<DiskHandleKind> for NvmeDiskConfig {
 pub struct NvmeManagerSavedState {
     #[mesh(1)]
     pub cpu_count: u32,
-    /// NVMe DMA buffer saved state.
     #[mesh(2)]
-    pub mem_buffer: Option<NvmeDmaBufferSavedState>,
-    /// NVMe DMA buffer next offset.
-    #[mesh(3)]
-    pub mem_next_offset: usize,
-    #[mesh(4)]
     pub nvme_disks: Vec<NvmeSavedDiskConfig>,
 }
 
@@ -532,15 +481,4 @@ pub struct NvmeSavedDiskConfig {
     pub pci_id: String,
     #[mesh(2)]
     pub driver_state: nvme_driver::NvmeDriverSavedState,
-}
-
-#[derive(Protobuf)]
-#[mesh(package = "underhill")]
-pub struct NvmeDmaBufferSavedState {
-    /// Total size of DMA buffer in bytes.
-    #[mesh(1)]
-    pub dma_size: usize,
-    /// List of PFNs for this DMA buffer.
-    #[mesh(2)]
-    pub pfns: Vec<u64>,
 }

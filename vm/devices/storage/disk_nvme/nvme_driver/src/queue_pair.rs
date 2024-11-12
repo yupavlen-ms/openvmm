@@ -35,6 +35,7 @@ use user_driver::memory::MemoryBlock;
 use user_driver::memory::PAGE_SIZE;
 use user_driver::memory::PAGE_SIZE64;
 use user_driver::DeviceBacking;
+use user_driver::HostDmaAllocator;
 use zerocopy::FromZeroes;
 
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
@@ -117,11 +118,11 @@ impl PendingCommands {
         let mut commands = Vec::new();
         // Convert Slab into Vec.
         for cmd in &self.commands {
-            commands.push(cmd.1.command.clone());
+            commands.push(cmd.1.command);
         }
         tracing::info!("YSP: save CID {}", self.next_cid_high_bits.0);
         PendingCommandsSavedState {
-            commands: commands,
+            commands,
             next_cid_high_bits: self.next_cid_high_bits.0,
         }
     }
@@ -132,7 +133,7 @@ impl PendingCommands {
         for cmd in &saved_state.commands {
             let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
             let pending_command = PendingCommand {
-                command: cmd.clone(),
+                command: *cmd,
                 respond: send,
             };
             // Remove high CID bits to be used as a key.
@@ -140,9 +141,7 @@ impl PendingCommands {
             commands.push((cid as usize, pending_command));
         }
         // Re-create identical Slab where CIDs are correctly mapped.
-        self.commands = commands
-            .into_iter()
-            .collect::<Slab<PendingCommand>>();
+        self.commands = commands.into_iter().collect::<Slab<PendingCommand>>();
         tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
         self.next_cid_high_bits = Wrapping(saved_state.next_cid_high_bits);
 
@@ -184,15 +183,17 @@ impl QueuePair {
 
     pub fn new(
         spawner: impl SpawnDriver,
+        device: &impl DeviceBacking,
         qid: u16,
         sq_size: u16, // Requested SQ size in entries.
         cq_size: u16, // Requested CQ size in entries.
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
-        mem_block: MemoryBlock,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::new qid={}", qid);
-        assert!(mem_block.len() >= Self::required_dma_size());
+        let mem_block = device
+            .host_allocator()
+            .allocate_dma_buffer(QueuePair::required_dma_size())?;
 
         let (queue_handler, alloc, mem) = QueuePair::allocate(qid, sq_size, cq_size, mem_block)?;
 
@@ -257,7 +258,6 @@ impl QueuePair {
                 queue_handler
             }
         });
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem_block.read_at(0, checker.as_mut_slice());

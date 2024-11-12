@@ -33,6 +33,7 @@ use guest_emulation_transport::GuestEmulationTransportClient;
 use guid::Guid;
 use hardware_key_sealing::HardwareDerivedKeys;
 use hardware_key_sealing::HardwareKeyProtectorExt as _;
+use key_protector::GetKeysFromKeyProtectorError;
 use key_protector::KeyProtectorExt as _;
 use mesh::MeshPayload;
 use openssl::pkey::Private;
@@ -43,6 +44,7 @@ use protocol::vmgs::SecurityProfile;
 use protocol::vmgs::AES_GCM_KEY_LENGTH;
 use secure_key_release::VmgsEncryptionKeys;
 use static_assertions::const_assert_eq;
+use std::fmt::Debug;
 use tee_call::TeeCall;
 use thiserror::Error;
 use zerocopy::AsBytes;
@@ -51,16 +53,16 @@ use zerocopy::FromZeroes;
 /// An attestation error.
 #[derive(Debug, Error)]
 #[error(transparent)]
-pub struct Error(ErrorInner);
+pub struct Error(AttestationErrorInner);
 
-impl<T: Into<ErrorInner>> From<T> for Error {
+impl<T: Into<AttestationErrorInner>> From<T> for Error {
     fn from(value: T) -> Self {
         Self(value.into())
     }
 }
 
 #[derive(Debug, Error)]
-enum ErrorInner {
+enum AttestationErrorInner {
     #[error("read security profile from vmgs")]
     ReadSecurityProfile(#[source] vmgs::ReadFromVmgsError),
     #[error("failed to request vmgs encryption keys")]
@@ -81,7 +83,7 @@ enum ErrorInner {
 #[derive(Debug, Error)]
 enum GetDerivedKeysError {
     #[error("failed to get ingress/egress keys from the the key protector")]
-    GetKeysFromKeyProtector(#[source] key_protector::GetKeysFromKeyProtectorError),
+    GetKeysFromKeyProtector(#[source] GetKeysFromKeyProtectorError),
     #[error("failed to fetch GSP")]
     FetchGuestStateProtectionById(
         #[source] guest_emulation_transport::error::GuestStateProtectionByIdError,
@@ -241,20 +243,24 @@ pub async fn initialize_platform_security(
     suppress_attestation: bool,
     driver: LocalDriver,
 ) -> Result<PlatformAttestationData, Error> {
+    tracing::info!(CVM_ALLOWED,
+        attestation_type=?attestation_type,
+        secure_boot=attestation_vm_config.secure_boot,
+        tpm_enabled=attestation_vm_config.tpm_enabled,
+        tpm_persisted=attestation_vm_config.tpm_persisted,
+        "Reading security profile");
+
     // Read Security Profile from VMGS
     // Currently this only includes "Key Reference" data, which is not attested data, is opaque to the
     // Underhill, and is passed to the IGVMm agent outside of the report contents.
     let SecurityProfile { mut agent_data } = vmgs::read_security_profile(vmgs)
         .await
-        .map_err(ErrorInner::ReadSecurityProfile)?;
+        .map_err(AttestationErrorInner::ReadSecurityProfile)?;
 
     // If attestation is suppressed, return the `agent_data` that is required by
     // TPM AK cert request.
     if suppress_attestation {
-        tracing::info!(
-            CVM_ALLOWED,
-            "Attestation is suppressed, assuming unlocked vmgs and stateless tpm"
-        );
+        tracing::info!(CVM_ALLOWED, "Suppressing attestation");
 
         return Ok(PlatformAttestationData {
             host_attestation_settings: HostAttestationSettings {
@@ -270,12 +276,6 @@ pub async fn initialize_platform_security(
         AttestationType::Tdx => Some(Box::new(tee_call::TdxCall)),
         AttestationType::Host | AttestationType::Unsupported => None,
     };
-
-    tracing::info!(
-        CVM_ALLOWED,
-        "Initializing platform type {:?}",
-        attestation_type
-    );
 
     let VmgsEncryptionKeys {
         ingress_rsa_kek,
@@ -294,9 +294,9 @@ pub async fn initialize_platform_security(
             driver,
         )
         .await
-        .map_err(ErrorInner::RequestVmgsEncryptionKeys)?
+        .map_err(AttestationErrorInner::RequestVmgsEncryptionKeys)?
     } else {
-        tracing::info!(CVM_ALLOWED, "Assuming no key-encryption key");
+        tracing::info!(CVM_ALLOWED, "Key-encryption key retrieval not required");
 
         // Attestation is unavailable, assume no tenant key
         VmgsEncryptionKeys::default()
@@ -310,11 +310,17 @@ pub async fn initialize_platform_security(
     };
 
     // Read Key Protector blob from VMGS
+    tracing::info!(
+        CVM_ALLOWED,
+        dek_minimal_size = dek_minimal_size,
+        "Reading key protector from VMGS"
+    );
     let mut key_protector = vmgs::read_key_protector(vmgs, dek_minimal_size)
         .await
-        .map_err(ErrorInner::ReadKeyProtector)?;
+        .map_err(AttestationErrorInner::ReadKeyProtector)?;
 
     // Read VM id from VMGS
+    tracing::info!(CVM_ALLOWED, "Reading VM ID from VMGS");
     let mut key_protector_by_id = match vmgs::read_key_protector_by_id(vmgs).await {
         Ok(key_protector_by_id) => KeyProtectorById {
             inner: key_protector_by_id,
@@ -324,13 +330,18 @@ pub async fn initialize_platform_security(
             inner: protocol::vmgs::KeyProtectorById::new_zeroed(),
             found_id: false,
         },
-        Err(e) => Err(ErrorInner::ReadKeyProtectorById(e))?,
+        Err(e) => { Err(AttestationErrorInner::ReadKeyProtectorById(e)) }?,
     };
 
     // Check if the VM id has been changed since last boot with KP write
     let vm_id_changed = if key_protector_by_id.found_id {
-        key_protector_by_id.inner.id_guid != bios_guid
+        let changed = key_protector_by_id.inner.id_guid != bios_guid;
+        if changed {
+            tracing::info!("VM Id has changed since last boot");
+        };
+        changed
     } else {
+        tracing::info!("First booting of the VM");
         // Previous id in KP not found means this is the first boot,
         // treat id as unchanged for this case.
         false
@@ -338,6 +349,7 @@ pub async fn initialize_platform_security(
 
     let vmgs_encrypted: bool = vmgs.get_encryption_algorithm() != EncryptionAlgorithm::NONE;
 
+    tracing::info!(tcb_version=?tcb_version, vmgs_encrypted = vmgs_encrypted, "Deriving keys");
     let derived_keys_result = get_derived_keys(
         get,
         tee_call.as_deref(),
@@ -352,9 +364,10 @@ pub async fn initialize_platform_security(
         tcb_version,
     )
     .await
-    .map_err(ErrorInner::GetDerivedKeys)?;
+    .map_err(AttestationErrorInner::GetDerivedKeys)?;
 
     // All Underhill VMs use VMGS encryption
+    tracing::info!("Unlocking VMGS");
     if let Err(e) = unlock_vmgs_data_store(
         vmgs,
         vmgs_encrypted,
@@ -366,10 +379,10 @@ pub async fn initialize_platform_security(
     )
     .await
     {
-        get.event_log(guest_emulation_transport::api::EventLogId::ATTESTATION_FAILED);
-        get.event_log_flush().await;
+        get.event_log_fatal(guest_emulation_transport::api::EventLogId::ATTESTATION_FAILED)
+            .await;
 
-        Err(ErrorInner::UnlockVmgsDataStore(e))?
+        Err(AttestationErrorInner::UnlockVmgsDataStore(e))?
     }
 
     let state_refresh_request_from_gsp = derived_keys_result
@@ -382,8 +395,8 @@ pub async fn initialize_platform_security(
 
     tracing::info!(
         CVM_ALLOWED,
-        state_refresh_request_from_gsp,
-        vm_id_changed,
+        state_refresh_request_from_gsp = state_refresh_request_from_gsp,
+        vm_id_changed = vm_id_changed,
         "determine if refreshing tpm seeds is needed"
     );
 
@@ -391,7 +404,7 @@ pub async fn initialize_platform_security(
     let guest_secret_key = match vmgs::read_guest_secret_key(vmgs).await {
         Ok(data) => Some(data.guest_secret_key.to_vec()),
         Err(vmgs::ReadFromVmgsError::EntryNotFound(_)) => None,
-        Err(e) => return Err(ErrorInner::ReadGuestSecretKey(e).into()),
+        Err(e) => return Err(AttestationErrorInner::ReadGuestSecretKey(e).into()),
     };
 
     Ok(PlatformAttestationData {
@@ -490,7 +503,7 @@ async fn unlock_vmgs_data_store(
                 // If last time we failed to remove old key then we'll come here.
                 // We have to remove old key before adding egress_key.
                 let key_index = if old_index == 0 { 1 } else { 0 };
-                tracing::trace!(CVM_ALLOWED, key_index, "Remove old key...");
+                tracing::trace!(CVM_ALLOWED, key_index = key_index, "Remove old key...");
                 vmgs.remove_encryption_key(key_index)
                     .await
                     .map_err(UnlockVmgsDataStoreError::RemoveOldVmgsEncryptionKey)?;
@@ -574,9 +587,29 @@ async fn get_derived_keys(
 
     // Handle key released via attestation process (tenant key) to get keys from KeyProtector
     let (ingress_key, egress_key, no_kek) = if let Some(ingress_kek) = ingress_rsa_kek {
-        let keys = key_protector
-            .unwrap_and_rotate_keys(ingress_kek, wrapped_des_key, ingress_idx, egress_idx)
-            .map_err(GetDerivedKeysError::GetKeysFromKeyProtector)?;
+        let keys = match key_protector.unwrap_and_rotate_keys(
+            ingress_kek,
+            wrapped_des_key,
+            ingress_idx,
+            egress_idx,
+        ) {
+            Ok(keys) => keys,
+            Err(e)
+                if matches!(
+                    e,
+                    GetKeysFromKeyProtectorError::DesKeyRsaUnwrap(_)
+                        | GetKeysFromKeyProtectorError::IngressDekRsaUnwrap(_)
+                ) =>
+            {
+                get.event_log_fatal(
+                    guest_emulation_transport::api::EventLogId::DEK_DECRYPTION_FAILED,
+                )
+                .await;
+
+                return Err(GetDerivedKeysError::GetKeysFromKeyProtector(e));
+            }
+            Err(e) => return Err(GetDerivedKeysError::GetKeysFromKeyProtector(e)),
+        };
         (keys.ingress, keys.egress, false)
     } else {
         ([0u8; AES_GCM_KEY_LENGTH], [0u8; AES_GCM_KEY_LENGTH], true)
