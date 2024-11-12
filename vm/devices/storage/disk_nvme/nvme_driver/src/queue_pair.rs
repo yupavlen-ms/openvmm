@@ -118,7 +118,7 @@ impl PendingCommands {
         let mut commands = Vec::new();
         // Convert Slab into Vec.
         for cmd in &self.commands {
-            commands.push(cmd.1.command.clone());
+            commands.push(cmd.1.command);
         }
         tracing::info!("YSP: save CID {}", self.next_cid_high_bits.0);
         PendingCommandsSavedState {
@@ -133,7 +133,7 @@ impl PendingCommands {
         for cmd in &saved_state.commands {
             let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
             let pending_command = PendingCommand {
-                command: cmd.clone(),
+                command: *cmd,
                 respond: send,
             };
             // Remove high CID bits to be used as a key.
@@ -258,7 +258,6 @@ impl QueuePair {
                 queue_handler
             }
         });
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem_block.read_at(0, checker.as_mut_slice());

@@ -114,6 +114,7 @@ impl NvmeController {
         register_mmio: &mut dyn RegisterMmioIntercept,
         caps: NvmeControllerCaps,
     ) -> Self {
+        tracing::info!("YSP: NvmeController::new");
         let (msix, msix_cap) = MsixEmulator::new(4, caps.msix_count, register_msi);
         let bars = DeviceBars::new()
             .bar0(
@@ -343,6 +344,7 @@ impl NvmeController {
 
         if cc.en() != self.registers.cc.en() {
             if cc.en() {
+                tracing::info!("YSP: Processing CC.EN");
                 // Some drivers will write zeros to IOSQES and IOCQES, assuming that the defaults will work.
                 if cc.iocqes() == 0 {
                     cc.set_iocqes(IOCQES);
@@ -365,6 +367,7 @@ impl NvmeController {
                 }
 
                 if self.registers.csts.rdy() {
+                    tracing::info!("YSP: Enabling during reset");
                     tracelimit::warn_ratelimited!("enabling during reset");
                     return;
                 }
@@ -379,6 +382,7 @@ impl NvmeController {
                     self.registers.aqa.acqs_z().max(1) + 1,
                 );
             } else if self.registers.csts.rdy() {
+                tracing::info!("YSP: Resetting when CSTS.RDY");
                 self.workers.controller_reset();
             } else {
                 tracelimit::warn_ratelimited!("disabling while not ready");
@@ -395,6 +399,7 @@ impl NvmeController {
 
     fn get_csts(&mut self) -> u32 {
         if !self.registers.cc.en() && self.registers.csts.rdy() {
+            tracing::info!("YSP: Reading CSTS (trying to disable)");
             // Keep trying to disable.
             if self.workers.poll_controller_reset() {
                 // AQA, ASQ, and ACQ are not reset by controller reset.
@@ -403,12 +408,14 @@ impl NvmeController {
                 self.registers.interrupt_mask = 0;
             }
         } else if self.registers.cc.en() && !self.registers.csts.rdy() {
+            tracing::info!("YSP: Reading CSTS (trying to enable)");
             if self.workers.poll_enabled() {
                 self.registers.csts.set_rdy(true);
             }
         }
 
         let csts = self.registers.csts;
+        tracing::info!("YSP: Reading CSTS (end)");
         tracing::debug!(?csts, "get csts");
         csts.into()
     }
