@@ -17,6 +17,8 @@ vm_resource::register_static_resolvers! {
     tpm::resolver::TpmDeviceResolver,
     #[cfg(guest_arch = "x86_64")]
     serial_16550::resolver::Serial16550Resolver,
+    #[cfg(guest_arch = "x86_64")]
+    serial_debugcon::resolver::SerialDebugconResolver,
     #[cfg(guest_arch = "aarch64")]
     serial_pl011::resolver::SerialPl011Resolver,
     chipset::battery::resolver::BatteryResolver,
@@ -28,7 +30,7 @@ vm_resource::register_static_resolvers! {
     serial_core::disconnected::resolver::DisconnectedSerialBackendResolver,
     #[cfg(windows)]
     serial_socket::windows::WindowsPipeSerialResolver,
-    serial_socket::unix::UnixStreamSerialResolver,
+    serial_socket::net::SocketSerialResolver,
 
     // Network backends
     net_backend::null::NullResolver,

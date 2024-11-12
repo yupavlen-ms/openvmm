@@ -29,6 +29,7 @@ use hvlite_defs::config::Vtl2BaseAddressType;
 use hvlite_defs::config::X2ApicConfig;
 use hvlite_defs::config::DEFAULT_PCAT_BOOT_ORDER;
 use std::ffi::OsString;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
 use thiserror::Error;
@@ -232,33 +233,37 @@ flags:
     #[clap(long, conflicts_with("virtio_console"))]
     pub virtio_console_pci: bool,
 
-    /// COM1 binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// COM1 binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[clap(long, value_name = "SERIAL")]
     pub com1: Option<SerialConfigCli>,
 
-    /// COM2 binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// COM2 binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[clap(long, value_name = "SERIAL")]
     pub com2: Option<SerialConfigCli>,
 
-    /// COM3 binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// COM3 binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[clap(long, value_name = "SERIAL")]
     pub com3: Option<SerialConfigCli>,
 
-    /// COM4 binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// COM4 binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[clap(long, value_name = "SERIAL")]
     pub com4: Option<SerialConfigCli>,
 
-    /// virtio serial binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// virtio serial binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[clap(long, value_name = "SERIAL")]
     pub virtio_serial: Option<SerialConfigCli>,
 
-    /// vmbus com1 serial binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// vmbus com1 serial binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[structopt(long, value_name = "SERIAL")]
     pub vmbus_com1_serial: Option<SerialConfigCli>,
 
-    /// vmbus com2 serial binding (console | stderr | listen=\<path\> | term[=\<terminal emulator\>] | none)
+    /// vmbus com2 serial binding (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none)
     #[structopt(long, value_name = "SERIAL")]
     pub vmbus_com2_serial: Option<SerialConfigCli>,
+
+    /// debugcon binding (port:serial, where port is a u16, and serial is (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | term[=\<program\>] | none))
+    #[clap(long, value_name = "SERIAL")]
+    pub debugcon: Option<DebugconSerialConfigCli>,
 
     /// boot UEFI firmware
     #[clap(long, short = 'e')]
@@ -766,7 +771,31 @@ impl FromStr for FloppyDiskCli {
     }
 }
 
-// (console | stderr | listen=\<path\> | none)
+#[derive(Clone)]
+pub struct DebugconSerialConfigCli {
+    pub port: u16,
+    pub serial: SerialConfigCli,
+}
+
+impl FromStr for DebugconSerialConfigCli {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let Some((port, serial)) = s.split_once(',') else {
+            return Err("invalid format (missing comma between port and serial)".into());
+        };
+
+        let port: u16 = parse_number(port)
+            .map_err(|_| "could not parse port".to_owned())?
+            .try_into()
+            .map_err(|_| "port must be 16-bit")?;
+        let serial: SerialConfigCli = serial.parse()?;
+
+        Ok(Self { port, serial })
+    }
+}
+
+/// (console | stderr | listen=\<path\> | listen=tcp:\<ip\>:\<port\> | none)
 #[derive(Clone)]
 pub enum SerialConfigCli {
     None,
@@ -774,6 +803,7 @@ pub enum SerialConfigCli {
     NewConsole(Option<PathBuf>),
     Stderr,
     Pipe(PathBuf),
+    Tcp(SocketAddr),
 }
 
 impl FromStr for SerialConfigCli {
@@ -789,7 +819,15 @@ impl FromStr for SerialConfigCli {
                 SerialConfigCli::NewConsole(Some(PathBuf::from(s.strip_prefix("term=").unwrap())))
             }
             s if s.starts_with("listen=") => {
-                SerialConfigCli::Pipe(PathBuf::from(s.strip_prefix("listen=").unwrap()))
+                let s = s.strip_prefix("listen=").unwrap();
+                if let Some(tcp) = s.strip_prefix("tcp:") {
+                    let addr = tcp
+                        .parse()
+                        .map_err(|err| format!("invalid tcp address: {err}"))?;
+                    SerialConfigCli::Tcp(addr)
+                } else {
+                    SerialConfigCli::Pipe(s.into())
+                }
             }
             _ => return Err("invalid serial configuration".into()),
         };

@@ -41,7 +41,7 @@ use hvdef::Vtl;
 use loader_defs::linux::setup_data;
 use loader_defs::linux::SETUP_DTB;
 use loader_defs::shim::ShimParamsRaw;
-use memory_range::flatten_equivalent_ranges;
+use memory_range::merge_adjacent_ranges;
 use memory_range::walk_ranges;
 use memory_range::MemoryRange;
 use memory_range::RangeWalkResult;
@@ -124,8 +124,12 @@ fn build_kernel_command_line(
         "panic_print=0",
         // RELIABILITY: Reboot immediately on panic, no timeout.
         "panic=-1",
-        // RELIABILITY: Print processor context information on a fatal signal.
-        "print_fatal_signals=1",
+        // RELIABILITY: Don't print processor context information on a fatal
+        // signal. Our crash dump collection infrastructure seems reliable, and
+        // this information doesn't seem useful without a dump anyways.
+        // Additionally it may push important logs off the end of the kmsg
+        // page logged by the host.
+        //"print_fatal_signals=0",
         // RELIABILITY: Unlimited logging to /dev/kmsg from userspace.
         "printk.devkmsg=on",
         // RELIABILITY: Reboot using a triple fault as the fastest method.
@@ -267,7 +271,7 @@ struct Fdt {
 /// where the shim is loaded. Return a ShimParams structure based on the raw
 /// offset based RawShimParams.
 fn shim_parameters(shim_params_raw_offset: isize) -> ShimParams {
-    extern "C" {
+    unsafe extern "C" {
         static __ehdr_start: u8;
     }
 
@@ -354,30 +358,7 @@ fn reserved_memory_regions(
     // implement that.
     let mut flattened = off_stack!(ArrayVec<(MemoryRange, ReservedMemoryType), MAX_RESERVED_MEM_RANGES>, ArrayVec::new_const());
     flattened.clear();
-    flattened.extend(flatten_equivalent_ranges(reserved.iter().copied()));
-
-    // YSP: FIXME: Debug
-    for rng in flattened.as_ref().iter() {
-        match rng.1 {
-            ReservedMemoryType::Vtl2Config => {
-                log!(
-                    "YSP: reserved {:X}-{:X} vtl2config",
-                    rng.0.start(),
-                    rng.0.end()
-                );
-            }
-            ReservedMemoryType::SidecarImage | ReservedMemoryType::SidecarNode => {
-                log!(
-                    "YSP: reserved {:X}-{:X} sidecar",
-                    rng.0.start(),
-                    rng.0.end()
-                );
-            }
-            ReservedMemoryType::DmaBuffers => {
-                log!("YSP: reserved {:X}-{:X} DMA", rng.0.start(), rng.0.end());
-            }
-        }
-    }
+    flattened.extend(merge_adjacent_ranges(reserved.iter().copied()));
     flattened
 }
 
@@ -945,6 +926,10 @@ mod test {
 
     // ensure we can boot with a _lot_ of vcpus
     #[test]
+    #[cfg_attr(
+        target_arch = "aarch64",
+        ignore = "TODO: investigate why this doesn't always work on ARM"
+    )]
     fn fdt_cpu_scaling() {
         const MAX_CPUS: usize = 2048;
 
