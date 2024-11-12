@@ -258,7 +258,6 @@ impl QueuePair {
                 queue_handler
             }
         });
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem_block.read_at(0, checker.as_mut_slice());

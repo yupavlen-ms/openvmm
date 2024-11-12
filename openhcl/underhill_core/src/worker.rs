@@ -2746,7 +2746,6 @@ async fn new_underhill_vm(
         None
     };
 
-    tracing::info!("YSP: before vmbus_devices");
     // Add vmbus devices.
     let mut vmbus_devices = Vec::new();
     for resource in vmbus_device_handles {
@@ -2769,7 +2768,6 @@ async fn new_underhill_vm(
         );
     }
 
-    tracing::info!("YSP: after vmbus_devices");
     let (chipset, devices) = chipset_builder.build()?;
     let chipset = vmm_core::vmotherboard_adapter::ChipsetPlusSynic::new(synic.clone(), chipset);
 

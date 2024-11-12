@@ -2,9 +2,6 @@
 // Licensed under the MIT License.
 
 use crate::queue_pair::QueuePair;
-//use crate::spec::Register;
-use nvme_spec::Register;
-use pal_async::timer::PolledTimer;
 use crate::NvmeDriver;
 use chipset_device::mmio::ExternallyManagedMmioIntercepts;
 use disk_ramdisk::RamDisk;
