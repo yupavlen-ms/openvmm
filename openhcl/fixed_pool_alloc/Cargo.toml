@@ -12,11 +12,8 @@ vfio = ["user_driver/vfio"]
 [dependencies]
 anyhow.workspace = true
 hcl.workspace = true
-
-vm_topology.workspace = true
 hvdef.workspace = true
 inspect.workspace = true
-libc.workspace = true
 memory_range.workspace = true
 parking_lot.workspace = true
 sparse_mmap.workspace = true
