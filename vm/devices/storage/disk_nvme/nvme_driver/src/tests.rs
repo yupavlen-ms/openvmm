@@ -2,6 +2,9 @@
 // Licensed under the MIT License.
 
 use crate::queue_pair::QueuePair;
+//use crate::spec::Register;
+use nvme_spec::Register;
+use pal_async::timer::PolledTimer;
 use crate::NvmeDriver;
 use chipset_device::mmio::ExternallyManagedMmioIntercepts;
 use disk_ramdisk::RamDisk;
@@ -18,6 +21,7 @@ use user_driver::emulated::DeviceSharedMemory;
 use user_driver::emulated::EmulatedDevice;
 use vmcore::vm_task::SingleDriverBackend;
 use vmcore::vm_task::VmTaskDriverSource;
+use zerocopy::AsBytes;
 
 #[async_test]
 async fn test_nvme_driver(driver: DefaultDriver) {
@@ -140,7 +144,7 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
     const IO_QUEUE_COUNT: u16 = 64;
     const CPU_COUNT: u32 = 64;
 
-    let driver_source = VmTaskDriverSource::new(SingleDriverBackend::new(driver));
+    let driver_source = VmTaskDriverSource::new(SingleDriverBackend::new(driver.clone()));
     let payload_len = QueuePair::required_dma_size() * 4;
     let emu_mem = DeviceSharedMemory::new(64 * 1024 * 1024, payload_len);
     let mut msi_x = MsiInterruptSet::new();
@@ -176,7 +180,7 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
     // Create a second set of devices since the ownership has been moved.
     let new_emu_mem = DeviceSharedMemory::new(64 * 1024 * 1024, payload_len);
     let mut new_msi_x = MsiInterruptSet::new();
-    let new_nvme_ctrl = nvme::NvmeController::new(
+    let mut new_nvme_ctrl = nvme::NvmeController::new(
         &driver_source,
         new_emu_mem.guest_memory().clone(),
         &mut new_msi_x,
@@ -187,6 +191,19 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
             subsystem_id: Guid::default(),
         },
     );
+
+    let mut backoff = user_driver::backoff::Backoff::new(&driver);
+
+    // Enable the controller for keep-alive test.
+    let mut dword = 0u32;
+    // Read Register::CC.
+    new_nvme_ctrl.read_bar0(0x14, dword.as_bytes_mut()).unwrap();
+    // Set CC.EN.
+    dword |= 1;
+    new_nvme_ctrl.write_bar0(0x14, dword.as_bytes()).unwrap();
+    // Wait for CSTS.RDY to set.
+    backoff.back_off().await;
+
     let new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, new_emu_mem);
     let _new_nvme_driver = NvmeDriver::restore(&driver_source, CPU_COUNT, new_device, &saved_state)
         .await

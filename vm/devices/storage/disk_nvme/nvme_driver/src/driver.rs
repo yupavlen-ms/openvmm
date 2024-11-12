@@ -556,8 +556,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // It is expected the device to be alive when restoring.
         if !bar0.csts().rdy() {
-            // YSP: FIXME: anyhow::bail!("device is gone 3");
             tracing::info!("YSP: RDY not set");
+            anyhow::bail!("device is gone 3");
         }
 
         let registers = Arc::new(DeviceRegisters::new(bar0));
