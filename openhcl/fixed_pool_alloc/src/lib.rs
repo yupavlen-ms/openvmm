@@ -32,6 +32,22 @@ pub struct FixedPoolOutOfMemory {
     tag: String,
 }
 
+/// Error returned when unable to restore memory chunk.
+#[derive(Debug, Error)]
+#[error("unable to restore matching chunk pfn {pfn} size {size} with tag {tag}")]
+pub struct FixedPoolNoMatchingChunk {
+    pfn: u64,
+    size: u64,
+    tag: String,
+}
+
+/// Memory integrity error.
+#[derive(Debug, Error)]
+#[error("pool integrity error leaked blocks {leaked_blocks}")]
+pub struct FixedPoolIntegrity {
+    leaked_blocks: usize,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Inspect)]
 #[inspect(external_tag)]
 enum State {
@@ -237,6 +253,27 @@ impl FixedPool {
         })
     }
 
+    /// Validate memory pool after restore finishes.
+    pub fn validate(&mut self) -> anyhow::Result<(), FixedPoolIntegrity> {
+        let inner = self.inner.lock();
+        let leaked_blocks = inner.state.iter().filter(|chunk| {
+            if let State::Restored { .. } = chunk {
+                true
+            }
+            else {
+                false
+            }
+        }).count();
+
+        if leaked_blocks > 0 {
+            return Err(FixedPoolIntegrity {
+                leaked_blocks
+            });
+        }
+
+        Ok(())
+    }
+
     /// Return an allocator instance that can be used to allocate pages.
     pub fn allocator(&self) -> FixedPoolAllocator {
         FixedPoolAllocator {
@@ -319,15 +356,14 @@ impl FixedPoolAllocator {
         })
     }
 
-    /// Restore allocation of the contiguous pages from the fixed pool.
-    /// If a contiguous region of free pages is not available, then an
-    /// error is returned.
+    /// Verifies that request to restore a mapping is valid
+    /// and matches the saved state.
     fn restore(
         &self,
         req_pfn: u64,
         req_pages: NonZeroU64,
         tag: String,
-    ) -> Result<FixedPoolHandle, FixedPoolOutOfMemory> {
+    ) -> Result<FixedPoolHandle, FixedPoolNoMatchingChunk> {
         let mut inner = self.inner.lock();
         let req_pages = req_pages.get();
 
@@ -335,59 +371,48 @@ impl FixedPoolAllocator {
             .state
             .iter()
             .position(|state| match state {
-                State::Free {
-                    base_pfn: avail_pfn,
-                    size_pages: avail_pages,
+                State::Restored {
+                    base_pfn: restored_pfn,
+                    size_pages: restored_pages,
+                    tag: id,
                 } => {
-                    *avail_pages >= req_pages
-                        && *avail_pfn <= req_pfn
-                        && *avail_pfn + *avail_pages >= req_pfn + req_pages
+                    *restored_pfn == req_pfn && *restored_pages == req_pages
                 }
-                State::Allocated { .. } | State::Restored { .. } | State::Confirmed { .. } => false,
+                State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => false,
             })
-            .ok_or(FixedPoolOutOfMemory {
+            .ok_or(FixedPoolNoMatchingChunk {
+                pfn: req_pfn,
                 size: req_pages,
                 tag: tag.clone(),
             })?;
 
-        let new_pfn = match inner.state.swap_remove(index) {
-            State::Free {
-                base_pfn: free_base,
-                size_pages: free_len,
+        match inner.state.swap_remove(index) {
+            State::Restored {
+                base_pfn: restored_pfn,
+                size_pages: restored_pages,
+                tag: id,
             } => {
                 // Push the requested block to the collection.
-                inner.state.push(State::Restored {
+                inner.state.push(State::Confirmed {
                     base_pfn: req_pfn,
                     size_pages: req_pages,
                     tag,
                 });
 
-                if free_len > req_pages {
-                    // Push back the left free range.
-                    if free_base < req_pfn {
-                        inner.state.push(State::Free {
-                            base_pfn: free_base,
-                            size_pages: req_pfn - free_base,
-                        });
-                    }
-                    // Push back the right free range.
-                    if req_pfn + req_pages < free_base + free_len {
-                        inner.state.push(State::Free {
-                            base_pfn: req_pfn + req_pages,
-                            size_pages: free_base + free_len - req_pfn - req_pages,
-                        })
-                    }
-                }
-                req_pfn
+                Ok(FixedPoolHandle {
+                    inner: self.inner.clone(),
+                    base_pfn: req_pfn,
+                    size_pages: req_pages,
+                })
             }
-            State::Allocated { .. } | State::Restored { .. } | State::Confirmed { .. } => unreachable!(),
-        };
-
-        Ok(FixedPoolHandle {
-            inner: self.inner.clone(),
-            base_pfn: new_pfn,
-            size_pages: req_pages,
-        })
+            State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => {
+                Err(FixedPoolNoMatchingChunk {
+                    pfn: req_pfn,
+                    size: req_pages,
+                    tag,
+                })
+            }
+        }
     }
 }
 
@@ -467,16 +492,17 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         assert_eq!(size_pages as usize, pfns.len());
 
         let alloc = self
-            .alloc(
+            .restore(
+                pfns[0],
                 size_pages.try_into().expect("already checked nonzero"),
                 FixedPoolAllocator::VFIO_MSHV_TAG.into(),
             )
-            .context("failed to allocate fixed mem")?;
+            .context("failed to restore fixed mem")?;
 
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
         let mapping = sparse_mmap::SparseMapping::new(len).context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
-        tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
+        tracing::info!("YSP: restored pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
         // No need to set bit 63 because this buffer is visible to VTL2 only.
         mapping
