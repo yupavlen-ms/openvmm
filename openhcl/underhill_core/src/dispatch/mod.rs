@@ -20,6 +20,7 @@ use crate::worker::NetworkSettingsError;
 use crate::ControlRequest;
 use anyhow::Context;
 use async_trait::async_trait;
+use fixed_pool_alloc::FixedPool;
 use futures::FutureExt;
 use futures::StreamExt;
 use futures_concurrency::future::Join;
@@ -178,6 +179,7 @@ pub(crate) struct LoadedVm {
     pub _periodic_telemetry_task: Task<()>,
 
     pub shared_vis_pool: Option<SharedPool>,
+    pub fixed_mem_pool: Option<FixedPool>,
 }
 
 pub struct LoadedVmState<T> {
@@ -659,10 +661,12 @@ impl LoadedVm {
             }
         };
 
-        // YSP: FIXME:
-        let mem_pool_state = Some(MemPoolSavedState {
-            mem_pool_state: true,
-        });
+        let mem_pool_state = self.fixed_mem_pool
+            .as_ref()
+            .map(|f| {
+                f.save()
+                .ok()
+            }).and_then(|s| s);
 
         let units = self.save_units().await.context("state unit save failed")?;
         let vmgs = self

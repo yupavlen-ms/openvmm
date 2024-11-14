@@ -2876,6 +2876,7 @@ async fn new_underhill_vm(
 
         _periodic_telemetry_task: periodic_telemetry_task,
         shared_vis_pool: shared_vis_pages_pool,
+        fixed_mem_pool,
     };
 
     Ok(loaded_vm)

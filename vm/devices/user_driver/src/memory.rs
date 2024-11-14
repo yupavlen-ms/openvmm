@@ -185,10 +185,27 @@ pub mod save_restore {
 
     #[derive(Protobuf)]
     #[mesh(package = "underhill")]
+    pub struct MemPoolState {
+        /// Base PFN for the chunk.
+        #[mesh(1)]
+        pub base_pfn: u64,
+        /// Number of pages for this chunk.
+        #[mesh(2)]
+        pub size_pages: u64,
+        /// Allocated or free.
+        #[mesh(3)]
+        pub allocated: bool,
+        /// ID tag.
+        #[mesh(4)]
+        pub tag: String,
+    }
+
+    #[derive(Protobuf)]
+    #[mesh(package = "underhill")]
     /// Save-restore memory allocation mapping.
     pub struct MemPoolSavedState {
-        /// Fixed DMA pool allocation map.
+        /// Memory pool allocation map.
         #[mesh(1)]
-        pub mem_pool_state: bool, // YSP: FIXME:
+        pub mem_pool: Vec<MemPoolState>,
     }
 }
