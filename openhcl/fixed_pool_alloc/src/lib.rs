@@ -21,6 +21,7 @@ use thiserror::Error;
 use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDmaBuffer;
 use user_driver::HostDmaAllocator;
+use user_driver::memory::save_restore::MemPoolSavedState;
 
 /// Error returned when unable to allocate memory.
 #[derive(Debug, Error)]
@@ -44,6 +45,7 @@ enum State {
         base_pfn: u64,
         #[inspect(hex)]
         size_pages: u64,
+        restored: bool,
         tag: String,
     },
 }
@@ -85,6 +87,7 @@ impl Drop for FixedPoolHandle {
                 if let State::Allocated {
                     base_pfn: base,
                     size_pages: len,
+                    restored: _,
                     tag: _,
                 } = state
                 {
@@ -118,6 +121,30 @@ impl FixedPool {
     /// Create a fixed pool allocator, with the specified memory.
     // YSP: FIXME: See if we need MemoryRangeWithNode?
     pub fn new(fixed_pool: &[MemoryRange]) -> anyhow::Result<Self> {
+        let mut pages = Vec::new();
+        for range in fixed_pool {
+            tracing::info!("YSP: FixedPool::new pfn={:X} len={}", range.start() / HV_PAGE_SIZE, range.len());
+            pages.push(State::Free {
+                base_pfn: range.start() / HV_PAGE_SIZE,
+                size_pages: range.len() / HV_PAGE_SIZE,
+            });
+        }
+
+        Ok(Self {
+            inner: Arc::new(Mutex::new(FixedPoolInner { state: pages })),
+        })
+    }
+
+    // YSP: FIXME:
+    pub fn save(&self) -> anyhow::Result<MemPoolSavedState> {
+        let inner = self.inner.lock();
+        Ok(MemPoolSavedState {
+            mem_pool_state: true,   // YSP: FIXME:
+        })
+    }
+
+    // YSP: FIXME:
+    pub fn restore(fixed_pool: &[MemoryRange], saved_state: MemPoolSavedState) -> anyhow::Result<Self> {
         let mut pages = Vec::new();
         for range in fixed_pool {
             tracing::info!("YSP: FixedPool::new pfn={:X} len={}", range.start() / HV_PAGE_SIZE, range.len());
@@ -184,6 +211,7 @@ impl FixedPoolAllocator {
                 inner.state.push(State::Allocated {
                     base_pfn: base,
                     size_pages,
+                    restored: false,
                     tag,
                 });
 
@@ -211,6 +239,78 @@ impl FixedPoolAllocator {
             size_pages,
         })
     }
+
+    /// Restore allocation of the contiguous pages from the fixed pool.
+    /// If a contiguous region of free pages is not available, then an
+    /// error is returned.
+    fn restore(
+        &self,
+        req_pfn: u64,
+        req_pages: NonZeroU64,
+        tag: String,
+    ) -> Result<FixedPoolHandle, FixedPoolOutOfMemory> {
+        let mut inner = self.inner.lock();
+        let req_pages = req_pages.get();
+
+        let index = inner
+            .state
+            .iter()
+            .position(|state| match state {
+                State::Free {
+                    base_pfn: avail_pfn,
+                    size_pages: avail_pages,
+                } => {
+                    *avail_pages >= req_pages
+                        && *avail_pfn <= req_pfn
+                        && *avail_pfn + *avail_pages >= req_pfn + req_pages
+                }
+                State::Allocated { .. } => false,
+            })
+            .ok_or(FixedPoolOutOfMemory {
+                size: req_pages,
+                tag: tag.clone(),
+            })?;
+
+        let new_pfn = match inner.state.swap_remove(index) {
+            State::Free {
+                base_pfn: free_base,
+                size_pages: free_len,
+            } => {
+                // Push the requested block to the collection.
+                inner.state.push(State::Allocated {
+                    base_pfn: req_pfn,
+                    size_pages: req_pages,
+                    restored: true,
+                    tag,
+                });
+
+                if free_len > req_pages {
+                    // Push back the left free range.
+                    if free_base < req_pfn {
+                        inner.state.push(State::Free {
+                            base_pfn: free_base,
+                            size_pages: req_pfn - free_base,
+                        });
+                    }
+                    // Push back the right free range.
+                    if req_pfn + req_pages < free_base + free_len {
+                        inner.state.push(State::Free {
+                            base_pfn: req_pfn + req_pages,
+                            size_pages: free_base + free_len - req_pfn - req_pages,
+                        })
+                    }
+                }
+                req_pfn
+            }
+            State::Allocated { .. } => unreachable!(),
+        };
+
+        Ok(FixedPoolHandle {
+            inner: self.inner.clone(),
+            base_pfn: new_pfn,
+            size_pages: req_pages,
+        })
+    }
 }
 
 #[cfg(feature = "vfio")]
@@ -230,7 +330,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         let alloc = self
             .alloc(
                 size_pages.try_into().expect("already checked nonzero"),
-                "mshv dma".into(),
+                "mshv_dma".into(),
             )
             .context("failed to allocate fixed mem")?;
 
@@ -291,7 +391,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         let alloc = self
             .alloc(
                 size_pages.try_into().expect("already checked nonzero"),
-                "mshv dma".into(),
+                "mshv_dma".into(),
             )
             .context("failed to allocate fixed mem")?;
 

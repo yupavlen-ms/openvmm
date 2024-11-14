@@ -1756,7 +1756,10 @@ async fn new_underhill_vm(
     // Contents of fixed pool will be preserved during servicing.
     let fixed_mem_pool = if !runtime_params.dma_preserve_memory_map().is_empty() {
         let pools = runtime_params.dma_preserve_memory_map();
-        Some(FixedPool::new(pools)?)
+        match servicing_state.mem_pool_state {
+            Some(dma) => Some(FixedPool::restore(pools, dma.unwrap())?),
+            None => Some(FixedPool::new(pools)?)
+        }
     } else {
         None
     };

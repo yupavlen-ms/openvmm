@@ -179,3 +179,16 @@ impl MemoryBlock {
         self.base as u64
     }
 }
+
+pub mod save_restore {
+    use mesh::payload::Protobuf;
+
+    #[derive(Protobuf)]
+    #[mesh(package = "underhill")]
+    /// Save-restore memory allocation mapping.
+    pub struct MemPoolSavedState {
+        /// Fixed DMA pool allocation map.
+        #[mesh(1)]
+        pub mem_pool_state: bool, // YSP: FIXME:
+    }
+}
