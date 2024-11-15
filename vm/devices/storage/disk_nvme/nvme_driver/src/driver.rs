@@ -522,7 +522,11 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
                 s.device_id = self.device_id.clone();
                 for ns in &self.namespaces {
-                    s.namespaces.push(ns.save()?);
+                    // TODO: The decision is to re-query namespace data after restore.
+                    // Leave the code in place so it can be restored in future.
+                    // The reason is uncertainty about namespace change during servicing.
+                    let _ns_data = ns.save()?;
+                    // s.namespaces.push(_ns_data);
                     tracing::info!("YSP: saved nsid={}", ns.nsid());
                 }
                 Ok(s)
@@ -674,6 +678,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // Restore namespace(s).
         for ns in &saved_state.namespaces {
+            // TODO: Current approach is to re-query namespace data after servicing
+            // and this array will be empty. Once we confirm that we can process
+            // namespace change notification AEN, the restore code will be re-added.
             this.namespaces.push(Arc::new(Namespace::restore(
                 &driver,
                 admin.issuer().clone(),

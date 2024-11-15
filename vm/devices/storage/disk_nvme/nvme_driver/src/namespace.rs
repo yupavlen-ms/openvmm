@@ -531,7 +531,7 @@ impl Namespace {
         self.nsid
     }
 
-    /// Save namespace data for servicing.
+    /// Save namespace object data for servicing.
     pub fn save(&self) -> anyhow::Result<SavedNamespaceData> {
         tracing::info!("YSP: Namespace::save nsid={}", self.nsid);
         let id = self.state.identify.lock();
@@ -544,7 +544,7 @@ impl Namespace {
         Ok(save_data)
     }
 
-    /// Restore namespace data after servicing.
+    /// Restore namespace object data after servicing.
     pub(super) fn restore(
         driver: &VmTaskDriver,
         admin: Arc<Issuer>,
