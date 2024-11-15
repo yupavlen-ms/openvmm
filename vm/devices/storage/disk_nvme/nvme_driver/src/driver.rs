@@ -63,7 +63,7 @@ pub struct NvmeDriver<T: DeviceBacking> {
     rescan_event: Arc<event_listener::Event>,
     /// NVMe namespaces associated with this driver.
     #[inspect(skip)]
-    namespace: Vec<Arc<Namespace>>,
+    namespaces: Vec<Arc<Namespace>>,
     /// Keeps the controller connected (CSTS.RDY==1) while servicing.
     nvme_keepalive: bool,
 }
@@ -251,7 +251,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             driver,
             io_issuers,
             rescan_event: Default::default(),
-            namespace: vec![],
+            namespaces: vec![],
             nvme_keepalive: false,
         })
     }
@@ -472,7 +472,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
         tracing::info!("YSP: namespace {} for {}", nsid, &self.device_id);
         // Check if namespace was already added after restore.
-        if let Some(ns) = self.namespace.iter().find(|n| n.nsid() == nsid) {
+        if let Some(ns) = self.namespaces.iter().find(|n| n.nsid() == nsid) {
             tracing::info!("YSP: FOUND namespace {} for {}", nsid, &self.device_id);
             return Ok(ns.clone());
         }
@@ -491,7 +491,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .await?,
         );
 
-        self.namespace.push(ns_new.clone());
+        self.namespaces.push(ns_new.clone());
         tracing::info!("YSP: NEW namespace {} for {}", nsid, &self.device_id);
         Ok(ns_new)
     }
@@ -525,7 +525,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     .write_to(s.identify_ctrl.as_mut());
 
                 s.device_id = self.device_id.clone();
-                for ns in &self.namespace {
+                for ns in &self.namespaces {
                     s.namespace.push(ns.save()?);
                     tracing::info!("YSP: saved nsid={}", ns.nsid());
                 }
@@ -587,7 +587,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             driver: driver.clone(),
             io_issuers,
             rescan_event: Default::default(),
-            namespace: vec![], // YSP: FIXME: check this and below
+            namespaces: vec![], // YSP: FIXME: check this and below
             nvme_keepalive: true,
         };
 
@@ -678,7 +678,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // Restore namespace(s).
         for ns in &saved_state.namespace {
-            this.namespace.push(Arc::new(Namespace::restore(
+            this.namespaces.push(Arc::new(Namespace::restore(
                 &driver,
                 admin.issuer().clone(),
                 this.rescan_event.clone(),

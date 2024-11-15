@@ -56,7 +56,6 @@ use tracing::instrument;
 use tracing::Instrument;
 use uevent::UeventListener;
 use underhill_threadpool::AffinitizedThreadpool;
-use user_driver::memory::save_restore::MemPoolSavedState;
 use virt::IsolationType;
 use virt_mshv_vtl::UhPartition;
 use virt_mshv_vtl::VtlCrash;

@@ -1783,6 +1783,17 @@ async fn new_underhill_vm(
         None
     };
 
+    // NVMe manager is the only client for fixed DMA pool as of now,
+    // run integrity check after restore. Find a better place if more
+    // clients added in future.
+    if fixed_mem_pool.is_some() && nvme_manager.is_some() {
+        fixed_mem_pool
+            .as_ref()
+            .unwrap()
+            .validate()
+            .expect("integrity errors in fixed memory pool");
+    }
+
     let initial_generation_id = match dps.general.generation_id.map(u128::from_ne_bytes) {
         Some(0) | None => {
             let mut gen_id = [0; 16];

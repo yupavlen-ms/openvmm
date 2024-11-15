@@ -192,6 +192,7 @@ impl FixedPool {
                 tag: id,
             } = e
             {
+                tracing::info!("YSP: saving memblock pfn {} len {}", *base, *len);
                 mem_pool.push(MemPoolState {
                     base_pfn: *base,
                     size_pages: *len,
@@ -204,6 +205,7 @@ impl FixedPool {
                 size_pages: len,
             } = e
             {
+                tracing::info!("YSP: saving FREE memblock pfn {} len {}", *base, *len);
                 mem_pool.push(MemPoolState {
                     base_pfn: *base,
                     size_pages: *len,
@@ -232,6 +234,7 @@ impl FixedPool {
             for range in fixed_pool {
                 if range.contains(&linear) {
                     if chunk.allocated {
+                        tracing::info!("YSP: restoring memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
                         pages.push(State::Restored {
                             base_pfn: chunk.base_pfn,
                             size_pages: chunk.size_pages,
@@ -239,6 +242,7 @@ impl FixedPool {
                         });
                     }
                     else {
+                        tracing::info!("YSP: restoring FREE memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
                         pages.push(State::Free {
                             base_pfn: chunk.base_pfn,
                             size_pages: chunk.size_pages,
@@ -254,7 +258,7 @@ impl FixedPool {
     }
 
     /// Validate memory pool after restore finishes.
-    pub fn validate(&mut self) -> anyhow::Result<(), FixedPoolIntegrity> {
+    pub fn validate(&self) -> anyhow::Result<(), FixedPoolIntegrity> {
         let inner = self.inner.lock();
         let leaked_blocks = inner.state.iter().filter(|chunk| {
             if let State::Restored { .. } = chunk {
@@ -266,10 +270,12 @@ impl FixedPool {
         }).count();
 
         if leaked_blocks > 0 {
+            tracing::info!("YSP: validate FAIL count={}", leaked_blocks);
             return Err(FixedPoolIntegrity {
                 leaked_blocks
             });
         }
+        tracing::info!("YSP: validate SUCCESS");
 
         Ok(())
     }
@@ -374,7 +380,7 @@ impl FixedPoolAllocator {
                 State::Restored {
                     base_pfn: restored_pfn,
                     size_pages: restored_pages,
-                    tag: id,
+                    tag: _,
                 } => {
                     *restored_pfn == req_pfn && *restored_pages == req_pages
                 }
@@ -386,12 +392,14 @@ impl FixedPoolAllocator {
                 tag: tag.clone(),
             })?;
 
+        tracing::info!("YSP: Found matching chunk index={} for pfn={:X} size={}", index, req_pfn, req_pages);
         match inner.state.swap_remove(index) {
             State::Restored {
-                base_pfn: restored_pfn,
-                size_pages: restored_pages,
-                tag: id,
+                base_pfn: _,
+                size_pages: _,
+                tag: _,
             } => {
+                tracing::info!("YSP: yehaaaw");
                 // Push the requested block to the collection.
                 inner.state.push(State::Confirmed {
                     base_pfn: req_pfn,
@@ -406,6 +414,7 @@ impl FixedPoolAllocator {
                 })
             }
             State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => {
+                tracing::info!("YSP: oopsie");
                 Err(FixedPoolNoMatchingChunk {
                     pfn: req_pfn,
                     size: req_pages,
