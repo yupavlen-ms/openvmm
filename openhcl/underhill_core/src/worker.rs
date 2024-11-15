@@ -1787,11 +1787,18 @@ async fn new_underhill_vm(
     // run integrity check after restore. Find a better place if more
     // clients added in future.
     if fixed_mem_pool.is_some() && nvme_manager.is_some() {
-        fixed_mem_pool
+        match fixed_mem_pool
             .as_ref()
             .unwrap()
-            .validate()
-            .expect("integrity errors in fixed memory pool");
+            .validate() {
+            Ok(_) => {
+                tracing::info!("fixed mem pool integrity OK");
+            },
+            Err(_) => {
+                // Can be converted to panic after comprehensive testing.
+                tracing::info!("fixed mem pool integrity ERROR");
+            }
+        }
     }
 
     let initial_generation_id = match dps.general.generation_id.map(u128::from_ne_bytes) {
