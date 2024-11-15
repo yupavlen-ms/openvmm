@@ -470,13 +470,10 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
     /// Gets the namespace with namespace ID `nsid`.
     pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
-        tracing::info!("YSP: namespace {} for {}", nsid, &self.device_id);
-        // Check if namespace was already added after restore.
-        if let Some(ns) = self.namespaces.iter().find(|n| n.nsid() == nsid) {
-            tracing::info!("YSP: FOUND namespace {} for {}", nsid, &self.device_id);
-            return Ok(ns.clone());
-        }
-
+        tracing::info!("YSP: QUERY namespace {} for {}", nsid, &self.device_id);
+        // Even if namespace might have been previously restored,
+        // query Identify again to prevent possible mismatch.
+        // TODO: Check if we will process Namespace Change AEN instead.
         let ns_new = Arc::new(
             Namespace::new(
                 &self.driver,
@@ -486,7 +483,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 &self.io_issuers,
                 &self.device_id,
                 nsid,
-                None,
             )
             .await?,
         );
@@ -526,7 +522,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
                 s.device_id = self.device_id.clone();
                 for ns in &self.namespaces {
-                    s.namespace.push(ns.save()?);
+                    s.namespaces.push(ns.save()?);
                     tracing::info!("YSP: saved nsid={}", ns.nsid());
                 }
                 Ok(s)
@@ -677,7 +673,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         worker.io = ioq;
 
         // Restore namespace(s).
-        for ns in &saved_state.namespace {
+        for ns in &saved_state.namespaces {
             this.namespaces.push(Arc::new(Namespace::restore(
                 &driver,
                 admin.issuer().clone(),
@@ -981,7 +977,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             io,
             identify_ctrl: [0; 4096],  // Will be updated by the caller.
             device_id: "".to_string(), // Will be updated by the caller.
-            namespace: vec![],         // Will be updated by the caller.
+            namespaces: vec![],        // Will be updated by the caller.
             qsize: worker_state.qsize,
             max_io_queues: worker_state.max_io_queues,
         };
@@ -1017,7 +1013,7 @@ pub mod save_restore {
         pub device_id: String,
         /// Namespace data.
         #[mesh(5)]
-        pub namespace: Vec<crate::namespace::SavedNamespaceData>,
+        pub namespaces: Vec<crate::namespace::SavedNamespaceData>,
         /// Queue size as determined by CAP.MQES.
         #[mesh(6)]
         pub qsize: u16,

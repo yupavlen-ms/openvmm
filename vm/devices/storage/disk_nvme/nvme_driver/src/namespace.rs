@@ -79,15 +79,51 @@ impl Namespace {
         io_issuers: &Arc<IoIssuers>,
         device_id: &str,
         nsid: u32,
-        identify_ns: Option<nvm::IdentifyNamespace>,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::new {}", nsid);
-        let identify = match identify_ns {
-            Some(ns) => ns.clone(),
-            None => identify_namespace(&admin, nsid)
+        let identify = identify_namespace(&admin, nsid)
                 .await
-                .map_err(NamespaceError::Request)?,
-        };
+                .map_err(NamespaceError::Request)?;
+
+        let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
+        let this = Namespace::new_from_identify(
+            controller_identify.clone(),
+            io_issuers,
+            cancel_rescan,
+            nsid,
+            identify)?;
+
+        // Spawn a task, but detach is so that it doesn't get dropped while NVMe
+        // request is in flight. Use a cancel context, whose cancel gets dropped
+        // when `self` gets dropped, so that it terminates after finishing any
+        // requests.
+        driver
+            .spawn(format!("nvme_poll_rescan_{nsid}"), {
+                let state = this.state.clone();
+                async move {
+                    state
+                        .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
+                        .await
+                }
+                .instrument(tracing::info_span!(
+                    "nvme_poll_rescan",
+                    device_id,
+                    nsid,
+                ))
+            })
+            .detach();
+
+        Ok(this)
+    }
+
+    /// Create Namespace object from Identify data structure.
+    fn new_from_identify(
+        controller_identify: Arc<spec::IdentifyController>,
+        io_issuers: &Arc<IoIssuers>,
+        cancel_rescan: mesh::Cancel,
+        nsid: u32,
+        identify: nvm::IdentifyNamespace,
+    ) -> Result<Self, NamespaceError> {
         if identify.nsze == 0 {
             return Err(NamespaceError::NotFound);
         }
@@ -139,27 +175,6 @@ impl Namespace {
             identify: Mutex::new(identify),
             resize_event: Default::default(),
         });
-
-        // Spawn a task, but detach is so that it doesn't get dropped while NVMe
-        // request is in flight. Use a cancel context, whose cancel gets dropped
-        // when `self` gets dropped, so that it terminates after finishing any
-        // requests.
-        let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
-        driver
-            .spawn(format!("nvme_poll_rescan_{nsid}"), {
-                let state = state.clone();
-                async move {
-                    state
-                        .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
-                        .await
-                }
-                .instrument(tracing::info_span!(
-                    "nvme_poll_rescan",
-                    device_id,
-                    nsid,
-                ))
-            })
-            .detach();
 
         Ok(Self {
             nsid,
@@ -541,21 +556,39 @@ impl Namespace {
         saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::restore nsid={}", saved_state.nsid);
+        let nsid = saved_state.nsid;
         let identify = nvm::IdentifyNamespace::read_from_prefix(identify_ns)
             .unwrap_or(nvm::IdentifyNamespace::new_zeroed());
-        // Restore provides Identify Namespace result to new() so there is no wait.
-        let ns = futures::executor::block_on(Namespace::new(
-            driver,
-            admin,
-            rescan_event,
-            identify_ctrl,
-            io_issuers,
-            device_id,
-            saved_state.nsid,
-            Some(identify),
-        ));
 
-        ns
+        let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
+        let this = Namespace::new_from_identify(
+            identify_ctrl.clone(),
+            io_issuers,
+            cancel_rescan,
+            nsid,
+            identify)?;
+    
+        // Spawn a task, but detach is so that it doesn't get dropped while NVMe
+        // request is in flight. Use a cancel context, whose cancel gets dropped
+        // when `self` gets dropped, so that it terminates after finishing any
+        // requests.
+        driver
+            .spawn(format!("nvme_poll_rescan_{nsid}"), {
+                let state = this.state.clone();
+                async move {
+                    state
+                        .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
+                        .await
+                }
+                .instrument(tracing::info_span!(
+                    "nvme_poll_rescan",
+                    device_id,
+                    nsid,
+                ))
+            })
+            .detach();
+    
+        Ok(this)
     }
 }
 
