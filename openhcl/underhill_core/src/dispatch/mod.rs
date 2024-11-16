@@ -660,12 +660,11 @@ impl LoadedVm {
             }
         };
 
-        let mem_pool_state = self.fixed_mem_pool
+        let mem_pool_state = self
+            .fixed_mem_pool
             .as_ref()
-            .map(|f| {
-                f.save()
-                .ok()
-            }).and_then(|s| s);
+            .map(|f| f.save().ok())
+            .and_then(|s| s);
 
         let units = self.save_units().await.context("state unit save failed")?;
         let vmgs = self

@@ -1276,7 +1276,7 @@ impl WorkerInner {
             parse_packet(packet, &mut self.full_request_pool).map_err(WorkerError::PacketError)?;
         let submitted_io = match packet.data {
             PacketData::ExecuteScsi(request) => {
-                self.push_scsi_request(packet.transaction_id, request);
+                self.push_scsi_request(false, packet.transaction_id, request);
                 true
             }
             PacketData::ResetAdapter | PacketData::ResetBus | PacketData::ResetLun => {
@@ -1316,7 +1316,10 @@ impl WorkerInner {
         Ok(submitted_io)
     }
 
-    fn push_scsi_request(&mut self, transaction_id: u64, full_request: Arc<ScsiRequestAndRange>) {
+    fn push_scsi_request(&mut self, after_restore: bool, transaction_id: u64, full_request: Arc<ScsiRequestAndRange>) {
+        if after_restore {
+            tracing::info!("YSP: push_scsi_request id={}", transaction_id);
+        }
         let scsi_queue = self.scsi_queue.clone();
         let scsi_request_state = ScsiRequestState {
             transaction_id,

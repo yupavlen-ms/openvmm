@@ -18,11 +18,11 @@ use parking_lot::Mutex;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use thiserror::Error;
+use user_driver::memory::save_restore::MemPoolSavedState;
+use user_driver::memory::save_restore::MemPoolState;
 use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDmaBuffer;
 use user_driver::HostDmaAllocator;
-use user_driver::memory::save_restore::MemPoolSavedState;
-use user_driver::memory::save_restore::MemPoolState;
 
 /// Error returned when unable to allocate memory.
 #[derive(Debug, Error)]
@@ -118,11 +118,13 @@ impl Drop for FixedPoolHandle {
                     base_pfn: base,
                     size_pages: len,
                     tag: _,
-                } | State::Restored {
+                }
+                | State::Restored {
                     base_pfn: base,
                     size_pages: len,
                     tag: _,
-                } | State::Confirmed {
+                }
+                | State::Confirmed {
                     base_pfn: base,
                     size_pages: len,
                     tag: _,
@@ -182,11 +184,13 @@ impl FixedPool {
                 base_pfn: base,
                 size_pages: len,
                 tag: id,
-            } | State::Restored {
+            }
+            | State::Restored {
                 base_pfn: base,
                 size_pages: len,
                 tag: id,
-            } | State::Confirmed {
+            }
+            | State::Confirmed {
                 base_pfn: base,
                 size_pages: len,
                 tag: id,
@@ -199,8 +203,7 @@ impl FixedPool {
                     tag: id.clone(),
                     allocated: true,
                 });
-            }
-            else if let State::Free {
+            } else if let State::Free {
                 base_pfn: base,
                 size_pages: len,
             } = e
@@ -212,19 +215,19 @@ impl FixedPool {
                     tag: "".into(),
                     allocated: false,
                 });
-            }
-            else {
+            } else {
                 unreachable!("invalid mem pool state");
             }
         });
 
-        Ok(MemPoolSavedState {
-            mem_pool,
-        })
+        Ok(MemPoolSavedState { mem_pool })
     }
 
     /// Restore memory pool from allocation map.
-    pub fn restore(fixed_pool: &[MemoryRange], saved_state: MemPoolSavedState) -> anyhow::Result<Self> {
+    pub fn restore(
+        fixed_pool: &[MemoryRange],
+        saved_state: MemPoolSavedState,
+    ) -> anyhow::Result<Self> {
         let mut pages = Vec::new();
         saved_state.mem_pool.iter().for_each(|chunk| {
             let linear = MemoryRange::from_4k_gpn_range(std::ops::Range {
@@ -240,8 +243,7 @@ impl FixedPool {
                             size_pages: chunk.size_pages,
                             tag: chunk.tag.clone(),
                         });
-                    }
-                    else {
+                    } else {
                         tracing::info!("YSP: restoring FREE memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
                         pages.push(State::Free {
                             base_pfn: chunk.base_pfn,
@@ -260,20 +262,15 @@ impl FixedPool {
     /// Validate memory pool after restore finishes.
     pub fn validate(&self) -> anyhow::Result<(), FixedPoolIntegrity> {
         let inner = self.inner.lock();
-        let leaked_blocks = inner.state.iter().filter(|chunk| {
-            if let State::Restored { .. } = chunk {
-                true
-            }
-            else {
-                false
-            }
-        }).count();
+        let leaked_blocks = inner
+            .state
+            .iter()
+            .filter(|chunk| matches!(chunk, State::Restored { .. }))
+            .count();
 
         if leaked_blocks > 0 {
             tracing::info!("YSP: validate FAIL count={}", leaked_blocks);
-            return Err(FixedPoolIntegrity {
-                leaked_blocks
-            });
+            return Err(FixedPoolIntegrity { leaked_blocks });
         }
         tracing::info!("YSP: validate SUCCESS");
 
@@ -346,7 +343,9 @@ impl FixedPoolAllocator {
 
                 base
             }
-            State::Allocated { .. } | State::Restored { .. } | State::Confirmed { .. } => unreachable!(),
+            State::Allocated { .. } | State::Restored { .. } | State::Confirmed { .. } => {
+                unreachable!()
+            }
         };
         tracing::info!(
             "YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}",
@@ -381,9 +380,7 @@ impl FixedPoolAllocator {
                     base_pfn: restored_pfn,
                     size_pages: restored_pages,
                     tag: _,
-                } => {
-                    *restored_pfn == req_pfn && *restored_pages == req_pages
-                }
+                } => *restored_pfn == req_pfn && *restored_pages == req_pages,
                 State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => false,
             })
             .ok_or(FixedPoolNoMatchingChunk {

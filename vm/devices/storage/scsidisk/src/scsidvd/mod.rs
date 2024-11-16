@@ -237,6 +237,7 @@ impl SimpleScsiDvd {
 
 impl ScsiSaveRestore for SimpleScsiDvd {
     fn save(&self) -> Result<Option<ScsiSavedState>, SaveError> {
+        tracing::info!("-YSP: SimpleScsiDvd::save");
         let sense = self.sense_data.get();
         let sense_data = sense.map(|sense| SavedSenseData {
             sense_key: sense.header.sense_key.0,
@@ -255,6 +256,7 @@ impl ScsiSaveRestore for SimpleScsiDvd {
     }
 
     fn restore(&self, state: &ScsiSavedState) -> Result<(), RestoreError> {
+        tracing::info!("-YSP: SimpleScsiDvd::restore");
         if let ScsiSavedState::ScsiDvd(dvd_state) = state {
             let ScsiDvdSavedState {
                 sense_data,

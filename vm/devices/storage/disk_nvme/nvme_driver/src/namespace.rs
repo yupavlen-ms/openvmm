@@ -82,8 +82,8 @@ impl Namespace {
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::new {}", nsid);
         let identify = identify_namespace(&admin, nsid)
-                .await
-                .map_err(NamespaceError::Request)?;
+            .await
+            .map_err(NamespaceError::Request)?;
 
         let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
         let this = Namespace::new_from_identify(
@@ -91,7 +91,8 @@ impl Namespace {
             io_issuers,
             cancel_rescan,
             nsid,
-            identify)?;
+            identify,
+        )?;
 
         // Spawn a task, but detach is so that it doesn't get dropped while NVMe
         // request is in flight. Use a cancel context, whose cancel gets dropped
@@ -278,6 +279,7 @@ impl Namespace {
         guest_memory: &GuestMemory,
         mem: PagedRange<'_>,
     ) -> Result<(), RequestError> {
+        tracing::info!("YSP: wwrite3 lba={}", lba);
         self.check_active()?;
         if block_count == 0 {
             return Ok(());
@@ -308,6 +310,7 @@ impl Namespace {
                 mem.subrange(0, len),
             )
             .await?;
+        tracing::info!("YSP: wwrite3 CPL lba={} bc={}", lba, block_count);
         Ok(())
     }
 
@@ -566,8 +569,9 @@ impl Namespace {
             io_issuers,
             cancel_rescan,
             nsid,
-            identify)?;
-    
+            identify,
+        )?;
+
         // Spawn a task, but detach is so that it doesn't get dropped while NVMe
         // request is in flight. Use a cancel context, whose cancel gets dropped
         // when `self` gets dropped, so that it terminates after finishing any
@@ -587,7 +591,7 @@ impl Namespace {
                 ))
             })
             .detach();
-    
+
         Ok(this)
     }
 }
