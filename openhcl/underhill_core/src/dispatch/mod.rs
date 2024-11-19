@@ -644,12 +644,12 @@ impl LoadedVm {
 
         // Only save NVMe state when there are NVMe controllers and nvme_keepalive
         // wasn't explicitly disabled through capabilities_flags, otherwise save None.
-        let nvme_state = match self.nvme_manager.as_ref() {
+        let nvme_state = match self.nvme_manager.as_mut() {
             Some(n) => {
                 // Do not save NVMe state if there was an error during save
                 // or nvme_keepalive was explicitly disabled,
                 // revert back to the regular nvme_init after boot.
-                match n.save().await {
+                match n.save() {
                     Ok(s) => Some(NvmeSavedState { nvme_state: s }),
                     Err(_) => None,
                 }

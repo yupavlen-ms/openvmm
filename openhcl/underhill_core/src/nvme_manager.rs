@@ -30,7 +30,10 @@ use vm_resource::kind::DiskHandleKind;
 use vm_resource::AsyncResolveResource;
 use vm_resource::ResourceId;
 use vm_resource::ResourceResolver;
+use vmcore::save_restore::SaveError;
 use vmcore::save_restore::SavedStateRoot;
+use vmcore::save_restore::SaveRestore;
+use vmcore::save_restore::RestoreError;
 use vmcore::vm_task::VmTaskDriverSource;
 
 #[derive(Debug, Error)]
@@ -145,7 +148,7 @@ impl NvmeManager {
     }
 
     /// Save NVMe manager's state during servicing.
-    pub async fn save(&self) -> anyhow::Result<NvmeManagerSavedState> {
+    pub async fn save2(&self) -> anyhow::Result<NvmeManagerSavedState> {
         tracing::info!("YSP: NvmeManager::save keepalive={}", self.nvme_keepalive);
         // NVMe manager has no own data to save, everything will be done
         // in the Worker task which can be contacted through Client.
@@ -160,7 +163,7 @@ impl NvmeManager {
     }
 
     /// Restore NVMe manager's state after servicing.
-    async fn restore(
+    async fn restore2(
         worker: &mut NvmeManagerWorker,
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
@@ -178,6 +181,41 @@ impl NvmeManager {
     pub fn override_nvme_keepalive_flag(&mut self, nvme_keepalive: bool) {
         tracing::info!("YSP: Override nvme_keepalive = {}", nvme_keepalive);
         self.nvme_keepalive = nvme_keepalive;
+    }
+}
+
+impl SaveRestore for NvmeManager {
+    type SavedState = NvmeManagerSavedState;
+
+    /// Save NVMe manager's state during servicing.
+    fn save(&mut self) -> Result<Self::SavedState, SaveError> {
+        tracing::info!("YSP: NvmeManager::save keepalive={}", self.nvme_keepalive);
+        // NVMe manager has no own data to save, everything will be done
+        // in the Worker task which can be contacted through Client.
+        if self.nvme_keepalive {
+            self.client().save().await
+        } else {
+            // If nvme_keepalive was explicitly disabled,
+            // return an error which is non-fatal indication
+            // that there is no save data.
+            Err(anyhow::Error::from(SaveRestoreError::ExplicitlyDisabled {}))
+        }
+    }
+
+    /// Restore NVMe manager's state after servicing.
+    fn restore(
+        &mut self,
+        saved_state: NvmeSavedState,
+        //worker: &mut NvmeManagerWorker,
+    ) -> Result<(), RestoreError> {
+        tracing::info!("YSP: NvmeManager::restore");
+        let dma_buffer = worker.dma_buffer.clone();
+        worker
+            .restore(dma_buffer, &saved_state.nvme_state)
+            .instrument(tracing::info_span!("nvme_worker_restore"))
+            .await?;
+
+        Ok(())
     }
 }
 
