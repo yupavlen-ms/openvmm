@@ -1163,7 +1163,7 @@ impl SimpleScsiDisk {
                 return Err(ScsiError::WriteProtected);
             }
 
-            tracing::info!("YSP: wwrite offset={}", p.offset);
+            //tracing::info!("YSP: wwrite offset={}", p.offset);
             self.disk
                 .write_vectored(&external_data, p.offset, p.fua)
                 .await
@@ -1285,7 +1285,7 @@ impl AsyncScsiDisk for SimpleScsiDisk {
 
             // YSP:
             if op == ScsiOp::WRITE || op == ScsiOp::WRITE6 || op == ScsiOp::WRITE12 || op == ScsiOp::WRITE16 {
-                tracing::info!("YSP: WRITE CPL ");
+                //tracing::info!("YSP: WRITE CPL ");
             }
 
             self.process_result(result, op)

@@ -127,7 +127,7 @@ impl AsyncDisk for NvmeDisk {
         sector: u64,
         fua: bool,
     ) -> StackFuture<'a, Result<(), DiskError>, { ASYNC_DISK_STACK_SIZE }> {
-        tracing::info!("YSP: wwrite2 sector={}", sector);
+        //tracing::info!("YSP: wwrite2 sector={}", sector);
         StackFuture::from(async move {
             let block_count = buffers.len() as u64 >> self.block_shift;
             let mut block_offset = 0;

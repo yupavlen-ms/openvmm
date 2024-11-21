@@ -279,7 +279,7 @@ impl Namespace {
         guest_memory: &GuestMemory,
         mem: PagedRange<'_>,
     ) -> Result<(), RequestError> {
-        tracing::info!("YSP: wwrite3 lba={}", lba);
+        //tracing::info!("YSP: wwrite3 lba={}", lba);
         self.check_active()?;
         if block_count == 0 {
             return Ok(());
@@ -310,7 +310,7 @@ impl Namespace {
                 mem.subrange(0, len),
             )
             .await?;
-        tracing::info!("YSP: wwrite3 CPL lba={} bc={}", lba, block_count);
+        //tracing::info!("YSP: wwrite3 CPL lba={} bc={}", lba, block_count);
         Ok(())
     }
 
