@@ -381,11 +381,6 @@ fn parse_openhcl(node: &Node<'_>) -> anyhow::Result<OpenhclInfo> {
         reserved_range
     };
 
-    let vtl0_alias_map = try_find_property(node, "vtl0-alias-map")
-        .map(|prop| prop.read_u64(0).map_err(err_to_owned))
-        .transpose()
-        .context("unable to read vtl0-alias-map")?;
-
     // Report DMA preserve ranges in a separate vec, for convenience.
     let dma_preserve_ranges = memory
         .iter()
