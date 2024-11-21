@@ -64,7 +64,6 @@ use virt_support_apic::OffloadNotSupported;
 use virt_support_x86emu::emulate::emulate_io;
 use virt_support_x86emu::emulate::emulate_translate_gva;
 use virt_support_x86emu::emulate::EmulatorSupport;
-use virt_support_x86emu::emulate::TranslateGvaSupport;
 use virt_support_x86emu::emulate::TranslateMode;
 use virt_support_x86emu::translate::TranslationRegisters;
 use vmcore::vmtime::VmTimeAccess;
@@ -478,6 +477,37 @@ impl HardwareIsolatedBacking for TdxBacked {
         _target_vtl: GuestVtl,
     ) {
         todo!()
+    }
+
+    fn translation_registers(
+        &self,
+        this: &UhProcessor<'_, Self>,
+        vtl: GuestVtl,
+    ) -> TranslationRegisters {
+        // TODO TDX GUEST VSM: use vtl for all registers
+        let cr0 = this.backing.cr0.read(&this.runner);
+        let cr4 = this.backing.cr4.read(&this.runner);
+        let efer = this.backing.efer;
+        let cr3 = this.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR3);
+        let ss = this.read_segment(vtl, TdxSegmentReg::Ss).into();
+        let rflags = this.runner.tdx_enter_guest_state().rflags;
+
+        TranslationRegisters {
+            cr0,
+            cr4,
+            efer,
+            cr3,
+            ss,
+            rflags,
+            encryption_mode: this.partition.caps.vtom.map_or(
+                virt_support_x86emu::translate::EncryptionMode::None,
+                virt_support_x86emu::translate::EncryptionMode::Vtom,
+            ),
+        }
+    }
+
+    fn pat(&self, this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> u64 {
+        this.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_PAT)
     }
 }
 
@@ -2242,45 +2272,6 @@ impl<T: CpuIo> EmulatorSupport for UhEmulationState<'_, '_, T, TdxBacked> {
                 apic_page: zerocopy::transmute_mut!(self.vp.runner.tdx_apic_page_mut()),
             })
             .mmio_write(address, data);
-    }
-}
-
-impl<T: CpuIo> TranslateGvaSupport for UhEmulationState<'_, '_, T, TdxBacked> {
-    type Error = UhRunVpError;
-
-    fn guest_memory(&self) -> &guestmem::GuestMemory {
-        &self.vp.partition.gm[self.vtl]
-    }
-
-    fn acquire_tlb_lock(&mut self) {
-        self.vp.set_tlb_lock(Vtl::Vtl2, self.vtl)
-    }
-
-    fn registers(&mut self) -> Result<TranslationRegisters, Self::Error> {
-        let cr0 = self.vp.backing.cr0.read(&self.vp.runner);
-        let cr4 = self.vp.backing.cr4.read(&self.vp.runner);
-        let efer = self.vp.backing.efer;
-        let cr3 = self
-            .vp
-            .runner
-            .read_vmcs64(GuestVtl::Vtl0, VmcsField::VMX_VMCS_GUEST_CR3);
-        let ss = self
-            .vp
-            .read_segment(GuestVtl::Vtl0, TdxSegmentReg::Ss)
-            .into();
-        let rflags = self.vp.runner.tdx_enter_guest_state().rflags;
-        Ok(TranslationRegisters {
-            cr0,
-            cr4,
-            efer,
-            cr3,
-            ss,
-            rflags,
-            encryption_mode: self.vp.partition.caps.vtom.map_or(
-                virt_support_x86emu::translate::EncryptionMode::None,
-                virt_support_x86emu::translate::EncryptionMode::Vtom,
-            ),
-        })
     }
 }
 

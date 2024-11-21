@@ -18,8 +18,9 @@ cfg_if::cfg_if! {
         use hvdef::HvX64RegisterName;
         use hvdef::HvX64SegmentRegister;
         use virt::state::StateElement;
-        use virt::x86::MsrError;
         use virt::vp::AccessVpState;
+        use virt::x86::MsrError;
+        use virt_support_x86emu::translate::TranslationRegisters;
     } else if #[cfg(guest_arch = "aarch64")] {
         use hv1_hypercall::Arm64RegisterState;
         use hvdef::HvArm64RegisterName;
@@ -280,6 +281,14 @@ pub trait HardwareIsolatedBacking: Backing {
         source_vtl: GuestVtl,
         target_vtl: GuestVtl,
     );
+    /// Gets registers needed for gva to gpa translation
+    fn translation_registers(
+        &self,
+        this: &UhProcessor<'_, Self>,
+        vtl: GuestVtl,
+    ) -> TranslationRegisters;
+    /// Gets the pat register
+    fn pat(&self, this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> u64;
 }
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]

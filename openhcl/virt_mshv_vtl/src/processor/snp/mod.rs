@@ -24,7 +24,6 @@ use crate::UhCvmPartitionState;
 use crate::UhCvmVpState;
 use crate::UhPartitionInner;
 use crate::WakeReason;
-use guestmem::GuestMemory;
 use hcl::vmsa::VmsaWrapper;
 use hv1_emulator::hv::ProcessorVtlHv;
 use hv1_emulator::synic::ProcessorSynic;
@@ -57,7 +56,6 @@ use virt_support_apic::ApicWork;
 use virt_support_x86emu::emulate::emulate_io;
 use virt_support_x86emu::emulate::emulate_translate_gva;
 use virt_support_x86emu::emulate::EmulatorSupport as X86EmulatorSupport;
-use virt_support_x86emu::emulate::TranslateGvaSupport;
 use virt_support_x86emu::translate::TranslationRegisters;
 use vmcore::vmtime::VmTimeAccess;
 use vtl_array::VtlArray;
@@ -205,6 +203,29 @@ impl HardwareIsolatedBacking for SnpBacked {
             target_vmsa.set_xmm_registers(i, current_vmsa.xmm_registers(i));
             target_vmsa.set_ymm_registers(i, current_vmsa.ymm_registers(i));
         }
+    }
+
+    fn translation_registers(
+        &self,
+        this: &UhProcessor<'_, Self>,
+        vtl: GuestVtl,
+    ) -> TranslationRegisters {
+        let vmsa = this.runner.vmsa(vtl);
+        TranslationRegisters {
+            cr0: vmsa.cr0(),
+            cr4: vmsa.cr4(),
+            efer: vmsa.efer(),
+            cr3: vmsa.cr3(),
+            rflags: vmsa.rflags(),
+            ss: from_seg(hv_seg_from_snp(&vmsa.ss())),
+            encryption_mode: virt_support_x86emu::translate::EncryptionMode::Vtom(
+                this.partition.caps.vtom.unwrap(),
+            ),
+        }
+    }
+
+    fn pat(&self, this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> u64 {
+        this.runner.vmsa(vtl).pat()
     }
 }
 
@@ -572,33 +593,6 @@ fn hv_table_from_snp(selector: &SevSelector) -> hvdef::HvX64TableRegister {
     }
 }
 
-impl<T: CpuIo> TranslateGvaSupport for UhEmulationState<'_, '_, T, SnpBacked> {
-    type Error = UhRunVpError;
-
-    fn guest_memory(&self) -> &GuestMemory {
-        &self.vp.partition.gm[self.vtl]
-    }
-
-    fn acquire_tlb_lock(&mut self) {
-        self.vp.set_tlb_lock(Vtl::Vtl2, self.vtl)
-    }
-
-    fn registers(&mut self) -> Result<TranslationRegisters, Self::Error> {
-        let vmsa = self.vp.runner.vmsa(self.vtl);
-        Ok(TranslationRegisters {
-            cr0: vmsa.cr0(),
-            cr4: vmsa.cr4(),
-            efer: vmsa.efer(),
-            cr3: vmsa.cr3(),
-            rflags: vmsa.rflags(),
-            ss: from_seg(hv_seg_from_snp(&vmsa.ss())),
-            encryption_mode: virt_support_x86emu::translate::EncryptionMode::Vtom(
-                self.vp.partition.caps.vtom.unwrap(),
-            ),
-        })
-    }
-}
-
 fn init_vmsa(vmsa: &mut VmsaWrapper<'_, &mut SevVmsa>, vtl: GuestVtl, vtom: Option<u64>) {
     // Query the SEV_FEATURES MSR to determine the features enabled on VTL2's VMSA
     // and use that to set btb_isolation, prevent_host_ibs, and VMSA register protection.
@@ -705,6 +699,7 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, SnpBacked> {
             hv1_hypercall::HvFlushVirtualAddressSpaceEx,
             hv1_hypercall::HvSetVpRegisters,
             hv1_hypercall::HvModifyVtlProtectionMask,
+            hv1_hypercall::HvX64TranslateVirtualAddress,
         ],
     );
 
