@@ -120,7 +120,7 @@ impl PendingCommands {
         for cmd in &self.commands {
             commands.push(cmd.1.command);
         }
-        tracing::info!("YSP: save CID {}", self.next_cid_high_bits.0);
+        tracing::info!("YSP: save CID {} len={}", self.next_cid_high_bits.0, commands.len());
         PendingCommandsSavedState {
             commands,
             next_cid_high_bits: self.next_cid_high_bits.0,
