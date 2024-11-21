@@ -1427,6 +1427,17 @@ fn disk_open(disk_cli: &DiskCliKind, read_only: bool) -> anyhow::Result<Resource
         DiskCliKind::PersistentReservationsWrapper(inner) => Resource::new(
             disk_backend_resources::DiskWithReservationsHandle(disk_open(inner, read_only)?),
         ),
+        DiskCliKind::Crypt {
+            disk,
+            cipher,
+            key_file,
+        } => Resource::new(disk_crypt_resources::DiskCryptHandle {
+            disk: disk_open(disk, read_only)?,
+            cipher: match cipher {
+                cli_args::DiskCipher::XtsAes256 => disk_crypt_resources::Cipher::XtsAes256,
+            },
+            key: fs_err::read(key_file).context("failed to read key file")?,
+        }),
     };
 
     Ok(disk_type)
