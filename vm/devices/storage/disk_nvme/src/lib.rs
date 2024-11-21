@@ -84,6 +84,64 @@ impl DiskIo for NvmeDisk {
                 .min(self.namespace.max_transfer_block_count().into())
                 as u32;
 
+                self.namespace
+                    .read(
+                        get_cpu_number(),
+                        sector + block_offset,
+                        this_block_count,
+                        buffers.guest_memory(),
+                        buffers.range().subrange(
+                            (block_offset as usize) << self.block_shift,
+                            (this_block_count as usize) << self.block_shift,
+                        ),
+                    )
+                    .await
+                    .map_err(map_nvme_error)?;
+
+                block_offset += this_block_count as u64;
+            }
+            Ok(())
+        })
+    }
+
+    fn write_vectored<'a>(
+        &'a self,
+        buffers: &'a scsi_buffers::RequestBuffers<'a>,
+        sector: u64,
+        fua: bool,
+    ) -> StackFuture<'a, Result<(), DiskError>, { ASYNC_DISK_STACK_SIZE }> {
+        //tracing::info!("YSP: wwrite2 sector={}", sector);
+        StackFuture::from(async move {
+            let block_count = buffers.len() as u64 >> self.block_shift;
+            let mut block_offset = 0;
+            while block_offset < block_count {
+                let this_block_count = (block_count - block_offset)
+                    .min(self.namespace.max_transfer_block_count().into())
+                    as u32;
+
+                self.namespace
+                    .write(
+                        get_cpu_number(),
+                        sector + block_offset,
+                        this_block_count,
+                        fua,
+                        buffers.guest_memory(),
+                        buffers.range().subrange(
+                            (block_offset as usize) << self.block_shift,
+                            (this_block_count as usize) << self.block_shift,
+                        ),
+                    )
+                    .await
+                    .map_err(map_nvme_error)?;
+
+                block_offset += this_block_count as u64;
+            }
+            Ok(())
+        })
+    }
+
+    fn sync_cache(&self) -> StackFuture<'_, Result<(), DiskError>, { ASYNC_DISK_STACK_SIZE }> {
+        StackFuture::from(async move {
             self.namespace
                 .read(
                     get_cpu_number(),
