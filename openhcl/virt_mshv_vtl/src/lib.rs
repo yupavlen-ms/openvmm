@@ -313,16 +313,22 @@ pub struct UhCvmVpState {
     exit_vtl: GuestVtl,
     /// Hypervisor enlightenment emulator state.
     hv: VtlArray<ProcessorVtlHv, 2>,
+    /// LAPIC state.
+    lapics: VtlArray<processor::LapicState, 2>,
 }
 
 #[cfg(guest_arch = "x86_64")]
 impl UhCvmVpState {
     /// Creates a new CVM VP state.
-    pub fn new(hv: VtlArray<ProcessorVtlHv, 2>) -> Self {
+    pub fn new(
+        hv: VtlArray<ProcessorVtlHv, 2>,
+        lapics: VtlArray<processor::LapicState, 2>,
+    ) -> Self {
         Self {
             vtls_tlb_waiting: VtlArray::new(false),
             exit_vtl: GuestVtl::Vtl0,
             hv,
+            lapics,
         }
     }
 }
