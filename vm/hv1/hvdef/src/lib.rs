@@ -1885,6 +1885,17 @@ macro_rules! registers {
                 Eom = 0x000A0014,
                 Sirbp = 0x000A0015,
 
+                Stimer0Config = 0x000B0000,
+                Stimer0Count = 0x000B0001,
+                Stimer1Config = 0x000B0002,
+                Stimer1Count = 0x000B0003,
+                Stimer2Config = 0x000B0004,
+                Stimer2Count = 0x000B0005,
+                Stimer3Config = 0x000B0006,
+                Stimer3Count = 0x000B0007,
+                StimeUnhaltedTimerConfig = 0x000B0100,
+                StimeUnhaltedTimerCount = 0x000B0101,
+
                 VsmCodePageOffsets = 0x000D0002,
                 VsmVpStatus = 0x000D0003,
                 VsmPartitionStatus = 0x000D0004,
@@ -2360,6 +2371,17 @@ pub struct HvVpVtlControl {
     /// will vary based on whether the VTL is 32-bit or 64-bit: rax and rcx or
     /// eax, ecx, and edx.
     pub registers: [u64; 2],
+}
+
+#[bitfield(u64)]
+#[derive(AsBytes, FromBytes, FromZeroes)]
+pub struct HvRegisterVsmVina {
+    pub vector: u8,
+    pub enabled: bool,
+    pub auto_reset: bool,
+    pub auto_eoi: bool,
+    #[bits(53)]
+    pub reserved: u64,
 }
 
 #[repr(C)]

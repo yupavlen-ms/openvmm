@@ -2,7 +2,7 @@
 # Licensed under the MIT License.
 
 [package]
-name = "hvlite_entry"
+name = "openvmm_entry"
 edition = "2021"
 rust-version.workspace = true
 
@@ -32,6 +32,7 @@ vnc_worker_defs.workspace = true
 hvlite_pcat_locator.workspace = true
 hvlite_ttrpc_vmservice.workspace = true
 disk_backend_resources.workspace = true
+disk_vhd1.workspace = true
 firmware_uefi_custom_vars.workspace = true
 hyperv_secure_boot_templates.workspace = true
 hyperv_uefi_custom_vars_json.workspace = true

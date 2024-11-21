@@ -20,7 +20,6 @@ mod reference_time;
 mod servicing;
 mod threadpool_vm_task_backend;
 mod vmbus_relay_unit;
-mod vmgs;
 mod vp;
 mod vpci;
 mod worker;
@@ -322,6 +321,7 @@ async fn launch_workers(
         halt_on_guest_halt: opt.halt_on_guest_halt,
         no_sidecar_hotplug: opt.no_sidecar_hotplug,
         gdbstub: opt.gdbstub,
+        hide_isolation: opt.hide_isolation,
     };
 
     let (mut remote_console_cfg, framebuffer_access) =
@@ -381,6 +381,11 @@ async fn launch_workers(
                         listener,
                         req_chan: send,
                         vp_count,
+                        target_arch: if cfg!(guest_arch = "x86_64") {
+                            debug_worker_defs::TargetArch::X86_64
+                        } else {
+                            debug_worker_defs::TargetArch::Aarch64
+                        },
                     },
                 )
                 .await?,

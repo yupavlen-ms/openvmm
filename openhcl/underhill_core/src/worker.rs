@@ -31,6 +31,7 @@ use crate::emuplat::netvsp::HclNetworkVFManager;
 use crate::emuplat::netvsp::HclNetworkVFManagerEndpointInfo;
 use crate::emuplat::netvsp::HclNetworkVFManagerShutdownInProgress;
 use crate::emuplat::netvsp::RuntimeSavedState;
+use crate::emuplat::non_volatile_store::VmbsBrokerNonVolatileStore;
 use crate::emuplat::tpm::resources::GetTpmGetAttestationReportHelperHandle;
 use crate::emuplat::tpm::resources::GetTpmRequestAkCertHelperHandle;
 use crate::emuplat::vga_proxy::UhRegisterHostIoFastPath;
@@ -47,7 +48,6 @@ use crate::servicing::transposed::OptionServicingInitState;
 use crate::servicing::ServicingState;
 use crate::threadpool_vm_task_backend::ThreadpoolBackend;
 use crate::vmbus_relay_unit::VmbusRelayHandle;
-use crate::vmgs::UnderhillVmgsNonVolatileStore;
 use crate::wrapped_partition::WrappedPartition;
 use crate::ControlRequest;
 use anyhow::Context;
@@ -293,6 +293,8 @@ pub struct UnderhillEnvCfg {
     pub no_sidecar_hotplug: bool,
     /// Enables the GDB stub for debugging the guest.
     pub gdbstub: bool,
+    /// Hide the isolation mode from the guest.
+    pub hide_isolation: bool,
 }
 
 /// Bundle of config + runtime objects for hooking into the underhill remote
@@ -626,6 +628,8 @@ struct UhVmNetworkSettings {
     get_client: GuestEmulationTransportClient,
     #[inspect(skip)]
     vp_count: usize,
+    #[inspect(skip)]
+    dma_mode: net_mana::GuestDmaMode,
 }
 
 impl UhVmNetworkSettings {
@@ -742,6 +746,7 @@ impl UhVmNetworkSettings {
             nic_max_sub_channels,
             servicing_netvsp_state,
             vfio_dma_buffer(shared_vis_pages_pool, None),
+            self.dma_mode,
         )
         .await?;
 
@@ -1119,13 +1124,11 @@ fn new_aarch64_topology(
     TopologyBuilder::new_aarch64(gic)
         .vps_per_socket(cpus.len() as u32)
         .build_with_vp_info(cpus.iter().enumerate().map(|(vp_index, cpu)| {
-            let mpidr = aarch64defs::MpidrEl1::new()
-                .with_res1_31(true)
-                .with_u(cpus.len() == 1)
-                .with_aff0((cpu.reg & 0xFF) as u8)
-                .with_aff1(((cpu.reg >> 8) & 0xFF) as u8)
-                .with_aff2(((cpu.reg >> 16) & 0xFF) as u8)
-                .with_aff3(((cpu.reg >> 32) & 0xFF) as u8);
+            let mpidr = aarch64defs::MpidrEl1::from(
+                cpu.reg & u64::from(aarch64defs::MpidrEl1::AFFINITY_MASK),
+            )
+            .with_res1_31(true)
+            .with_u(cpus.len() == 1);
             vm_topology::processor::aarch64::Aarch64VpInfo {
                 base: VpInfo {
                     vp_index: VpIndex::new(vp_index as u32),
@@ -1285,6 +1288,8 @@ async fn new_underhill_vm(
         physical_address_size,
     )?;
 
+    let hide_isolation = isolation.is_isolated() && env_cfg.hide_isolation;
+
     // Determine if x2apic is supported so that the topology matches
     // reality.
     //
@@ -1299,7 +1304,7 @@ async fn new_underhill_vm(
     //
     // TODO: centralize cpuid querying logic.
     #[cfg(guest_arch = "x86_64")]
-    let x2apic = if isolation.is_hardware_isolated() {
+    let x2apic = if isolation.is_hardware_isolated() && !hide_isolation {
         // For hardware CVMs, always enable x2apic support at boot.
         vm_topology::processor::x86::X2ApicState::Enabled
     } else if safe_intrinsics::cpuid(x86defs::cpuid::CpuidFunction::VersionAndFeatures.0, 0).ecx
@@ -1328,26 +1333,36 @@ async fn new_underhill_vm(
     let mut with_vmbus_relay = false;
     if dps.general.vmbus_redirection_enabled {
         with_vmbus = true;
-        with_vmbus_relay = true;
+        // If the guest is isolated but we are hiding this fact, then don't
+        // start the relay--the guest will not be able to use relayed channels
+        // since it will not be able to put their ring buffers in shared memory.
+        with_vmbus_relay = !hide_isolation;
     }
 
     // also construct the VMGS nice and early, as much like the GET, it also
     // plays an important role during initial bringup
-    let mut vmgs = match servicing_state.vmgs {
+    let (mut vmgs, vmgs_disk) = match servicing_state.vmgs {
         Some((vmgs_state, vmgs_get_meta_state)) => {
             // fast path, with zero .await calls
-            let storage =
-                crate::vmgs::VmgsGet::new_with_meta(get_client.clone(), vmgs_get_meta_state.into());
-            Vmgs::open_from_saved(Box::new(storage), vmgs_state)
+            let disk = Arc::new(
+                disk_get_vmgs::GetVmgsDisk::restore_with_meta(
+                    get_client.clone(),
+                    vmgs_get_meta_state,
+                )
+                .context("failed to open VMGS disk")?,
+            );
+            (Vmgs::open_from_saved(disk.clone(), vmgs_state), disk)
         }
         None => {
-            let storage = crate::vmgs::VmgsGet::new(get_client.clone())
-                .instrument(tracing::info_span!("vmgs_get_storage"))
-                .await
-                .context("failed to get VMGS client")?;
+            let disk = Arc::new(
+                disk_get_vmgs::GetVmgsDisk::new(get_client.clone())
+                    .instrument(tracing::info_span!("vmgs_get_storage"))
+                    .await
+                    .context("failed to get VMGS client")?,
+            );
 
             let vmgs = if !env_cfg.reformat_vmgs {
-                match Vmgs::open(Box::new(storage.clone()))
+                match Vmgs::open(disk.clone())
                     .instrument(tracing::info_span!("vmgs_open"))
                     .await
                 {
@@ -1375,14 +1390,15 @@ async fn new_underhill_vm(
                 None
             };
 
-            if let Some(vmgs) = vmgs {
+            let vmgs = if let Some(vmgs) = vmgs {
                 vmgs
             } else {
-                Vmgs::format_new(Box::new(storage))
+                Vmgs::format_new(disk.clone())
                     .instrument(tracing::info_span!("vmgs_format"))
                     .await
                     .context("failed to format vmgs")?
-            }
+            };
+            (vmgs, disk)
         }
     };
 
@@ -1429,6 +1445,7 @@ async fn new_underhill_vm(
         use_mmio_hypercalls,
         intercept_debug_exceptions: env_cfg.gdbstub,
         dma_pages_pool: None,
+        hide_isolation,
     };
 
     let proto_partition = UhProtoPartition::new(params, |cpu| tp.driver(cpu).clone())
@@ -1454,6 +1471,25 @@ async fn new_underhill_vm(
     })
     .await
     .context("failed to initialize memory")?;
+
+    // Devices in hardware isolated VMs default to accessing only shared memory,
+    // since that is what the guest expects--it will double buffer memory to be
+    // DMAed through a shared memory pool.
+    //
+    // When hiding isolation, allow devices to access all memory, since that's
+    // the only option: the guest won't and can't transition anything to shared.
+    //
+    // For non-isolated VMs, there is no shared/private distinction, so devices
+    // access the same memory as the guest. For software-isolated VMs, the
+    // hypervisor does not allow the paravisor to observe changes to
+    // shared/private state, so we have no choice but to allow devices to access
+    // both.
+    let device_memory = if hide_isolation || !isolation.is_hardware_isolated() {
+        gm.vtl0()
+    } else {
+        gm.shared_memory()
+            .expect("isolated VMs should have shared memory")
+    };
 
     let shared_vis_pages_pool = if shared_pool_size != 0 {
         Some(
@@ -1509,7 +1545,13 @@ async fn new_underhill_vm(
 
     // Set the shared memory allocator to GET that is required by attestation call-out.
     if let Some(allocator) = shared_vis_pages_pool.as_ref().map(|p| p.allocator()) {
-        get_client.set_shared_memory_allocator(allocator, gm.untrusted_dma_memory().clone());
+        get_client.set_shared_memory_allocator(
+            allocator,
+            gm.shared_memory()
+                .or_else(|| env_cfg.enable_shared_visibility_pool.then(|| gm.vtl0()))
+                .context("missing shared memory for shared pool allocator")?
+                .clone(),
+        );
     }
 
     // Create the `AttestationVmConfig` from `dps`, which will be used in
@@ -1595,7 +1637,7 @@ async fn new_underhill_vm(
     // into smaller, more focused objects. This promotes good code hygiene and
     // predictable performance characteristics in downstream code.
     let vmgs_thin_client = vmgs_broker::VmgsThinClient::new(vmgs_client.clone());
-    let vmgs_client: &dyn UnderhillVmgsNonVolatileStore = &vmgs_client;
+    let vmgs_client: &dyn VmbsBrokerNonVolatileStore = &vmgs_client;
 
     // Read measured config from VTL0 memory. When restoring, it is already gone.
     let (firmware_type, measured_vtl0_info, load_kind) = {
@@ -1659,7 +1701,7 @@ async fn new_underhill_vm(
             gm.vtl1().cloned().unwrap_or(GuestMemory::empty()),
         ]
         .into(),
-        untrusted_dma_memory: gm.untrusted_dma_memory().clone(),
+        shared_memory: gm.shared_memory().cloned(),
         #[cfg(guest_arch = "x86_64")]
         cpuid,
         crash_notification_send,
@@ -1734,9 +1776,13 @@ async fn new_underhill_vm(
         ))
     };
 
-    // ARM64 always bounces, as the OpenHCL kernel does not
-    // have access to VTL0 pages. Necessary until #273 is resolved.
-    let always_bounce = cfg!(guest_arch = "aarch64");
+    // ARM64 always bounces, as the OpenHCL kernel does not have access to VTL0
+    // pages. Necessary until #273 is resolved.
+    //
+    // Similarly, when hiding isolation from the guest, we must bounce because
+    // the guest buffers are in private memory, which the kernel does not have
+    // access to.
+    let always_bounce = cfg!(guest_arch = "aarch64") || hide_isolation;
     resolver.add_async_resolver::<DiskHandleKind, _, OpenBlockDeviceConfig, _>(
         BlockDeviceResolver::new(
             Arc::new(tp.clone()),
@@ -2484,7 +2530,7 @@ async fn new_underhill_vm(
     } = BaseChipsetBuilder::new(
         BaseChipsetFoundation {
             is_restoring,
-            untrusted_dma_memory: gm.untrusted_dma_memory().clone(),
+            untrusted_dma_memory: device_memory.clone(),
             trusted_vtl0_dma_memory: gm.vtl0().clone(),
             vmtime: &vmtime_source,
             vmtime_unit: vmtime.handle(),
@@ -2553,23 +2599,12 @@ async fn new_underhill_vm(
             .unwrap_or(!controllers.mana.is_empty());
         tracing::info!(enable_mnf, "Underhill MNF enabled?");
 
-        // Channel ID offsets are enabled for the Underhill server if the relay is not in use. This
-        // prevents them from conflicting with channels offered by the host, for which Hyper-V vmbus
-        // allocates ports even if not connected.
-        //
-        // If the relay is present, guest-specified channel IDs are used instead (which the host
-        // must support).
-        //
         // N.B. VmBus uses untrusted memory by default for relay channels, and uses additional
         //      trusted memory only for confidential channels offered by Underhill itself.
-        //
-        // N.B. The channel ID offset can break older Linux versions (that only support vmbus
-        //      protocol V1 and Win7) because they don't support channel IDs above 255.
-        let vmbus = VmbusServer::builder(&tp, synic.clone(), gm.untrusted_dma_memory().clone())
+        let vmbus = VmbusServer::builder(&tp, synic.clone(), device_memory.clone())
             .private_gm(gm.private_vtl0_memory().cloned())
             .hvsock_notify(hvsock_notify)
             .server_relay(server_relay)
-            .enable_channel_id_offset(!with_vmbus_relay)
             .max_version(env_cfg.vmbus_max_version)
             .delay_max_version(firmware_type == FirmwareType::Uefi)
             .enable_mnf(enable_mnf)
@@ -2649,7 +2684,7 @@ async fn new_underhill_vm(
             vmm_core::device_builder::build_vpci_device(
                 &driver_source,
                 &resolver,
-                gm.untrusted_dma_memory(),
+                device_memory,
                 vmbus.control(),
                 instance_id,
                 resource,
@@ -2677,6 +2712,11 @@ async fn new_underhill_vm(
         vf_managers: HashMap::new(),
         get_client: get_client.clone(),
         vp_count: vps.len(),
+        dma_mode: if hide_isolation {
+            net_mana::GuestDmaMode::BounceBuffer
+        } else {
+            net_mana::GuestDmaMode::DirectDma
+        },
     };
     let mut netvsp_state = Vec::with_capacity(controllers.mana.len());
     if !controllers.mana.is_empty() {
@@ -2878,6 +2918,7 @@ async fn new_underhill_vm(
         shutdown_relay,
 
         vmgs_thin_client,
+        vmgs_disk,
         _vmgs_handle: vmgs_handle,
 
         get_client: get_client.clone(),

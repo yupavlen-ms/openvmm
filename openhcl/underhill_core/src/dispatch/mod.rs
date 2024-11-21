@@ -162,6 +162,7 @@ pub(crate) struct LoadedVm {
     )>,
 
     pub vmgs_thin_client: vmgs_broker::VmgsThinClient,
+    pub vmgs_disk: Arc<disk_get_vmgs::GetVmgsDisk>,
     pub _vmgs_handle: Task<()>,
 
     // dependencies of the vtl2 settings service
@@ -672,11 +673,8 @@ impl LoadedVm {
             .save()
             .await
             .context("vmgs save failed")?;
-        let vmgs_get_storage_meta = self
-            .vmgs_thin_client
-            .save_storage_meta()
-            .await
-            .context("vmgs get metadata save failed")?;
+
+        let vmgs_get_storage_meta = self.vmgs_disk.save_meta();
 
         Ok(ServicingState {
             init_state: servicing::ServicingInitState {
