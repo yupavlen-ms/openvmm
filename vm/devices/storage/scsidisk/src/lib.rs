@@ -62,6 +62,7 @@ const VHDMP_MAX_WRITE_SAME_LENGTH_BYTES: u64 = 8 * 1024 * 1024; // bytes
 
 impl ScsiSaveRestore for SimpleScsiDisk {
     fn save(&self) -> Result<Option<ScsiSavedState>, SaveError> {
+        tracing::info!("YSP: SimpleScsiDisk::save");
         let sense = self.sense_data.get();
         let sense_data = sense.map(|sense| SavedSenseData {
             sense_key: sense.header.sense_key.0,
@@ -75,6 +76,7 @@ impl ScsiSaveRestore for SimpleScsiDisk {
     }
 
     fn restore(&self, state: &ScsiSavedState) -> Result<(), RestoreError> {
+        tracing::info!("YSP: SimpleScsiDisk::restore");
         if let ScsiSavedState::ScsiDisk(disk_state) = state {
             let ScsiDiskSavedState {
                 sector_count,
@@ -1161,6 +1163,7 @@ impl SimpleScsiDisk {
                 return Err(ScsiError::WriteProtected);
             }
 
+            //tracing::info!("YSP: wwrite offset={}", p.offset);
             self.disk
                 .write_vectored(&external_data, p.offset, p.fua)
                 .await
@@ -1279,6 +1282,11 @@ impl AsyncScsiDisk for SimpleScsiDisk {
                     self.handle_control_cdb(external_data, request, sector_count)
                 }
             };
+
+            // YSP:
+            if op == ScsiOp::WRITE || op == ScsiOp::WRITE6 || op == ScsiOp::WRITE12 || op == ScsiOp::WRITE16 {
+                //tracing::info!("YSP: WRITE CPL ");
+            }
 
             self.process_result(result, op)
         })
