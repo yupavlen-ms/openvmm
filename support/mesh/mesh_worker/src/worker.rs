@@ -445,6 +445,7 @@ impl WorkerLaunchRequest {
                 }
             }
             LaunchType::Restart { send, events } => {
+                tracing::info!("YSP: LaunchType::Restart");
                 let (state_send, state_recv) = mesh::oneshot();
                 send.send(WorkerRpc::Restart(state_send));
                 let state = match block_on(state_recv).flatten() {

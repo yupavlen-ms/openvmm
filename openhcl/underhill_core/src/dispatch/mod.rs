@@ -263,6 +263,7 @@ impl LoadedVm {
                 Event::WorkerRpc(message) => match message {
                     WorkerRpc::Stop => break None,
                     WorkerRpc::Restart(response) => {
+                        tracing::info!("YSP: WorkerRpc::Restart 1");
                         let state = async {
                             let running = self.stop().await;
                             match self.save(None).await {
@@ -325,6 +326,7 @@ impl LoadedVm {
                     }
                     UhVmRpc::Pause(rpc) => rpc.handle(|()| self.stop()).await,
                     UhVmRpc::Save(rpc) => {
+                        tracing::info!("YSP: UhVmRpc::Save");
                         rpc.handle_failable(|()| async {
                             let running = self.stop().await;
                             let r = self.save(None).await;
@@ -379,6 +381,7 @@ impl LoadedVm {
                     }
                 }
                 Event::ShutdownRequest(rpc) => {
+                    tracing::info!("YSP: ShutdownRequest");
                     rpc.handle(|msg| async {
                         if matches!(msg.shutdown_type, ShutdownType::Hibernate) {
                             self.handle_hibernate_request(false).await;
