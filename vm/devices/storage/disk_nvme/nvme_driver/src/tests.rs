@@ -187,8 +187,8 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
 
     let _ns1 = nvme_driver.namespace(1).await.unwrap();
     let saved_state = nvme_driver.save().await.unwrap();
-    assert_eq!(saved_state.namespace.len(), 1);
-    assert_eq!(saved_state.namespace[0].nsid, 1);
+    assert_eq!(saved_state.namespaces.len(), 1);
+    assert_eq!(saved_state.namespaces[0].nsid, 1);
 
     // Create a second set of devices since the ownership has been moved.
     let new_emu_mem = DeviceSharedMemory::new(64 * 1024 * 1024, payload_len);

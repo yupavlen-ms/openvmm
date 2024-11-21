@@ -199,6 +199,7 @@ impl From<state::ScsiPath> for ScsiPath {
 
 impl state::ScsiRequestSavedState {
     fn save(v: &ScsiRequestState) -> Self {
+        tracing::info!("YSP: ScsiRequestSavedState::save");
         let &ScsiRequestState {
             transaction_id,
             ref request,
@@ -211,6 +212,7 @@ impl state::ScsiRequestSavedState {
     }
 
     fn restore(&self) -> Result<ScsiRequestState, StorvspRestoreError> {
+        tracing::info!("YSP: ScsiRequestSavedState::restore");
         let Self {
             transaction_id,
             external_data,
@@ -240,6 +242,7 @@ impl state::ScsiRequestSavedState {
 
 impl StorageDevice {
     pub(super) fn save(&mut self) -> Result<state::SavedState, SaveError> {
+        tracing::info!("YSP: StorageDevice::save");
         let drives = self.save_drives()?;
         let protocol_state = self.save_protocol_state();
 
@@ -258,6 +261,7 @@ impl StorageDevice {
             },
         };
         let channels = self.save_workers(subchannel_count);
+        tracing::info!("YSP: StorageDevice::save DONE");
 
         Ok(state::SavedState {
             protocol_state,
@@ -271,6 +275,7 @@ impl StorageDevice {
         control: RestoreControl<'_>,
         state: state::SavedState,
     ) -> Result<(), RestoreError> {
+        tracing::info!("YSP: StorageDevice::restore");
         let state::SavedState {
             protocol_state,
             drives,
@@ -287,11 +292,13 @@ impl StorageDevice {
             .await?;
         self.restore_drives(&drives)?;
         self.restore_workers(control, channels).await?;
+        tracing::info!("YSP: StorageDevice::restore DONE");
         Ok(())
     }
 
     /// Save all sub-channels' states. Panics if any task is running. Need be call after Stop().
     fn save_workers(&self, subchannel_count: u16) -> Vec<state::ChannelSavedState> {
+        tracing::info!("YSP: StorageDevice::save_workers");
         let mut states = Vec::new();
         for task in &self.workers[..subchannel_count as usize + 1] {
             if let Some(worker) = task.worker.state() {
@@ -312,6 +319,7 @@ impl StorageDevice {
                 states.push(state::ChannelSavedState { channel: None });
             }
         }
+        tracing::info!("YSP: StorageDevice::save_workers DONE");
         states
     }
 
@@ -321,6 +329,7 @@ impl StorageDevice {
         mut control: RestoreControl<'_>,
         states: &Vec<state::ChannelSavedState>,
     ) -> Result<Vec<Option<OpenRequest>>, StorvspRestoreError> {
+        tracing::info!("YSP: StorageDevice::restore_channels");
         let mut is_open = Vec::new();
         for channel_state in states {
             is_open.push(channel_state.channel.is_some());
@@ -335,6 +344,7 @@ impl StorageDevice {
         control: RestoreControl<'_>,
         states: Vec<state::ChannelSavedState>,
     ) -> Result<(), StorvspRestoreError> {
+        tracing::info!("YSP: StorageDevice::restore_workers");
         // Compute the maximum packet size for the worker. Just leave the
         // default if the version has not been negotiated yet.
         let mut ready = false;
@@ -374,16 +384,19 @@ impl StorageDevice {
                     return Err(StorvspRestoreError::UnexpectedScsiRequest);
                 }
                 let state = saved_state.restore()?;
+                tracing::info!("YSP: pushing pending request");
                 worker
                     .inner
-                    .push_scsi_request(state.transaction_id, state.request);
+                    .push_scsi_request(true, state.transaction_id, state.request);
             }
         }
+        tracing::info!("YSP: StorageDevice::restore_workers DONE");
         Ok(())
     }
 
     /// Save drives's states.
     fn save_drives(&self) -> Result<Vec<Drive>, SaveError> {
+        tracing::info!("YSP: StorageDevice::save_drives");
         let mut states = Vec::new();
         let disks = self.controller.disks.read();
 
@@ -402,12 +415,14 @@ impl StorageDevice {
                 None => return Err(SaveError::NotSupported),
             }
         }
+        tracing::info!("YSP: StorageDevice::save_drives DONE");
 
         Ok(states)
     }
 
     /// Restore drive's states.
     fn restore_drives(&mut self, drives: &Vec<Drive>) -> Result<(), RestoreError> {
+        tracing::info!("YSP: StorageDevice::restore_drives");
         let disks = self.controller.disks.read();
 
         for (scsi_path, controller_disk) in disks.iter() {
@@ -426,12 +441,14 @@ impl StorageDevice {
                 }
             }
         }
+        tracing::info!("YSP: StorageDevice::restore_drives DONE");
 
         Ok(())
     }
 
     /// Save protocol state and packet size.
     fn save_protocol_state(&self) -> state::ProtocolState {
+        tracing::info!("YSP: StorageDevice::save_protocol_state");
         match *self.protocol.state.read() {
             crate::ProtocolState::Init(init_state) => {
                 state::ProtocolState::Init(match init_state {
@@ -466,6 +483,7 @@ impl StorageDevice {
         state: state::ProtocolState,
         subchannel_count: u16,
     ) -> Result<(), StorvspRestoreError> {
+        tracing::info!("YSP: StorageDevice::restore_protocol_state");
         let mut subchannels_allowed = false;
         let state = match state {
             state::ProtocolState::Init(init_state) => {
