@@ -24,6 +24,7 @@ use parking_lot::Mutex;
 use pci_core::msi::MsiControl;
 use pci_core::msi::MsiInterruptSet;
 use pci_core::msi::MsiInterruptTarget;
+use safeatomic::AtomicSliceOps;
 use std::ptr::NonNull;
 use std::sync::atomic::AtomicU8;
 use std::sync::Arc;
@@ -124,24 +125,28 @@ impl Default for Page {
 #[derive(Clone)]
 pub struct DeviceSharedMemory {
     mem: GuestMemory,
+    dma: GuestMemory,
     len: usize,
     state: Arc<Mutex<Vec<u64>>>,
 }
 
-struct Backing(AlignedHeapMemory);
+struct Backing {
+    mem: Arc<AlignedHeapMemory>,
+    allow_dma: bool,
+}
 
 /// SAFETY: passing through to [`AlignedHeapMemory`].
 unsafe impl GuestMemoryAccess for Backing {
     fn mapping(&self) -> Option<NonNull<u8>> {
-        self.0.mapping()
+        self.mem.mapping()
     }
 
     fn base_iova(&self) -> Option<u64> {
-        Some(0)
+        self.allow_dma.then_some(0)
     }
 
     fn max_address(&self) -> u64 {
-        self.0.max_address()
+        self.mem.max_address()
     }
 }
 
@@ -149,13 +154,20 @@ impl DeviceSharedMemory {
     pub fn new(size: usize, extra: usize) -> Self {
         assert_eq!(size % PAGE_SIZE, 0);
         assert_eq!(extra % PAGE_SIZE, 0);
-        let mem = GuestMemory::new(
-            "emulated_shared_mem",
-            Backing(AlignedHeapMemory::new(size + extra)),
-        );
+        let mem_backing = Backing {
+            mem: Arc::new(AlignedHeapMemory::new(size + extra)),
+            allow_dma: false,
+        };
+        let dma_backing = Backing {
+            mem: mem_backing.mem.clone(),
+            allow_dma: true,
+        };
+        let mem = GuestMemory::new("emulated_shared_mem", mem_backing);
+        let dma = GuestMemory::new("emulated_shared_dma", dma_backing);
         let len = size / PAGE_SIZE;
         Self {
             mem,
+            dma,
             len,
             state: Arc::new(Mutex::new(vec![0; (len + 63) / 64])),
         }
@@ -163,6 +175,10 @@ impl DeviceSharedMemory {
 
     pub fn guest_memory(&self) -> &GuestMemory {
         &self.mem
+    }
+
+    pub fn guest_memory_for_driver_dma(&self) -> &GuestMemory {
+        &self.dma
     }
 
     pub fn alloc(&self, len: usize) -> Option<DmaBuffer> {
@@ -243,9 +259,9 @@ pub struct EmulatedDmaAllocator {
 
 impl HostDmaAllocator for EmulatedDmaAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
-        Ok(MemoryBlock::new(
-            self.shared_mem.alloc(len).context("out of memory")?,
-        ))
+        let memory = MemoryBlock::new(self.shared_mem.alloc(len).context("out of memory")?);
+        memory.as_slice().atomic_fill(0);
+        Ok(memory)
     }
 
     fn attach_dma_buffer(&self, len: usize, _pfns: &[u64]) -> anyhow::Result<MemoryBlock> {

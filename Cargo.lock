@@ -877,10 +877,12 @@ version = "0.0.0"
 name = "debug_worker"
 version = "0.0.0"
 dependencies = [
+ "aarch64defs",
  "anyhow",
  "debug_worker_defs",
  "futures",
  "gdbstub",
+ "gdbstub_arch",
  "inspect",
  "mesh",
  "mesh_worker",
@@ -1155,6 +1157,23 @@ dependencies = [
  "scsi_buffers",
  "stackfuture",
  "vm_resource",
+]
+
+[[package]]
+name = "disk_get_vmgs"
+version = "0.0.0"
+dependencies = [
+ "disk_backend",
+ "guest_emulation_transport",
+ "guestmem",
+ "inspect",
+ "mesh",
+ "pal_async",
+ "scsi_buffers",
+ "stackfuture",
+ "thiserror 2.0.0",
+ "vmgs",
+ "vmgs_broker",
 ]
 
 [[package]]
@@ -2051,6 +2070,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdbstub_arch"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eecb536c55c43593a00dde9074dbbdb0e81ce5f20dbca921400f8779c21dea9c"
+dependencies = [
+ "gdbstub",
+ "num-traits",
+]
+
+[[package]]
 name = "gdma"
 version = "0.0.0"
 dependencies = [
@@ -2263,19 +2292,24 @@ name = "guest_emulation_device"
 version = "0.0.0"
 dependencies = [
  "async-trait",
+ "disk_backend",
+ "disk_ramdisk",
  "futures",
  "get_protocol",
  "get_resources",
+ "guestmem",
  "guid",
  "inspect",
  "mesh",
  "pal_async",
  "parking_lot",
  "power_resources",
+ "scsi_buffers",
  "serde_json",
  "task_control",
  "thiserror 2.0.0",
  "time",
+ "tracelimit",
  "tracing",
  "video_core",
  "vm_resource",
@@ -2713,94 +2747,6 @@ dependencies = [
  "vmbus_proxy",
  "vmm_core_defs",
  "vmotherboard",
-]
-
-[[package]]
-name = "hvlite_entry"
-version = "0.0.0"
-dependencies = [
- "anyhow",
- "awaitgroup",
- "build_rs_guest_arch",
- "chipset_resources",
- "clap",
- "clap_dyn_complete",
- "debug_worker_defs",
- "diag_client",
- "dirs",
- "disk_backend_resources",
- "firmware_uefi_custom_vars",
- "floppy_resources",
- "framebuffer",
- "fs-err",
- "futures",
- "futures-concurrency",
- "gdma_resources",
- "get_resources",
- "getrandom",
- "guid",
- "hvlite_defs",
- "hvlite_helpers",
- "hvlite_pcat_locator",
- "hvlite_ttrpc_vmservice",
- "hyperv_ic_resources",
- "hyperv_secure_boot_templates",
- "hyperv_uefi_custom_vars_json",
- "ide_resources",
- "input_core",
- "inspect",
- "inspect_proto",
- "macaddr",
- "mcr_resources",
- "mesh",
- "mesh_process",
- "mesh_rpc",
- "mesh_worker",
- "net_backend_resources",
- "netvsp_resources",
- "nvme_resources",
- "openssl",
- "pal",
- "pal_async",
- "parking_lot",
- "prost",
- "rustyline",
- "scsidisk_resources",
- "serial_16550_resources",
- "serial_core",
- "serial_socket",
- "shell-words",
- "sparse_mmap",
- "storvsp_resources",
- "term",
- "thiserror 2.0.0",
- "tpm_resources",
- "tracelimit",
- "tracing",
- "tracing-subscriber",
- "tracing_helpers",
- "uidevices_resources",
- "unix_socket",
- "video_core",
- "virt_whp",
- "virtio_resources",
- "vm_manifest_builder",
- "vm_resource",
- "vmbfs_resources",
- "vmbus_core",
- "vmbus_proxy",
- "vmbus_serial_resources",
- "vmcore",
- "vmgs_format",
- "vmgs_resources",
- "vmm_core_defs",
- "vmotherboard",
- "vmswitch",
- "vnc_worker_defs",
- "vtl2_settings_proto",
- "whp",
- "win_etw_tracing",
- "winapi",
 ]
 
 [[package]]
@@ -3347,18 +3293,18 @@ dependencies = [
 
 [[package]]
 name = "linkme"
-version = "0.3.22"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b53ad6a33de58864705954edb5ad5d571a010f9e296865ed43dc72a5621b430"
+checksum = "566336154b9e58a4f055f6dd4cbab62c7dc0826ce3c0a04e63b2d2ecd784cdae"
 dependencies = [
  "linkme-impl",
 ]
 
 [[package]]
 name = "linkme-impl"
-version = "0.3.22"
+version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04e542a18c94a9b6fcc7adb090fa3ba6b79ee220a16404f325672729f32a66ff"
+checksum = "edbe595006d355eaf9ae11db92707d4338cd2384d16866131cc1afdbdd35d8d9"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3982,7 +3928,9 @@ dependencies = [
  "net_backend",
  "pal_async",
  "pci_core",
+ "safeatomic",
  "test_with_tracing",
+ "thiserror 2.0.0",
  "tracelimit",
  "tracing",
  "user_driver",
@@ -4421,9 +4369,98 @@ dependencies = [
 name = "openvmm"
 version = "0.0.0"
 dependencies = [
- "hvlite_entry",
+ "openvmm_entry",
  "openvmm_resources",
  "win_prng_support",
+]
+
+[[package]]
+name = "openvmm_entry"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "awaitgroup",
+ "build_rs_guest_arch",
+ "chipset_resources",
+ "clap",
+ "clap_dyn_complete",
+ "debug_worker_defs",
+ "diag_client",
+ "dirs",
+ "disk_backend_resources",
+ "disk_vhd1",
+ "firmware_uefi_custom_vars",
+ "floppy_resources",
+ "framebuffer",
+ "fs-err",
+ "futures",
+ "futures-concurrency",
+ "gdma_resources",
+ "get_resources",
+ "getrandom",
+ "guid",
+ "hvlite_defs",
+ "hvlite_helpers",
+ "hvlite_pcat_locator",
+ "hvlite_ttrpc_vmservice",
+ "hyperv_ic_resources",
+ "hyperv_secure_boot_templates",
+ "hyperv_uefi_custom_vars_json",
+ "ide_resources",
+ "input_core",
+ "inspect",
+ "inspect_proto",
+ "macaddr",
+ "mcr_resources",
+ "mesh",
+ "mesh_process",
+ "mesh_rpc",
+ "mesh_worker",
+ "net_backend_resources",
+ "netvsp_resources",
+ "nvme_resources",
+ "openssl",
+ "pal",
+ "pal_async",
+ "parking_lot",
+ "prost",
+ "rustyline",
+ "scsidisk_resources",
+ "serial_16550_resources",
+ "serial_core",
+ "serial_socket",
+ "shell-words",
+ "sparse_mmap",
+ "storvsp_resources",
+ "term",
+ "thiserror 2.0.0",
+ "tpm_resources",
+ "tracelimit",
+ "tracing",
+ "tracing-subscriber",
+ "tracing_helpers",
+ "uidevices_resources",
+ "unix_socket",
+ "video_core",
+ "virt_whp",
+ "virtio_resources",
+ "vm_manifest_builder",
+ "vm_resource",
+ "vmbfs_resources",
+ "vmbus_core",
+ "vmbus_proxy",
+ "vmbus_serial_resources",
+ "vmcore",
+ "vmgs_format",
+ "vmgs_resources",
+ "vmm_core_defs",
+ "vmotherboard",
+ "vmswitch",
+ "vnc_worker_defs",
+ "vtl2_settings_proto",
+ "whp",
+ "win_etw_tracing",
+ "winapi",
 ]
 
 [[package]]
@@ -4811,6 +4848,7 @@ dependencies = [
  "vmbfs_resources",
  "vmbus_serial_resources",
  "vmcore",
+ "vmgs_format",
  "vmm_core_defs",
  "vmotherboard",
  "vtl2_settings_proto",
@@ -6669,6 +6707,7 @@ dependencies = [
  "disk_backend",
  "disk_backend_resources",
  "disk_blockdevice",
+ "disk_get_vmgs",
  "disk_nvme",
  "firmware_pcat",
  "firmware_uefi",
@@ -7132,6 +7171,7 @@ dependencies = [
  "tracing",
  "virt",
  "virt_support_gic",
+ "vm_topology",
  "vmcore",
 ]
 
@@ -7279,9 +7319,11 @@ dependencies = [
 name = "virt_support_gic"
 version = "0.0.0"
 dependencies = [
+ "aarch64defs",
  "inspect",
- "open_enum",
+ "memory_range",
  "parking_lot",
+ "tracelimit",
  "tracing",
  "vm_topology",
 ]
@@ -7883,20 +7925,20 @@ name = "vmgs"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "cfg-if",
  "crc32fast",
+ "disk_backend",
+ "disk_ramdisk",
  "getrandom",
- "guid",
+ "guestmem",
  "inspect",
  "inspect_counters",
  "mesh_protobuf",
  "openssl",
  "pal_async",
- "tempfile_helpers",
+ "scsi_buffers",
  "thiserror 2.0.0",
  "tracing",
- "vhd1_defs",
  "vmgs_format",
  "windows",
  "zerocopy",
@@ -7934,6 +7976,7 @@ dependencies = [
 name = "vmgs_lib"
 version = "0.0.0"
 dependencies = [
+ "disk_vhd1",
  "futures",
  "vmgs",
  "vmgs_format",
@@ -7955,6 +7998,8 @@ dependencies = [
  "anyhow",
  "async-trait",
  "clap",
+ "disk_backend",
+ "disk_vhd1",
  "fs-err",
  "guid",
  "hcl_compat_uefi_nvram_storage",
@@ -8014,6 +8059,7 @@ dependencies = [
  "thiserror 2.0.0",
  "tracing",
  "virt",
+ "virt_support_aarch64emu",
  "virt_support_x86emu",
  "vm_resource",
  "vm_topology",

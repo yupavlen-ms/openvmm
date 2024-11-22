@@ -6,6 +6,7 @@
 mod tlb_lock;
 
 use super::UhProcessor;
+use super::UhRunVpError;
 use crate::processor::HardwareIsolatedBacking;
 use crate::processor::UhHypercallHandler;
 use crate::validate_vtl_gpa_flags;
@@ -13,6 +14,7 @@ use crate::GuestVsmState;
 use crate::GuestVsmVtl1State;
 use crate::GuestVtl;
 use crate::WakeReason;
+use hv1_emulator::RequestInterrupt;
 use hvdef::hypercall::HvFlushFlags;
 use hvdef::HvError;
 use hvdef::HvMapGpaFlags;
@@ -311,8 +313,7 @@ impl<T, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
             HvX64RegisterName::VpAssistPage => Ok(self.vp.backing.cvm_state_mut().hv[vtl]
                 .vp_assist_page()
                 .into()),
-            // TODO GUEST VSM: add the synic registers (definitely missing VINA
-            // and ApicBase)
+            // TODO GUEST VSM: add ApicBase register
             virt_msr @ (HvX64RegisterName::Star
             | HvX64RegisterName::Lstar
             | HvX64RegisterName::Cstar
@@ -475,6 +476,38 @@ impl<T, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
                 .map_err(Self::reg_access_error_to_hv_err)?
                 .msr_cr_pat
                 .into()),
+            synic_reg @ (HvX64RegisterName::Sint0
+            | HvX64RegisterName::Sint1
+            | HvX64RegisterName::Sint2
+            | HvX64RegisterName::Sint3
+            | HvX64RegisterName::Sint4
+            | HvX64RegisterName::Sint5
+            | HvX64RegisterName::Sint6
+            | HvX64RegisterName::Sint7
+            | HvX64RegisterName::Sint8
+            | HvX64RegisterName::Sint9
+            | HvX64RegisterName::Sint10
+            | HvX64RegisterName::Sint11
+            | HvX64RegisterName::Sint12
+            | HvX64RegisterName::Sint13
+            | HvX64RegisterName::Sint14
+            | HvX64RegisterName::Sint15
+            | HvX64RegisterName::Scontrol
+            | HvX64RegisterName::Sversion
+            | HvX64RegisterName::Sifp
+            | HvX64RegisterName::Sipp
+            | HvX64RegisterName::Eom
+            | HvX64RegisterName::Stimer0Config
+            | HvX64RegisterName::Stimer0Count
+            | HvX64RegisterName::Stimer1Config
+            | HvX64RegisterName::Stimer1Count
+            | HvX64RegisterName::Stimer2Config
+            | HvX64RegisterName::Stimer2Count
+            | HvX64RegisterName::Stimer3Config
+            | HvX64RegisterName::Stimer3Count
+            | HvX64RegisterName::VsmVina) => self.vp.backing.cvm_state_mut().hv[vtl]
+                .synic
+                .read_reg(synic_reg.into()),
             _ => {
                 tracing::error!(
                     ?name,
@@ -497,6 +530,7 @@ impl<T, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
         // - validate the values being set, e.g. that addresses are canonical,
         //   that efer and pat make sense, etc. Similar validation is needed in
         //   the write_msr path.
+        // TODO GUEST VSM: add ApicBase register
 
         match HvX64RegisterName::from(reg.name) {
             HvX64RegisterName::VsmPartitionConfig => self.vp.set_vsm_partition_config(
@@ -615,6 +649,38 @@ impl<T, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
                     .map_err(Self::reg_access_error_to_hv_err)?;
                 Ok(())
             }
+            synic_reg @ (HvX64RegisterName::Sint0
+            | HvX64RegisterName::Sint1
+            | HvX64RegisterName::Sint2
+            | HvX64RegisterName::Sint3
+            | HvX64RegisterName::Sint4
+            | HvX64RegisterName::Sint5
+            | HvX64RegisterName::Sint6
+            | HvX64RegisterName::Sint7
+            | HvX64RegisterName::Sint8
+            | HvX64RegisterName::Sint9
+            | HvX64RegisterName::Sint10
+            | HvX64RegisterName::Sint11
+            | HvX64RegisterName::Sint12
+            | HvX64RegisterName::Sint13
+            | HvX64RegisterName::Sint14
+            | HvX64RegisterName::Sint15
+            | HvX64RegisterName::Scontrol
+            | HvX64RegisterName::Sversion
+            | HvX64RegisterName::Sifp
+            | HvX64RegisterName::Sipp
+            | HvX64RegisterName::Eom
+            | HvX64RegisterName::Stimer0Config
+            | HvX64RegisterName::Stimer0Count
+            | HvX64RegisterName::Stimer1Config
+            | HvX64RegisterName::Stimer1Count
+            | HvX64RegisterName::Stimer2Config
+            | HvX64RegisterName::Stimer2Count
+            | HvX64RegisterName::Stimer3Config
+            | HvX64RegisterName::Stimer3Count
+            | HvX64RegisterName::VsmVina) => self.vp.backing.cvm_state_mut().hv[vtl]
+                .synic
+                .write_reg(&self.vp.partition.gm[vtl], synic_reg.into(), reg.value),
             _ => {
                 tracing::error!(
                     ?reg,
@@ -790,16 +856,9 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::VtlCall for UhHypercallHandle
         B::switch_vtl_state(self.vp, self.intercepted_vtl, GuestVtl::Vtl1);
         self.vp.backing.cvm_state_mut().exit_vtl = GuestVtl::Vtl1;
 
-        // TODO GUEST VSM: reevaluate if the return reason should be set here or
-        // during VTL 2 exit handling
         self.vp.backing.cvm_state_mut().hv[GuestVtl::Vtl1]
             .set_return_reason(HvVtlEntryReason::VTL_CALL)
             .expect("setting return reason cannot fail");
-
-        // TODO GUEST_VSM: Force reevaluation of the VTL 1 APIC in case delivery of
-        // low-priority interrupts was suppressed while in VTL 0.
-
-        // TODO GUEST_VSM: Track which VTLs are runnable and mark VTL as runnable
     }
 }
 
@@ -816,12 +875,16 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::VtlReturn for UhHypercallHand
 
         self.vp.unlock_tlb_lock(Vtl::Vtl1);
 
+        let hv = &mut self.vp.backing.cvm_state_mut().hv[GuestVtl::Vtl1];
+        if hv.synic.vina().auto_reset() {
+            hv.set_vina_asserted(false).unwrap();
+        }
+
         B::switch_vtl_state(self.vp, self.intercepted_vtl, GuestVtl::Vtl0);
         self.vp.backing.cvm_state_mut().exit_vtl = GuestVtl::Vtl0;
 
         // TODO CVM GUEST_VSM:
         // - rewind interrupts
-        // - reset VINA
 
         if !fast {
             let [rax, rcx] = self.vp.backing.cvm_state_mut().hv[GuestVtl::Vtl1]
@@ -980,6 +1043,52 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
         guest_vsm.deny_lower_vtl_startup = value.deny_lower_vtl_startup();
 
         Ok(())
+    }
+
+    /// Handle checking for cross-VTL interrupts, preempting VTL 0, and setting
+    /// VINA when appropriate. The `is_interrupt_pending` function should return
+    /// true if an interrupt of appropriate priority, or an NMI, is pending for
+    /// the given VTL. The boolean specifies whether RFLAGS.IF should be checked.
+    /// Returns true if interrupt reprocessing is required.
+    pub(crate) fn hcvm_handle_cross_vtl_interrupts(
+        &mut self,
+        is_interrupt_pending: impl Fn(&mut Self, GuestVtl, bool) -> bool,
+    ) -> Result<bool, UhRunVpError> {
+        let mut reprocessing_required = false;
+
+        if self.backing.cvm_state_mut().exit_vtl == GuestVtl::Vtl0 {
+            // Check for VTL preemption - which ignores RFLAGS.IF
+            if is_interrupt_pending(self, GuestVtl::Vtl1, false) {
+                B::switch_vtl_state(self, GuestVtl::Vtl0, GuestVtl::Vtl1);
+                self.backing.cvm_state_mut().exit_vtl = GuestVtl::Vtl1;
+                self.backing.cvm_state_mut().hv[GuestVtl::Vtl1]
+                    .set_return_reason(HvVtlEntryReason::INTERRUPT)
+                    .map_err(UhRunVpError::VpAssistPage)?;
+            }
+        }
+
+        if self.backing.cvm_state_mut().exit_vtl == GuestVtl::Vtl1 {
+            // Check for VINA
+            if is_interrupt_pending(self, GuestVtl::Vtl0, true) {
+                let vp_index = self.vp_index();
+                let hv = &mut self.backing.cvm_state_mut().hv[GuestVtl::Vtl1];
+                if hv.synic.vina().enabled()
+                    && !hv.vina_asserted().map_err(UhRunVpError::VpAssistPage)?
+                {
+                    hv.set_vina_asserted(true)
+                        .map_err(UhRunVpError::VpAssistPage)?;
+                    self.partition
+                        .synic_interrupt(vp_index, GuestVtl::Vtl1)
+                        .request_interrupt(
+                            hv.synic.vina().vector().into(),
+                            hv.synic.vina().auto_eoi(),
+                        );
+                    reprocessing_required = true;
+                }
+            }
+        }
+
+        Ok(reprocessing_required)
     }
 }
 

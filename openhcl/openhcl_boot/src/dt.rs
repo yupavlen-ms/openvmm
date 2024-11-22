@@ -512,6 +512,7 @@ pub fn write_dt(
                     ReservedMemoryType::Vtl2Config => MemoryVtlType::VTL2_CONFIG,
                     ReservedMemoryType::SidecarImage => MemoryVtlType::VTL2_SIDECAR_IMAGE,
                     ReservedMemoryType::SidecarNode => MemoryVtlType::VTL2_SIDECAR_NODE,
+                    ReservedMemoryType::Vtl2Reserved => MemoryVtlType::VTL2_RESERVED,
                     ReservedMemoryType::DmaBuffers => MemoryVtlType::VTL2_PRESERVED,
                 },
             )

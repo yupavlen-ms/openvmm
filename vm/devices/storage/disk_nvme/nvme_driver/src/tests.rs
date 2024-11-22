@@ -21,7 +21,16 @@ use vmcore::vm_task::VmTaskDriverSource;
 use zerocopy::AsBytes;
 
 #[async_test]
-async fn test_nvme_driver(driver: DefaultDriver) {
+async fn test_nvme_driver_direct_dma(driver: DefaultDriver) {
+    test_nvme_driver(driver, true).await;
+}
+
+#[async_test]
+async fn test_nvme_driver_bounce_buffer(driver: DefaultDriver) {
+    test_nvme_driver(driver, false).await;
+}
+
+async fn test_nvme_driver(driver: DefaultDriver, allow_dma: bool) {
     const MSIX_COUNT: u16 = 2;
     const IO_QUEUE_COUNT: u16 = 64;
     const CPU_COUNT: u32 = 64;
@@ -33,6 +42,13 @@ async fn test_nvme_driver(driver: DefaultDriver) {
         .guest_memory()
         .subrange(base_len as u64, payload_len as u64, false)
         .unwrap();
+    let driver_dma_mem = if allow_dma {
+        mem.guest_memory_for_driver_dma()
+            .subrange(base_len as u64, payload_len as u64, false)
+            .unwrap()
+    } else {
+        payload_mem.clone()
+    };
 
     let buf_range = OwnedRequestBuffers::linear(0, 16384, true);
 
@@ -69,7 +85,7 @@ async fn test_nvme_driver(driver: DefaultDriver) {
             1,
             2,
             false,
-            &payload_mem,
+            &driver_dma_mem,
             buf_range.buffer(&payload_mem).range(),
         )
         .await
@@ -80,7 +96,7 @@ async fn test_nvme_driver(driver: DefaultDriver) {
             1,
             0,
             32,
-            &payload_mem,
+            &driver_dma_mem,
             buf_range.buffer(&payload_mem).range(),
         )
         .await
@@ -118,7 +134,7 @@ async fn test_nvme_driver(driver: DefaultDriver) {
             63,
             0,
             32,
-            &payload_mem,
+            &driver_dma_mem,
             buf_range.buffer(&payload_mem).range(),
         )
         .await
@@ -171,8 +187,10 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
 
     let _ns1 = nvme_driver.namespace(1).await.unwrap();
     let saved_state = nvme_driver.save().await.unwrap();
-    assert_eq!(saved_state.namespaces.len(), 1);
-    assert_eq!(saved_state.namespaces[0].nsid, 1);
+    // As of today we do not save namespace data to avoid possible conflict
+    // when namespace has changed during servicing.
+    // TODO: Review and re-enable in future.
+    assert_eq!(saved_state.namespaces.len(), 0);
 
     // Create a second set of devices since the ownership has been moved.
     let new_emu_mem = DeviceSharedMemory::new(64 * 1024 * 1024, payload_len);
