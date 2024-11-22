@@ -4,6 +4,7 @@
 //! Implementation of an admin or IO queue pair.
 
 use super::spec;
+use crate::driver::save_restore::PendingCommandSavedState;
 use crate::driver::save_restore::PendingCommandsSavedState;
 use crate::driver::save_restore::QueueHandlerSavedState;
 use crate::driver::save_restore::QueuePairSavedState;
@@ -116,31 +117,42 @@ impl PendingCommands {
 
     /// Save pending commands into a buffer.
     pub fn save(&self) -> PendingCommandsSavedState {
-        let mut commands = Vec::new();
-        // Convert Slab into Vec.
-        for cmd in &self.commands {
-            commands.push(cmd.1.command);
-        }
+        let commands: Vec<PendingCommandSavedState> = self
+            .commands
+            .iter()
+            .map(|(_index, cmd)| PendingCommandSavedState {
+                command: cmd.command,
+            })
+            .collect();
         tracing::info!("YSP: save CID {} len={}", self.next_cid_high_bits.0, commands.len());
         PendingCommandsSavedState {
             commands,
             next_cid_high_bits: self.next_cid_high_bits.0,
+            // TODO: Not used today, added for future compatibility.
+            cid_key_bits: Self::CID_KEY_BITS,
         }
     }
 
     /// Restore pending commands from the saved state.
     pub fn restore(&mut self, saved_state: &PendingCommandsSavedState) -> anyhow::Result<()> {
-        let mut commands: Vec<(usize, PendingCommand)> = Vec::new();
-        for cmd in &saved_state.commands {
-            let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
-            let pending_command = PendingCommand {
-                command: *cmd,
-                respond: send,
-            };
-            // Remove high CID bits to be used as a key.
-            let cid = cmd.cdw0.cid() & Self::CID_KEY_MASK;
-            commands.push((cid as usize, pending_command));
-        }
+        let commands: Vec<(usize, PendingCommand)> = saved_state
+            .commands
+            .iter()
+            .map(|state| {
+                let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
+                // To correctly restore Slab we need both the command index,
+                // inherited from command's CID, and the command itself.
+                (
+                    // Remove high CID bits to be used as a key.
+                    (state.command.cdw0.cid() & Self::CID_KEY_MASK) as usize,
+                    PendingCommand {
+                        command: state.command,
+                        respond: send,
+                    },
+                )
+            })
+            .collect();
+
         // Re-create identical Slab where CIDs are correctly mapped.
         self.commands = commands.into_iter().collect::<Slab<PendingCommand>>();
         tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
@@ -151,18 +163,10 @@ impl PendingCommands {
 }
 
 impl QueuePair {
-    pub const MAX_SQSIZE: u16 = (PAGE_SIZE / 64) as u16; // Maximum SQ size in entries.
-    pub const MAX_CQSIZE: u16 = (PAGE_SIZE / 16) as u16; // Maximum CQ size in entries.
-
-    /// Return size in bytes for Submission Queue.
-    fn sq_size() -> usize {
-        PAGE_SIZE
-    }
-
-    /// Return size in bytes for Completion Queue.
-    fn cq_size() -> usize {
-        PAGE_SIZE
-    }
+    pub const MAX_SQ_ENTRIES: u16 = (PAGE_SIZE / 64) as u16; // Maximum SQ size in entries.
+    pub const MAX_CQ_ENTRIES: u16 = (PAGE_SIZE / 16) as u16; // Maximum CQ size in entries.
+    pub const SQ_SIZE: usize = PAGE_SIZE; // Submission Queue size in bytes.
+    pub const CQ_SIZE: usize = PAGE_SIZE; // Completion Queue size in bytes.
 
     /// Return size in bytes for DMA memory.
     fn dma_data_size() -> usize {
@@ -179,7 +183,7 @@ impl QueuePair {
     /// Return total DMA buffer size needed for the queue pair (all chunks are contiguous).
     pub fn required_dma_size() -> usize {
         // 4k for SQ + 4k for CQ + 512k for data.
-        QueuePair::sq_size() + QueuePair::cq_size() + QueuePair::dma_data_size()
+        QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::dma_data_size()
     }
 
     pub fn new(
@@ -213,18 +217,18 @@ impl QueuePair {
             &mem_block.base_va(),
             qid
         );
-        assert!(sq_size <= Self::MAX_SQSIZE);
-        assert!(cq_size <= Self::MAX_CQSIZE);
+        assert!(sq_size <= Self::MAX_SQ_ENTRIES);
+        assert!(cq_size <= Self::MAX_CQ_ENTRIES);
 
         // The memory block is split contiguously: SQ, CQ, Data.
-        let sq = SubmissionQueue::new(qid, sq_size, mem_block.subblock(0, Self::sq_size()));
+        let sq = SubmissionQueue::new(qid, sq_size, mem_block.subblock(0, Self::SQ_SIZE));
         let cq = CompletionQueue::new(
             qid,
             cq_size,
-            mem_block.subblock(Self::sq_size(), Self::cq_size()),
+            mem_block.subblock(Self::SQ_SIZE, Self::CQ_SIZE),
         );
         let alloc: PageAllocator = PageAllocator::new(
-            mem_block.subblock(Self::sq_size() + Self::cq_size(), Self::dma_data_size()),
+            mem_block.subblock(Self::SQ_SIZE + Self::CQ_SIZE, Self::dma_data_size()),
         );
 
         let queue_handler = QueueHandler {

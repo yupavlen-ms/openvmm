@@ -5,7 +5,6 @@
 
 use super::spec;
 use crate::driver::save_restore::QueuePairSavedState;
-use crate::spec::nvm;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
 use crate::queue_pair::QueuePair;
@@ -270,7 +269,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         // device bugs where differing sizes might be a less common scenario
         //
         // Namely: using differing sizes revealed a bug in the initial NvmeDirectV2 implementation
-        let admin_len = std::cmp::min(QueuePair::MAX_SQSIZE, QueuePair::MAX_CQSIZE);
+        let admin_len = std::cmp::min(QueuePair::MAX_SQ_ENTRIES, QueuePair::MAX_CQ_ENTRIES);
         let admin_sqes = admin_len;
         let admin_cqes = admin_len;
 
@@ -397,8 +396,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let max_io_queues = allocated_io_queue_count.min(requested_io_queue_count);
 
         let qsize = {
-            let io_cqsize = QueuePair::MAX_CQSIZE.min(worker.registers.cap.mqes_z() + 1);
-            let io_sqsize = QueuePair::MAX_SQSIZE.min(worker.registers.cap.mqes_z() + 1);
+            let io_cqsize = QueuePair::MAX_CQ_ENTRIES.min(worker.registers.cap.mqes_z() + 1);
+            let io_sqsize = QueuePair::MAX_SQ_ENTRIES.min(worker.registers.cap.mqes_z() + 1);
 
             // Some hardware (such as ASAP) require that the sq and cq have the same size.
             io_cqsize.min(io_sqsize)
@@ -1125,11 +1124,20 @@ pub mod save_restore {
 
     #[derive(Protobuf, Clone, Debug)]
     #[mesh(package = "nvme_driver")]
+    pub struct PendingCommandSavedState {
+        #[mesh(1, encoding = "mesh::payload::encoding::ZeroCopyEncoding")]
+        pub command: spec::Command,
+    }
+
+    #[derive(Protobuf, Clone, Debug)]
+    #[mesh(package = "nvme_driver")]
     pub struct PendingCommandsSavedState {
         #[mesh(1)]
-        pub commands: Vec<spec::Command>,
+        pub commands: Vec<PendingCommandSavedState>,
         #[mesh(2)]
         pub next_cid_high_bits: u16,
+        #[mesh(3)]
+        pub cid_key_bits: u32,
     }
 
     /// NVMe namespace data.
@@ -1141,6 +1149,6 @@ pub mod save_restore {
         #[mesh(2)]
         pub block_count: u64,
         #[mesh(3, encoding = "mesh::payload::encoding::ZeroCopyEncoding")]
-        pub identify_ns: nvm::IdentifyNamespace,
+        pub identify_ns: nvme_spec::nvm::IdentifyNamespace,
     }
 }
