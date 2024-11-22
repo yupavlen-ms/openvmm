@@ -91,7 +91,7 @@ impl VfioDevice {
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         keepalive: bool,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: VFIO new/restore {}", keepalive);
+        tracing::info!("YSP: VFIO new/restore {} {}", pci_id, keepalive);
         let path = Path::new("/sys/bus/pci/devices").join(pci_id);
 
         // YSP: FIXME: Looks like we can try vfio_set_device_reset_method()
@@ -119,10 +119,10 @@ impl VfioDevice {
         container.set_iommu(IommuType::NoIommu)?;
         if keepalive {
             // Prevent physical hardware interaction when restoring.
-            group.set_keep_alive(path.file_name().unwrap().to_str().unwrap())?;
-            tracing::info!("YSP: VFIO: keep-alive was set");
+            group.set_keep_alive(pci_id)?;
+            tracing::info!("YSP: VFIO: keep-alive was set {}", pci_id);
         }
-        let device = group.open_device(path.file_name().unwrap().to_str().unwrap())?;
+        let device = group.open_device(pci_id)?;
         let msix_info = device.irq_info(vfio_bindings::bindings::vfio::VFIO_PCI_MSIX_IRQ_INDEX)?;
         if msix_info.flags.noresize() {
             anyhow::bail!("unsupported: kernel does not support dynamic msix allocation");

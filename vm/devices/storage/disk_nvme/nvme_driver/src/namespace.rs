@@ -5,6 +5,7 @@
 
 use super::spec;
 use super::spec::nvm;
+use crate::driver::save_restore::SavedNamespaceData;
 use crate::driver::IoIssuers;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
@@ -13,7 +14,6 @@ use crate::NVME_PAGE_SHIFT;
 use guestmem::ranges::PagedRange;
 use guestmem::GuestMemory;
 use inspect::Inspect;
-use mesh::payload::Protobuf;
 use mesh::CancelContext;
 use pal_async::task::Spawn;
 use parking_lot::Mutex;
@@ -535,8 +535,13 @@ impl Namespace {
     }
 
     /// Save namespace object data for servicing.
+    /// Initially we will re-query namespace state after restore
+    /// to avoid possible contention if namespace was changed
+    /// during servicing.
+    /// TODO: Re-enable namespace save/restore once we confirm
+    /// that we can process namespace change AEN.
+    #[allow(dead_code)]
     pub fn save(&self) -> anyhow::Result<SavedNamespaceData> {
-        tracing::info!("YSP: Namespace::save nsid={}", self.nsid);
         let id = self.state.identify.lock();
         let mut save_data = SavedNamespaceData {
             nsid: self.nsid,
@@ -673,16 +678,4 @@ fn nvm_cmd(opcode: nvm::NvmOpcode, nsid: u32) -> spec::Command {
         nsid,
         ..FromZeroes::new_zeroed()
     }
-}
-
-/// Save/restore NVMe namespace data.
-#[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "underhill")]
-pub struct SavedNamespaceData {
-    #[mesh(1)]
-    pub nsid: u32,
-    #[mesh(2)]
-    pub block_count: u64,
-    #[mesh(3)]
-    pub identify_ns: [u8; 4096], // Alternatively save few fields that we actually use and rebuild from them.
 }

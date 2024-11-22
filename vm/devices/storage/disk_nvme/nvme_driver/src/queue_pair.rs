@@ -5,6 +5,7 @@
 
 use super::spec;
 use crate::driver::save_restore::PendingCommandsSavedState;
+use crate::driver::save_restore::QueueHandlerSavedState;
 use crate::driver::save_restore::QueuePairSavedState;
 use crate::page_allocator::PageAllocator;
 use crate::page_allocator::ScopedPages;
@@ -307,14 +308,15 @@ impl QueuePair {
             self.cq_addr()
         );
         // Send an RPC request to QueueHandler thread to save its data.
-        let queue_data = self.issuer.send.call(Req::Save, ()).await?;
+        let handler_data = self.issuer.send.call(Req::Save, ()).await??;
 
-        // Add more data to the returned response.
-        let mut local_queue_data = queue_data.unwrap();
-        local_queue_data.mem_len = self.mem.len();
-        local_queue_data.pfns = self.mem.pfns().to_vec();
-
-        Ok(local_queue_data)
+        Ok(QueuePairSavedState {
+            cpu: 0, // YSP: FIXME: ZZZ?
+            mem_len: self.mem.len(),
+            msix: 0, // YSP: FIXME: ZZZ?
+            pfns: self.mem.pfns().to_vec(),
+            handler_data,
+        })
     }
 
     /// Restore queue pair state after servicing. Returns newly created object from saved data.
@@ -327,17 +329,17 @@ impl QueuePair {
     ) -> anyhow::Result<Self> {
         tracing::info!(
             "YSP: QueuePair::restore {}/{}",
-            saved_state.sq_state.sqid,
-            saved_state.cq_state.cqid
+            saved_state.handler_data.sq_state.sqid,
+            saved_state.handler_data.cq_state.cqid
         );
         let (mut queue_handler, alloc, mem) = QueuePair::allocate(
-            saved_state.sq_state.sqid,
-            saved_state.sq_state.len as u16,
-            saved_state.cq_state.len as u16,
+            saved_state.handler_data.sq_state.sqid,
+            saved_state.handler_data.sq_state.len as u16,
+            saved_state.handler_data.cq_state.len as u16,
             mem_block,
         )?;
 
-        queue_handler.restore(saved_state)?;
+        queue_handler.restore(&saved_state.handler_data)?;
 
         QueuePair::resume(spawner, interrupt, registers, mem, alloc, queue_handler)
     }
@@ -597,7 +599,7 @@ struct PendingCommand {
 enum Req {
     Command(Rpc<spec::Command, spec::Completion>),
     Inspect(inspect::Deferred),
-    Save(Rpc<(), Result<QueuePairSavedState, anyhow::Error>>),
+    Save(Rpc<(), Result<QueueHandlerSavedState, anyhow::Error>>),
 }
 
 #[derive(Inspect)]
@@ -673,32 +675,26 @@ impl QueueHandler {
     }
 
     /// Save queue data for servicing.
-    pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
+    pub async fn save(&self) -> anyhow::Result<QueueHandlerSavedState> {
         tracing::info!(
             "YSP: QueueHandler::save qid={}/{}",
             self.sq.id(),
             self.cq._id()
         );
         // The data is collected from both QueuePair and QueueHandler.
-        Ok(QueuePairSavedState {
+        Ok(QueueHandlerSavedState {
             sq_state: self.sq.save(),
             cq_state: self.cq.save(),
             pending_cmds: self.commands.save(),
-            cpu: 0,       // Will be updated by the caller.
-            msix: 0,      // Will be updated by the caller.
-            mem_len: 0,   // Will be updated by the caller.
-            pfns: vec![], // Will be updated by the caller.
         })
     }
 
     /// Restore queue data after servicing.
-    pub fn restore(&mut self, saved_state: &QueuePairSavedState) -> anyhow::Result<()> {
+    pub fn restore(&mut self, saved_state: &QueueHandlerSavedState) -> anyhow::Result<()> {
         tracing::info!(
-            "YSP: QueueHandler::restore qid={}/{} cpu={} msi={}",
+            "YSP: QueueHandler::restore qid={}/{}",
             saved_state.sq_state.sqid,
             saved_state.cq_state.cqid,
-            saved_state.cpu,
-            saved_state.msix,
         );
         self.commands.restore(&saved_state.pending_cmds)?;
         self.sq.restore(&saved_state.sq_state)?;

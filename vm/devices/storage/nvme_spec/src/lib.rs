@@ -447,7 +447,7 @@ pub struct OptionalAdminCommandSupport {
 }
 
 #[repr(C)]
-#[derive(Debug, AsBytes, FromBytes, FromZeroes, Inspect)]
+#[derive(Debug, AsBytes, FromBytes, FromZeroes, Inspect, Clone)]
 pub struct IdentifyController {
     pub vid: u16,
     pub ssvid: u16,
