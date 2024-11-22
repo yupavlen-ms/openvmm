@@ -327,6 +327,14 @@ fn reserved_memory_regions(
         }));
     }
 
+    // Add the VTL2 reserved region, if it exists.
+    if !partition_info.vtl2_reserved_region.is_empty() {
+        reserved.push((
+            partition_info.vtl2_reserved_region,
+            ReservedMemoryType::Vtl2Reserved,
+        ));
+    }
+
     // YSP: FIXME: Debug
     for ra in &partition_info.vtl2_ram {
         log!("YSP: vtl2_ram {:X}-{:X}", ra.range.start(), ra.range.end());
@@ -346,14 +354,6 @@ fn reserved_memory_regions(
             });
             reserved.push((reserved_dma, ReservedMemoryType::DmaBuffers));
         }
-    }
-
-    // Add the VTL2 reserved region, if it exists.
-    if !partition_info.vtl2_reserved_region.is_empty() {
-        reserved.push((
-            partition_info.vtl2_reserved_region,
-            ReservedMemoryType::Vtl2Reserved,
-        ));
     }
 
     reserved

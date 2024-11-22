@@ -34,6 +34,7 @@ async fn test_nvme_driver(driver: DefaultDriver, allow_dma: bool) {
     const MSIX_COUNT: u16 = 2;
     const IO_QUEUE_COUNT: u16 = 64;
     const CPU_COUNT: u32 = 64;
+
     let base_len = 64 << 20;
     let payload_len = QueuePair::required_dma_size() * 4;
     let mem = DeviceSharedMemory::new(base_len, payload_len);
