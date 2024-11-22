@@ -5,7 +5,7 @@
 
 use super::spec;
 use crate::driver::save_restore::QueuePairSavedState;
-// use crate::Error;
+use crate::spec::nvm;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
 use crate::queue_pair::QueuePair;
@@ -694,7 +694,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 this.identify.clone().unwrap(),
                 &this.io_issuers,
                 this.device_id.as_ref(),
-                &ns.identify_ns,
+                ns.identify_ns.clone(),
                 ns,
             )?));
         }
@@ -979,14 +979,18 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
         worker_state: &mut WorkerState,
     ) -> anyhow::Result<NvmeDriverWorkerSavedState> {
         tracing::info!("YSP: NvmeDriverWorkerTask::save");
-        let admin = self.admin.as_ref().unwrap().save().await?;
+        let admin = match self.admin.as_ref() {
+            Some(a) => Some(a.save().await?),
+            None => None,
+        };
+
         let mut io: Vec<QueuePairSavedState> = Vec::new();
         for io_q in self.io.iter() {
             io.push(io_q.save().await?);
         }
 
         Ok(NvmeDriverWorkerSavedState {
-            admin: Some(admin),
+            admin,
             io,
             qsize: worker_state.qsize,
             max_io_queues: worker_state.max_io_queues,
@@ -1136,7 +1140,7 @@ pub mod save_restore {
         pub nsid: u32,
         #[mesh(2)]
         pub block_count: u64,
-        #[mesh(3)]
-        pub identify_ns: [u8; 4096], // Alternatively save few fields that we actually use and rebuild from them.
+        #[mesh(3, encoding = "mesh::payload::encoding::ZeroCopyEncoding")]
+        pub identify_ns: nvm::IdentifyNamespace,
     }
 }

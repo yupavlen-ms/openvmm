@@ -542,14 +542,11 @@ impl Namespace {
     /// that we can process namespace change AEN.
     #[allow(dead_code)]
     pub fn save(&self) -> anyhow::Result<SavedNamespaceData> {
-        let id = self.state.identify.lock();
-        let mut save_data = SavedNamespaceData {
+        Ok(SavedNamespaceData {
             nsid: self.nsid,
             block_count: self.state.block_count.load(Ordering::Relaxed),
-            identify_ns: [0; 4096],
-        };
-        save_data.identify_ns.copy_from_slice(id.as_bytes());
-        Ok(save_data)
+            identify_ns: self.state.identify.lock().clone(),
+        })
     }
 
     /// Restore namespace object data after servicing.
@@ -560,13 +557,11 @@ impl Namespace {
         identify_ctrl: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
         device_id: &str,
-        identify_ns: &[u8; 4096],
+        identify_ns: nvm::IdentifyNamespace,
         saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::restore nsid={}", saved_state.nsid);
         let nsid = saved_state.nsid;
-        let identify = nvm::IdentifyNamespace::read_from_prefix(identify_ns)
-            .unwrap_or(nvm::IdentifyNamespace::new_zeroed());
 
         let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
         let this = Namespace::new_from_identify(
@@ -574,7 +569,7 @@ impl Namespace {
             io_issuers,
             cancel_rescan,
             nsid,
-            identify,
+            identify_ns,
         )?;
 
         // Spawn a task, but detach is so that it doesn't get dropped while NVMe
