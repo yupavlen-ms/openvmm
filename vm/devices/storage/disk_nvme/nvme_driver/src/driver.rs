@@ -658,8 +658,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 .map_interrupt(q_state.msix, q_state.cpu)
                 .context("failed to map interrupt")?;
 
-            let mem_block =
-                dma_buffer.attach_dma_buffer(q_state.mem_len, q_state.base_pfn)?;
+            let mem_block = dma_buffer.attach_dma_buffer(q_state.mem_len, q_state.base_pfn)?;
             let q = IoQueue::restore(
                 driver.clone(),
                 interrupt,

@@ -313,7 +313,7 @@ impl QueuePair {
             self.cq_addr()
         );
         // Return error if the queue does not have any memory allocated.
-        if self.mem.pfns().len() == 0 {
+        if self.mem.pfns().is_empty() {
             return Err(Error::InvalidState.into());
         }
         // Send an RPC request to QueueHandler thread to save its data.
