@@ -613,7 +613,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .map(|a| {
                 // Restore memory block for admin queue pair.
                 let mem_block = dma_buffer
-                    .attach_dma_buffer(a.mem_len, a.pfns.as_slice())
+                    .attach_dma_buffer(a.mem_len, a.base_pfn)
                     .expect("unable to restore mem block");
                 QueuePair::restore(driver.clone(), interrupt0, registers.clone(), mem_block, a)
                     .unwrap()
@@ -659,7 +659,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 .context("failed to map interrupt")?;
 
             let mem_block =
-                dma_buffer.attach_dma_buffer(q_state.mem_len, q_state.pfns.as_slice())?;
+                dma_buffer.attach_dma_buffer(q_state.mem_len, q_state.base_pfn)?;
             let q = IoQueue::restore(
                 driver.clone(),
                 interrupt,
@@ -1069,8 +1069,9 @@ pub mod save_restore {
         pub msix: u32,
         #[mesh(3)]
         pub mem_len: usize,
+        /// First PFN of the physically contiguous block.
         #[mesh(4)]
-        pub pfns: Vec<u64>, // TODO: Check if region is contiguous and save 1st PFN only if true.
+        pub base_pfn: u64,
         #[mesh(5)]
         pub handler_data: QueueHandlerSavedState,
     }
@@ -1100,8 +1101,6 @@ pub mod save_restore {
         pub committed_tail: u32,
         #[mesh(5)]
         pub len: u32,
-        #[mesh(6)]
-        pub pfns: Vec<u64>,  // TODO: Check if region is contiguous and save 1st PFN only if true.
     }
 
     #[derive(Protobuf, Clone, Debug)]
@@ -1118,8 +1117,6 @@ pub mod save_restore {
         #[mesh(5)]
         /// NVMe completion tag.
         pub phase: bool,
-        #[mesh(6)]
-        pub pfns: Vec<u64>,  // TODO: Check if region is contiguous and save 1st PFN only if true.
     }
 
     #[derive(Protobuf, Clone, Debug)]

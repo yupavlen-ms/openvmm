@@ -41,7 +41,7 @@ pub trait VfioDmaBuffer: 'static + Send + Sync {
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock>;
 
     /// Restore a dma buffer in the predefined location with the given `len` in bytes.
-    fn restore_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock>;
+    fn restore_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock>;
 }
 
 /// A device backend accessed via VFIO.
@@ -497,9 +497,8 @@ impl HostDmaAllocator for LockedMemoryAllocator {
         self.dma_buffer.create_dma_buffer(len)
     }
 
-    fn attach_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
-        tracing::info!("YSP: WRONG attach_dma_buffer len={} pfn[0]={:X}", len, pfns[0]);
-        // Return error 'Not supported'?
-        self.dma_buffer.restore_dma_buffer(len, pfns)
+    fn attach_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG attach_dma_buffer len={} pfn[0]={:X}", len, base_pfn);
+        self.dma_buffer.restore_dma_buffer(len, base_pfn)
     }
 }

@@ -4,6 +4,7 @@
 //! Implementation of an admin or IO queue pair.
 
 use super::spec;
+use crate::driver::save_restore::Error;
 use crate::driver::save_restore::PendingCommandSavedState;
 use crate::driver::save_restore::PendingCommandsSavedState;
 use crate::driver::save_restore::QueueHandlerSavedState;
@@ -311,6 +312,10 @@ impl QueuePair {
             self.sq_addr(),
             self.cq_addr()
         );
+        // Return error if the queue does not have any memory allocated.
+        if self.mem.pfns().len() == 0 {
+            return Err(Error::InvalidState.into());
+        }
         // Send an RPC request to QueueHandler thread to save its data.
         let handler_data = self.issuer.send.call(Req::Save, ()).await??;
 
@@ -318,7 +323,7 @@ impl QueuePair {
             cpu: 0, // YSP: FIXME: ZZZ?
             mem_len: self.mem.len(),
             msix: 0, // YSP: FIXME: ZZZ?
-            pfns: self.mem.pfns().to_vec(),
+            base_pfn: self.mem.pfns()[0],
             handler_data,
         })
     }

@@ -133,9 +133,9 @@ impl crate::vfio::VfioDmaBuffer for LockedMemorySpawner {
     fn restore_dma_buffer(
         &self,
         len: usize,
-        _pfns: &[u64],
+        _base_pfn: u64,
     ) -> anyhow::Result<crate::memory::MemoryBlock> {
         tracing::error!("YSP: WRONG restore_dma_buffer len={}", len);
-        Ok(crate::memory::MemoryBlock::new(LockedMemory::new(len)?))
+        anyhow::bail!("restore not supported for lockmem")
     }
 }
