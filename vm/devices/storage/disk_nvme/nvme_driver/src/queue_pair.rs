@@ -668,6 +668,8 @@ impl QueueHandler {
                     Req::Inspect(deferred) => deferred.inspect(&self),
                     Req::Save(queue_state) => {
                         queue_state.complete(self.save().await);
+                        // Do not allow any more processing after save completed.
+                        break;
                     }
                 },
                 Event::Completion(completion) => {
@@ -679,6 +681,7 @@ impl QueueHandler {
                 }
             }
         }
+        tracing::info!("YSP: quit queue loop");
     }
 
     /// Save queue data for servicing.
