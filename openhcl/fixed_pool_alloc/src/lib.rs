@@ -550,11 +550,13 @@ impl HostDmaAllocator for FixedPoolAllocator {
     }
 }
 
+/// Save and restore memory allocation pool state for servicing.
 pub mod save_restore {
     use mesh::payload::Protobuf;
 
     #[derive(Protobuf)]
     #[mesh(package = "page_pool")]
+    /// Fixed pool single chunk state for save/restore.
     pub struct MemPoolState {
         /// Base PFN for the chunk.
         #[mesh(1)]

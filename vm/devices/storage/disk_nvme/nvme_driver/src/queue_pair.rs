@@ -320,9 +320,7 @@ impl QueuePair {
         let handler_data = self.issuer.send.call(Req::Save, ()).await??;
 
         Ok(QueuePairSavedState {
-            cpu: 0, // YSP: FIXME: ZZZ?
             mem_len: self.mem.len(),
-            msix: 0, // YSP: FIXME: ZZZ?
             base_pfn: self.mem.pfns()[0],
             handler_data,
         })
