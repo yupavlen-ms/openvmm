@@ -123,12 +123,16 @@ impl IoQueue {
         saved_state: &IoQueueSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: IoQueue::restore");
+        // YSP: FIXME: Review arguments.
         let queue = QueuePair::restore(
             spawner,
+            saved_state.queue_data.handler_data.sq_state.sqid,
+            QueuePair::MAX_SQ_ENTRIES,
+            QueuePair::MAX_CQ_ENTRIES,
             interrupt,
             registers.clone(),
             mem_block,
-            &saved_state.queue_data,
+            Some(&saved_state.queue_data),
         )?;
 
         Ok(Self {
@@ -616,8 +620,18 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 let mem_block = dma_buffer
                     .attach_dma_buffer(a.mem_len, a.base_pfn)
                     .expect("unable to restore mem block");
-                QueuePair::restore(driver.clone(), interrupt0, registers.clone(), mem_block, a)
-                    .unwrap()
+                // YSP: FIXME: review arguments
+                QueuePair::restore(
+                    driver.clone(),
+                    0,
+                    QueuePair::MAX_SQ_ENTRIES,
+                    QueuePair::MAX_CQ_ENTRIES,
+                    interrupt0,
+                    registers.clone(),
+                    mem_block,
+                    Some(a),
+                )
+                .unwrap()
             })
             .unwrap();
 
