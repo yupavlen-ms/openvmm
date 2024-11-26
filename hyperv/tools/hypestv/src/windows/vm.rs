@@ -26,7 +26,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 pub struct Vm {
-    paravisor_diag: Option<DiagClient>,
+    paravisor_diag: DiagClient,
     inner: Arc<VmInner>,
     serial: Vec<Option<SerialTask>>,
 }
@@ -48,13 +48,13 @@ impl Vm {
     pub fn new(driver: DefaultDriver, name: String, printer: Printer) -> anyhow::Result<Self> {
         let id = diag_client::hyperv::vm_id_from_name(&name).context("failed to get vm id")?;
         let inner = Arc::new(VmInner {
-            driver,
+            driver: driver.clone(),
             printer,
             name,
             id,
         });
         Ok(Self {
-            paravisor_diag: None,
+            paravisor_diag: DiagClient::from_hyperv_id(driver, id),
             serial: (0..4).map(|_| None).collect(),
             inner,
         })
@@ -69,16 +69,6 @@ impl Vm {
         });
     }
 
-    async fn diag_client(&mut self) -> anyhow::Result<&mut DiagClient> {
-        if self.paravisor_diag.is_none() {
-            let diag = DiagClient::from_hyperv_id(self.inner.driver.clone(), self.inner.id)
-                .await
-                .context("failed to connect to paravisor")?;
-            self.paravisor_diag = Some(diag);
-        }
-        Ok(self.paravisor_diag.as_mut().unwrap())
-    }
-
     pub async fn handle_inspect(
         &mut self,
         target: InspectTarget,
@@ -89,8 +79,7 @@ impl Vm {
                 anyhow::bail!("host inspect not supported yet");
             }
             InspectTarget::Paravisor => {
-                self.diag_client()
-                    .await?
+                self.paravisor_diag
                     .inspect(path, Some(0), Some(Duration::from_secs(1)))
                     .await
             }
@@ -101,8 +90,11 @@ impl Vm {
         match cmd {
             VmCommand::Start { paravisor } => {
                 if paravisor {
-                    let diag = self.diag_client().await?;
-                    diag.start([], []).await.context("start failed")?;
+                    self.paravisor_diag
+                        .start([], [])
+                        .await
+                        .context("start failed")?;
+
                     writeln!(self.inner.printer.out(), "guest started within paravisor")?;
                 } else {
                     self.delay(move |inner| {
@@ -217,25 +209,23 @@ impl Vm {
                 if !paravisor {
                     anyhow::bail!("no host inspect yet");
                 }
-                let diag = self.diag_client().await?;
                 if let Some(update) = update {
-                    let value = diag
+                    let value = self
+                        .paravisor_diag
                         .update(element.unwrap_or_default(), update)
                         .await
                         .context("update failed")?;
 
                     println!("{:#}", value);
                 } else {
-                    let node = diag
+                    let node = self
+                        .paravisor_diag
                         .inspect(
                             element.unwrap_or_default(),
                             if recursive { limit } else { Some(0) },
                             Some(Duration::from_secs(1)),
                         )
                         .await
-                        .inspect_err(|_| {
-                            self.paravisor_diag = None;
-                        })
                         .context("inspect failed")?;
 
                     println!("{:#}", node);
