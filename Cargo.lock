@@ -1572,6 +1572,7 @@ dependencies = [
  "mesh",
  "parking_lot",
  "sparse_mmap",
+ "test_with_tracing",
  "thiserror 2.0.0",
  "tracing",
  "user_driver",

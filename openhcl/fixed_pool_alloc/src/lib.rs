@@ -538,6 +538,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
     }
 }
 
+#[cfg(feature = "vfio")]
 impl HostDmaAllocator for FixedPoolAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
         tracing::info!("YSP: CORRECT allocate_dma_buffer {}", len);
@@ -586,6 +587,7 @@ pub mod save_restore {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_with_tracing::test;
 
     #[test]
     fn test_fixed_alloc() {
@@ -618,95 +620,51 @@ mod test {
 
     #[test]
     fn test_fixed_restore() {
-        let state = vec![State::Free {
-            base_pfn: 10,
-            size_pages: 12,
-        }];
-        let alloc = FixedPoolAllocator {
-            inner: Arc::new(Mutex::new(FixedPoolInner { state })),
-        };
+        // Prepare the pool.
+        let mem_range_vec = vec![
+            MemoryRange::from_4k_gpn_range(std::ops::Range {start: 10, end: 90,}),
+        ];
+        let pool = FixedPool::new(&mem_range_vec.as_slice()).unwrap();
+        let alloc = pool.allocator();
 
+        // Allocate some block(s) as a baseline.
         let r1 = alloc
-            .restore(
+            .alloc(
                 13.try_into().unwrap(),
-                1.try_into().unwrap(),
                 "restore1".into(),
             )
             .unwrap();
-        assert_eq!(r1.base_pfn, 13);
-        assert_eq!(r1.size_pages, 1);
+        assert_eq!(r1.base_pfn, 10);
+        assert_eq!(r1.size_pages, 13);
 
         let r2 = alloc
-            .restore(
-                15.try_into().unwrap(),
-                2.try_into().unwrap(),
+            .alloc(
+                30.try_into().unwrap(),
                 "restore2".into(),
             )
             .unwrap();
-        assert_eq!(r2.base_pfn, 15);
-        assert_eq!(r2.size_pages, 2);
+        assert_eq!(r2.base_pfn, 23);
+        assert_eq!(r2.size_pages, 30);
 
-        let r3 = alloc
-            .restore(
-                18.try_into().unwrap(),
-                4.try_into().unwrap(),
-                "restore2".into(),
-            )
-            .unwrap();
-        assert_eq!(r3.base_pfn, 18);
-        assert_eq!(r3.size_pages, 4);
-
-        let r4 = alloc
-            .restore(
-                10.try_into().unwrap(),
-                3.try_into().unwrap(),
-                "restore2".into(),
-            )
-            .unwrap();
-        assert_eq!(r4.base_pfn, 10);
-        assert_eq!(r4.size_pages, 3);
-
-        let r5 = alloc
-            .restore(
-                14.try_into().unwrap(),
-                1.try_into().unwrap(),
-                "restore2".into(),
-            )
-            .unwrap();
-        assert_eq!(r5.base_pfn, 14);
-        assert_eq!(r5.size_pages, 1);
-
-        assert!(alloc
-            .restore(
-                5.try_into().unwrap(),
-                3.try_into().unwrap(),
-                "failed".into()
-            )
-            .is_err());
-        assert!(alloc
-            .restore(
-                100.try_into().unwrap(),
-                10.try_into().unwrap(),
-                "failed".into()
-            )
-            .is_err());
-        assert!(alloc
-            .restore(
-                12.try_into().unwrap(),
-                4.try_into().unwrap(),
-                "failed".into()
-            )
-            .is_err());
-
-        let inner = alloc.inner.lock();
-        assert_eq!(inner.state.len(), 6);
-        // Must be dropped to avoid deadlock after.
-        drop(inner);
-
-        drop(r1);
+        // Save pool state into a datastore.
+        let st = pool.save().unwrap();
+        tracing::info!("YSP: SAVED!!!");
+        assert_eq!(st.mem_pool.len(), 3);
         drop(r2);
-        drop(r3);
-        drop(r4);
-        drop(r5);
+        drop(r1);
+        drop(pool);
+
+        // Create another pool.
+        let pool = FixedPool::restore(&mem_range_vec.as_slice(), st).unwrap();
+
+        // Allocate another chunk on top of restored ones.
+        let r3 = alloc
+            .alloc(
+                25.try_into().unwrap(),
+                "restore3".into(),
+            )
+            .unwrap();
+        assert_eq!(r3.base_pfn, 53);
+        assert_eq!(r3.size_pages, 25);
     }
 }
