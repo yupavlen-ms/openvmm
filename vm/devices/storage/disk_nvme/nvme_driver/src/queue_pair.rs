@@ -50,6 +50,9 @@ pub(crate) struct QueuePair {
     cancel: Cancel,
     issuer: Arc<Issuer>,
     mem: MemoryBlock,
+    qid: u16,
+    sq_entries: u16,
+    cq_entries: u16,
 }
 
 impl Inspect for QueuePair {
@@ -59,6 +62,9 @@ impl Inspect for QueuePair {
             cancel: _,
             issuer,
             mem: _,
+            qid: _,
+            sq_entries: _,
+            cq_entries: _,
         } = self;
         issuer.send.send(Req::Inspect(req.defer()));
     }
@@ -196,7 +202,7 @@ impl QueuePair {
         qid: u16,
         sq_size: u16,
         cq_size: u16,
-        mut interrupt: DeviceInterrupt,
+        interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
     ) -> anyhow::Result<Self> {
         let mem = device
@@ -207,57 +213,45 @@ impl QueuePair {
         assert!(sq_size <= Self::MAX_SQ_ENTRIES);
         assert!(cq_size <= Self::MAX_CQ_ENTRIES);
 
-        QueuePair::restore(spawner, qid, sq_size, cq_size, interrupt, registers, mem, None)
+        QueuePair::new_or_restore(spawner, qid, sq_size, cq_size, interrupt, registers, mem, None)
     }
 
-    /// Part of QueuePair initialization sequence which does memory allocations.
-    fn allocate(
-        qid: u16,
-        sq_size: u16,
-        cq_size: u16,
-        mem_block: MemoryBlock,
-    ) -> anyhow::Result<(QueueHandler, PageAllocator, MemoryBlock)> {
-        tracing::info!(
-            "YSP: QueuePair::allocate {:X} qid={}",
-            &mem_block.base_va(),
-            qid
-        );
-        assert!(sq_size <= Self::MAX_SQ_ENTRIES);
-        assert!(cq_size <= Self::MAX_CQ_ENTRIES);
-
-        // The memory block is split contiguously: SQ, CQ, Data.
-        let sq = SubmissionQueue::new(qid, sq_size, mem_block.subblock(0, Self::SQ_SIZE));
-        let cq = CompletionQueue::new(
-            qid,
-            cq_size,
-            mem_block.subblock(Self::SQ_SIZE, Self::CQ_SIZE),
-        );
-        let alloc: PageAllocator = PageAllocator::new(
-            mem_block.subblock(Self::SQ_SIZE + Self::CQ_SIZE, Self::dma_data_size()),
-        );
-
-        let queue_handler = QueueHandler {
-            sq,
-            cq,
-            commands: PendingCommands::new(),
-            stats: Default::default(),
-        };
-
-        Ok((queue_handler, alloc, mem_block))
-    }
-
-    /// Part of QueuePair initialization sequence which resumes operations.
-    fn resume(
+    /// Create new object or restore from saved state.
+    fn new_or_restore(
         spawner: impl SpawnDriver,
+        qid: u16,
+        sq_entries: u16, // Submission queue entries.
+        cq_entries: u16, // Completion queue entries.
         mut interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         mem_block: MemoryBlock,
-        alloc: PageAllocator,
-        mut queue_handler: QueueHandler,
+        saved_state: Option<&QueuePairSavedState>,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: QueuePair::resume with intr <?>");
+        tracing::info!("YSP: QueuePair::new_or_restore qid={}", qid);
+
+        let sq_mem_block = mem_block.subblock(0, PAGE_SIZE);
+        let cq_mem_block = mem_block.subblock(PAGE_SIZE, PAGE_SIZE);
+        let data_offset = sq_mem_block.len() + cq_mem_block.len();
+        let (sq, cq) = match saved_state {
+            Some(s) => (SubmissionQueue::restore(sq_mem_block, &s.handler_data.sq_state)?,
+            CompletionQueue::restore(cq_mem_block, &s.handler_data.cq_state)?),
+            None => (SubmissionQueue::new(qid, sq_entries, sq_mem_block),
+            CompletionQueue::new(qid, cq_entries, cq_mem_block)),
+        };
+
         let (send, recv) = mesh::channel();
         let (mut ctx, cancel) = CancelContext::new().with_cancel();
+
+        let mut queue_handler = match saved_state {
+            Some(s) => QueueHandler::restore(sq, cq, &s.handler_data)?,
+            None => QueueHandler {
+                sq,
+                cq,
+                commands: PendingCommands::new(),
+                stats: Default::default(),
+            },
+        };
+
         let task = spawner.spawn("nvme-queue", {
             async move {
                 ctx.until_cancelled(async {
@@ -268,6 +262,12 @@ impl QueuePair {
                 queue_handler
             }
         });
+
+        // Page allocator uses remaining part of the buffer for dynamic allocation.
+        let alloc: PageAllocator = PageAllocator::new(
+            mem_block.subblock(data_offset, Self::dma_data_size()),
+        );
+
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem_block.read_at(0, checker.as_mut_slice());
@@ -282,15 +282,18 @@ impl QueuePair {
             checker[6],
             checker[7],
         );
-
+        
         Ok(Self {
             task,
             cancel,
             issuer: Arc::new(Issuer { send, alloc }),
             mem: mem_block,
+            qid,
+            sq_entries,
+            cq_entries,
         })
     }
-
+    
     pub fn sq_addr(&self) -> u64 {
         self.mem.pfns()[0] * PAGE_SIZE64
     }
@@ -327,62 +330,26 @@ impl QueuePair {
         Ok(QueuePairSavedState {
             mem_len: self.mem.len(),
             base_pfn: self.mem.pfns()[0],
+            qid: self.qid,
+            sq_entries: self.sq_entries,
+            cq_entries: self.cq_entries,
             handler_data,
         })
     }
 
-    /// Restore queue pair state after servicing or creates a new object
-    /// if saved state was not provided.
+    /// Restore queue pair state after servicing.
     pub fn restore(
         spawner: impl SpawnDriver,
-        qid: u16,
-        sq_size: u16, // Submission queue entries.
-        cq_size: u16, // Completion queue entries.
-        mut interrupt: DeviceInterrupt,
+        interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         mem_block: MemoryBlock,
-        saved_state: Option<&QueuePairSavedState>,
+        saved_state: &QueuePairSavedState,
     ) -> anyhow::Result<Self> {
-        let sq_mem_block = mem_block.subblock(0, PAGE_SIZE);
-        let cq_mem_block = mem_block.subblock(PAGE_SIZE, PAGE_SIZE);
-        let data_offset = sq_mem_block.len() + cq_mem_block.len();
-        let (sq, cq) = match saved_state.as_ref() {
-            Some(s) => (SubmissionQueue::restore(sq_mem_block, &s.handler_data.sq_state)?,
-            CompletionQueue::restore(cq_mem_block, &s.handler_data.cq_state)?),
-            None => (SubmissionQueue::new(qid, sq_size, sq_mem_block),
-            CompletionQueue::new(qid, cq_size, cq_mem_block)),
-        };
+        let qid = saved_state.qid;
+        let sq_entries = saved_state.sq_entries;
+        let cq_entries = saved_state.cq_entries;
 
-        let (send, recv) = mesh::channel();
-        let (mut ctx, cancel) = CancelContext::new().with_cancel();
-        let mut queue_handler = QueueHandler {
-            sq,
-            cq,
-            commands: PendingCommands::new(), // YSP: FIXME:
-            stats: Default::default(),
-        };
-        let task = spawner.spawn("nvme-queue", {
-            async move {
-                ctx.until_cancelled(async {
-                    queue_handler.run(&registers, recv, &mut interrupt).await;
-                })
-                .await
-                .ok();
-                queue_handler
-            }
-        });
-
-        // Page allocator uses remaining part of the buffer for dynamic allocation.
-        let alloc: PageAllocator = PageAllocator::new(
-            mem_block.subblock(data_offset, Self::dma_data_size()),
-        );
-
-        Ok(Self {
-            task,
-            cancel,
-            issuer: Arc::new(Issuer { send, alloc }),
-            mem: mem_block,
-        })
+        QueuePair::new_or_restore(spawner, qid, sq_entries, cq_entries, interrupt, registers, mem_block, Some(saved_state))
     }
 }
 
@@ -734,7 +701,7 @@ impl QueueHandler {
     }
 
     /// Restore queue data after servicing.
-    pub fn restore(sq_mem: MemoryBlock, cq_mem: MemoryBlock, saved_state: &QueueHandlerSavedState) -> anyhow::Result<Self> {
+    pub fn restore(sq: SubmissionQueue, cq: CompletionQueue, saved_state: &QueueHandlerSavedState) -> anyhow::Result<Self> {
         tracing::info!(
             "YSP: QueueHandler::restore qid={}/{}",
             saved_state.sq_state.sqid,
@@ -742,8 +709,8 @@ impl QueueHandler {
         );
 
         Ok(Self {
-            sq: SubmissionQueue::restore(sq_mem, &saved_state.sq_state)?,
-            cq: CompletionQueue::restore(cq_mem, &saved_state.cq_state)?,
+            sq,
+            cq,
             commands: PendingCommands::restore(&saved_state.pending_cmds)?,
             stats:  Default::default(),
         })

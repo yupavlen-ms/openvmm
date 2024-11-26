@@ -123,16 +123,12 @@ impl IoQueue {
         saved_state: &IoQueueSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: IoQueue::restore");
-        // YSP: FIXME: Review arguments.
         let queue = QueuePair::restore(
             spawner,
-            saved_state.queue_data.handler_data.sq_state.sqid,
-            QueuePair::MAX_SQ_ENTRIES,
-            QueuePair::MAX_CQ_ENTRIES,
             interrupt,
             registers.clone(),
             mem_block,
-            Some(&saved_state.queue_data),
+            &saved_state.queue_data,
         )?;
 
         Ok(Self {
@@ -620,16 +616,12 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 let mem_block = dma_buffer
                     .attach_dma_buffer(a.mem_len, a.base_pfn)
                     .expect("unable to restore mem block");
-                // YSP: FIXME: review arguments
                 QueuePair::restore(
                     driver.clone(),
-                    0,
-                    QueuePair::MAX_SQ_ENTRIES,
-                    QueuePair::MAX_CQ_ENTRIES,
                     interrupt0,
                     registers.clone(),
                     mem_block,
-                    Some(a),
+                    a,
                 )
                 .unwrap()
             })
@@ -1075,12 +1067,24 @@ pub mod save_restore {
     #[derive(Protobuf, Clone, Debug)]
     #[mesh(package = "nvme_driver")]
     pub struct QueuePairSavedState {
+        /// Allocated memory size in bytes.
         #[mesh(1)]
         pub mem_len: usize,
         /// First PFN of the physically contiguous block.
         #[mesh(2)]
         pub base_pfn: u64,
+        /// Queue ID used when creating the pair
+        /// (SQ and CQ IDs are using same number).
         #[mesh(3)]
+        pub qid: u16,
+        /// Submission queue entries.
+        #[mesh(4)]
+        pub sq_entries: u16,
+        /// Completion queue entries.
+        #[mesh(5)]
+        pub cq_entries: u16,
+        /// QueueHandler task data.
+        #[mesh(6)]
         pub handler_data: QueueHandlerSavedState,
     }
 
