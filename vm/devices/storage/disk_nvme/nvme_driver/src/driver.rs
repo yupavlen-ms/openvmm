@@ -616,14 +616,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 let mem_block = dma_buffer
                     .attach_dma_buffer(a.mem_len, a.base_pfn)
                     .expect("unable to restore mem block");
-                QueuePair::restore(
-                    driver.clone(),
-                    interrupt0,
-                    registers.clone(),
-                    mem_block,
-                    a,
-                )
-                .unwrap()
+                QueuePair::restore(driver.clone(), interrupt0, registers.clone(), mem_block, a)
+                    .unwrap()
             })
             .unwrap();
 
@@ -665,7 +659,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 .map_interrupt(q_state.msix, q_state.cpu)
                 .context("failed to map interrupt")?;
 
-            let mem_block = dma_buffer.attach_dma_buffer(q_state.queue_data.mem_len, q_state.queue_data.base_pfn)?;
+            let mem_block = dma_buffer
+                .attach_dma_buffer(q_state.queue_data.mem_len, q_state.queue_data.base_pfn)?;
             let q = IoQueue::restore(
                 driver.clone(),
                 interrupt,
@@ -830,11 +825,7 @@ impl<T: DeviceBacking> AsyncRun<WorkerState> for DriverWorkerTask<T> {
 
 impl<T: DeviceBacking> DriverWorkerTask<T> {
     async fn create_io_issuer(&mut self, state: &mut WorkerState, cpu: u32) {
-        tracing::info!(
-            "YSP: create_io_issuer cpu={} qid={}",
-            cpu,
-            self.io.len() + 1
-        );
+        tracing::info!("YSP: create_io_issuer cpu={} qid={}", cpu, self.io.len() + 1);
         if self.io_issuers.per_cpu[cpu as usize].get().is_some() {
             return;
         }

@@ -89,15 +89,11 @@ impl SubmissionQueue {
     }
 
     /// Restores queue data after servicing.
-    pub fn restore(mem: MemoryBlock, saved_state: &SubmissionQueueSavedState) -> anyhow::Result<Self> {
-        tracing::info!(
-            "YSP: SubmissionQueue::restore qid={} head={} tail={}/{}",
-            saved_state.sqid,
-            saved_state.head,
-            saved_state.tail,
-            saved_state.committed_tail,
-        );
-
+    pub fn restore(
+        mem: MemoryBlock,
+        saved_state: &SubmissionQueueSavedState,
+    ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: SubmissionQueue::restore qid={} head={} tail={}/{}", saved_state.sqid, saved_state.head, saved_state.tail, saved_state.committed_tail);
         Ok(Self {
             sqid: saved_state.sqid,
             head: saved_state.head,
@@ -162,14 +158,7 @@ impl CompletionQueue {
 
     /// Saves queue data for servicing.
     pub fn save(&self) -> CompletionQueueSavedState {
-        tracing::info!(
-            "YSP: CompletionQueue::save {:X} qid={} head={}/{} tag={}",
-            self.mem.base_va(),
-            self.cqid,
-            self.head,
-            self.committed_head,
-            self.phase,
-        );
+        tracing::info!("YSP: CompletionQueue::save {:X} qid={} head={}/{} tag={}", self.mem.base_va(), self.cqid, self.head, self.committed_head, self.phase);
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         self.mem.read_at(0, checker.as_mut_slice());
@@ -184,7 +173,6 @@ impl CompletionQueue {
             checker[6],
             checker[7],
         );
-
         CompletionQueueSavedState {
             cqid: self.cqid,
             head: self.head,
@@ -195,7 +183,10 @@ impl CompletionQueue {
     }
 
     /// Restores queue data after servicing.
-    pub fn restore(mem: MemoryBlock, saved_state: &CompletionQueueSavedState) -> anyhow::Result<Self> {
+    pub fn restore(
+        mem: MemoryBlock,
+        saved_state: &CompletionQueueSavedState,
+    ) -> anyhow::Result<Self> {
         tracing::info!(
             "YSP: CompletionQueue::restore {:X} qid={} head={}/{} tag={}",
             mem.base_va(),
@@ -220,7 +211,6 @@ impl CompletionQueue {
             checker[6],
             checker[7],
         );
-
         Ok(Self {
             cqid: saved_state.cqid,
             head: saved_state.head,
