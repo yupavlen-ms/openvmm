@@ -123,18 +123,24 @@ impl IoQueue {
         saved_state: &IoQueueSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: IoQueue::restore");
+        let IoQueueSavedState {
+            cpu,
+            msix,
+            queue_data,
+        } = saved_state;
+
         let queue = QueuePair::restore(
             spawner,
             interrupt,
             registers.clone(),
             mem_block,
-            &saved_state.queue_data,
+            queue_data,
         )?;
 
         Ok(Self {
             queue,
-            iv: saved_state.msix as u16,
-            cpu: saved_state.cpu,
+            iv: *msix as u16,
+            cpu: *cpu,
         })
     }
 }

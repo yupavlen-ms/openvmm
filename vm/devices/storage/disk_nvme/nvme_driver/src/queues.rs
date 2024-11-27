@@ -94,12 +94,19 @@ impl SubmissionQueue {
         saved_state: &SubmissionQueueSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: SubmissionQueue::restore qid={} head={} tail={}/{}", saved_state.sqid, saved_state.head, saved_state.tail, saved_state.committed_tail);
+        let SubmissionQueueSavedState {
+            sqid,
+            head,
+            tail,
+            committed_tail,
+            len,
+        } = saved_state;
         Ok(Self {
-            sqid: saved_state.sqid,
-            head: saved_state.head,
-            tail: saved_state.tail,
-            committed_tail: saved_state.committed_tail,
-            len: saved_state.len,
+            sqid: *sqid,
+            head: *head,
+            tail: *tail,
+            committed_tail: *committed_tail,
+            len: *len,
             mem,
         })
     }
@@ -195,7 +202,6 @@ impl CompletionQueue {
             saved_state.committed_head,
             saved_state.phase,
         );
-
         // YSP: FIXME: Restore memory block.
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
@@ -211,12 +217,21 @@ impl CompletionQueue {
             checker[6],
             checker[7],
         );
+
+        let CompletionQueueSavedState {
+            cqid,
+            head,
+            committed_head,
+            len,
+            phase,
+        } = saved_state;
+
         Ok(Self {
-            cqid: saved_state.cqid,
-            head: saved_state.head,
-            committed_head: saved_state.committed_head,
-            len: saved_state.len,
-            phase: saved_state.phase,
+            cqid: *cqid,
+            head: *head,
+            committed_head: *committed_head,
+            len: *len,
+            phase: *phase,
             mem,
         })
     }
