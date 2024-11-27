@@ -647,40 +647,35 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // Restore I/O queues.
         // Interrupt vector 0 is shared between Admin queue and I/O queue #1.
-        let mut ioq: Vec<IoQueue> = Vec::new();
-        for q_state in &saved_state.worker_data.io {
-            tracing::info!(
-                "YSP: found IOQ qid={}/{}",
-                q_state.queue_data.handler_data.sq_state.sqid,
-                q_state.queue_data.handler_data.cq_state.cqid
-            );
-            let interrupt = worker
-                .device
-                .map_interrupt(q_state.msix, q_state.cpu)
-                .context("failed to map interrupt")?;
-
-            let mem_block = dma_buffer
-                .attach_dma_buffer(q_state.queue_data.mem_len, q_state.queue_data.base_pfn)?;
-            let q = IoQueue::restore(
-                driver.clone(),
-                interrupt,
-                registers.clone(),
-                mem_block,
-                q_state,
-            )
-            .unwrap();
-
-            let issuer = IoIssuer {
-                issuer: q.queue.issuer().clone(),
-                cpu: q_state.cpu,
-            };
-            this.io_issuers.per_cpu[q_state.cpu as usize]
-                .set(issuer)
-                .unwrap();
-
-            ioq.push(q);
-        }
-        worker.io = ioq;
+        worker.io = saved_state
+            .worker_data
+            .io
+            .iter()
+            .map(|q| -> Result<IoQueue, anyhow::Error> {
+                let interrupt = worker
+                    .device
+                    .map_interrupt(q.msix, q.cpu)
+                    .context("failed to map interrupt")?;
+                let mem_block = dma_buffer
+                    .attach_dma_buffer(q.queue_data.mem_len, q.queue_data.base_pfn)?;
+                let q = IoQueue::restore(
+                    driver.clone(),
+                    interrupt,
+                    registers.clone(),
+                    mem_block,
+                    q,
+                )?;
+                let issuer = IoIssuer {
+                    issuer: q.queue.issuer().clone(),
+                    cpu: q.cpu,
+                };
+                this.io_issuers.per_cpu[q.cpu as usize]
+                    .set(issuer)
+                    .unwrap();
+                Ok(q)
+            })
+            .flatten()
+            .collect();
 
         // Restore namespace(s).
         for ns in &saved_state.namespaces {
