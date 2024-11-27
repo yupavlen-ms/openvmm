@@ -176,26 +176,9 @@ impl PendingCommands {
 impl QueuePair {
     pub const MAX_SQ_ENTRIES: u16 = (PAGE_SIZE / 64) as u16; // Maximum SQ size in entries.
     pub const MAX_CQ_ENTRIES: u16 = (PAGE_SIZE / 16) as u16; // Maximum CQ size in entries.
-    pub const SQ_SIZE: usize = PAGE_SIZE; // Submission Queue size in bytes.
-    pub const CQ_SIZE: usize = PAGE_SIZE; // Completion Queue size in bytes.
-
-    /// Return size in bytes for DMA memory.
-    fn dma_data_size() -> usize {
-        const PER_QUEUE_PAGES: usize = 128;
-        #[allow(clippy::assertions_on_constants)]
-        const _: () = assert!(
-            PER_QUEUE_PAGES * PAGE_SIZE >= 128 * 1024 + PAGE_SIZE,
-            "not enough room for an ATAPI IO plus a PRP list"
-        );
-
-        PER_QUEUE_PAGES * PAGE_SIZE
-    }
-
-    /// Return total DMA buffer size needed for the queue pair (all chunks are contiguous).
-    pub fn required_dma_size() -> usize {
-        // 4k for SQ + 4k for CQ + 512k for data.
-        QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::dma_data_size()
-    }
+    const SQ_SIZE: usize = PAGE_SIZE; // Submission Queue size in bytes.
+    const CQ_SIZE: usize = PAGE_SIZE; // Completion Queue size in bytes.
+    const PER_QUEUE_PAGES: usize = 128;
 
     pub fn new(
         spawner: impl SpawnDriver,
@@ -206,9 +189,10 @@ impl QueuePair {
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
     ) -> anyhow::Result<Self> {
+        let total_size = QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::PER_QUEUE_PAGES * PAGE_SIZE;
         let mem = device
             .host_allocator()
-            .allocate_dma_buffer(QueuePair::required_dma_size())
+            .allocate_dma_buffer(total_size)
             .context("failed to allocate memory for queues")?;
 
         assert!(sq_entries <= Self::MAX_SQ_ENTRIES);
@@ -232,9 +216,9 @@ impl QueuePair {
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::new_or_restore qid={}", qid);
         // MemoryBlock is either allocated or restored prior calling here.
-        let sq_mem_block = mem.subblock(0, PAGE_SIZE);
-        let cq_mem_block = mem.subblock(PAGE_SIZE, PAGE_SIZE);
-        let data_offset = sq_mem_block.len() + cq_mem_block.len();
+        let sq_mem_block = mem.subblock(0, QueuePair::SQ_SIZE);
+        let cq_mem_block = mem.subblock(QueuePair::SQ_SIZE, QueuePair::CQ_SIZE);
+        let data_offset = QueuePair::SQ_SIZE + QueuePair::CQ_SIZE;
 
         let mut queue_handler = match saved_state {
             Some(s) => QueueHandler::restore(sq_mem_block, cq_mem_block, s)?,
@@ -263,8 +247,13 @@ impl QueuePair {
         });
 
         // Page allocator uses remaining part of the buffer for dynamic allocation.
+        #[allow(clippy::assertions_on_constants)]
+        const _: () = assert!(
+            QueuePair::PER_QUEUE_PAGES * PAGE_SIZE >= 128 * 1024 + PAGE_SIZE,
+            "not enough room for an ATAPI IO plus a PRP list"
+        );
         let alloc: PageAllocator =
-            PageAllocator::new(mem.subblock(data_offset, Self::dma_data_size()));
+            PageAllocator::new(mem.subblock(data_offset, QueuePair::PER_QUEUE_PAGES * PAGE_SIZE));
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem.read_at(0, checker.as_mut_slice());
@@ -310,7 +299,7 @@ impl QueuePair {
 
     /// Save queue pair state for servicing.
     pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
-        tracing::info!("YSP: QueuePair::save {:X} sq={:X} cq={:X}", self.mem.base_va(), self.sq_addr(), self.cq_addr());
+        tracing::info!("YSP: QueuePair::save sq={:X} cq={:X}", self.sq_addr(), self.cq_addr());
         // Return error if the queue does not have any memory allocated.
         if self.mem.pfns().is_empty() {
             return Err(Error::InvalidState.into());
