@@ -150,11 +150,9 @@ impl PendingCommands {
         } = saved_state;
 
         tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
-
         Ok(Self {
             // Re-create identical Slab where CIDs are correctly mapped.
-            commands: 
-                commands
+            commands: commands
                 .iter()
                 .map(|state| {
                     let (send, mut _recv) = mesh::oneshot::<nvme_spec::Completion>();
@@ -233,16 +231,13 @@ impl QueuePair {
         saved_state: Option<&QueueHandlerSavedState>,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::new_or_restore qid={}", qid);
-
         // MemoryBlock is either allocated or restored prior calling here.
         let sq_mem_block = mem.subblock(0, PAGE_SIZE);
         let cq_mem_block = mem.subblock(PAGE_SIZE, PAGE_SIZE);
         let data_offset = sq_mem_block.len() + cq_mem_block.len();
 
         let mut queue_handler = match saved_state {
-            Some(s) => {
-                QueueHandler::restore(sq_mem_block, cq_mem_block, &s)?
-            }
+            Some(s) => QueueHandler::restore(sq_mem_block, cq_mem_block, s)?,
             None => {
                 // Create a new one.
                 QueueHandler {
@@ -270,7 +265,6 @@ impl QueuePair {
         // Page allocator uses remaining part of the buffer for dynamic allocation.
         let alloc: PageAllocator =
             PageAllocator::new(mem.subblock(data_offset, Self::dma_data_size()));
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem.read_at(0, checker.as_mut_slice());
@@ -316,12 +310,7 @@ impl QueuePair {
 
     /// Save queue pair state for servicing.
     pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
-        tracing::info!(
-            "YSP: QueuePair::save {:X} sq={:X} cq={:X}",
-            self.mem.base_va(),
-            self.sq_addr(),
-            self.cq_addr()
-        );
+        tracing::info!("YSP: QueuePair::save {:X} sq={:X} cq={:X}", self.mem.base_va(), self.sq_addr(), self.cq_addr());
         // Return error if the queue does not have any memory allocated.
         if self.mem.pfns().is_empty() {
             return Err(Error::InvalidState.into());
@@ -350,7 +339,7 @@ impl QueuePair {
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::restore");
         let QueuePairSavedState {
-            mem_len: _, // Used to restore DMA buffer before calling this.
+            mem_len: _,  // Used to restore DMA buffer before calling this.
             base_pfn: _, // Used to restore DMA buffer before calling this.
             qid,
             sq_entries,
@@ -721,7 +710,6 @@ impl QueueHandler {
         saved_state: &QueueHandlerSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueueHandler::restore qid={}/{}", saved_state.sq_state.sqid, saved_state.cq_state.cqid);
-
         let QueueHandlerSavedState {
             sq_state,
             cq_state,

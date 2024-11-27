@@ -294,10 +294,7 @@ impl NvmeController {
         match spec::Register(addr) {
             spec::Register::INTMS => self.registers.interrupt_mask |= data,
             spec::Register::INTMC => self.registers.interrupt_mask &= !data,
-            spec::Register::CC => {
-                tracing::info!("YSP: writing CC");
-                self.set_cc(data.into())
-            }
+            spec::Register::CC => self.set_cc(data.into()),
             spec::Register::AQA => self.registers.aqa = data.into(),
             _ => return IoResult::Err(InvalidRegister),
         }

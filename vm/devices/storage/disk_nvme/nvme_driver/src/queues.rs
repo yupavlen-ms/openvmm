@@ -72,13 +72,7 @@ impl SubmissionQueue {
 
     /// Saves queue data for servicing.
     pub fn save(&self) -> SubmissionQueueSavedState {
-        tracing::info!(
-            "YSP: SubmissionQueue::save qid={} head={} tail={}/{}",
-            self.sqid,
-            self.head,
-            self.tail,
-            self.committed_tail,
-        );
+        tracing::info!("YSP: SubmissionQueue::save qid={} head={} tail={}/{}", self.sqid, self.head, self.tail, self.committed_tail);
         SubmissionQueueSavedState {
             sqid: self.sqid,
             head: self.head,
@@ -217,7 +211,6 @@ impl CompletionQueue {
             checker[6],
             checker[7],
         );
-
         let CompletionQueueSavedState {
             cqid,
             head,
