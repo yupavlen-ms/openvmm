@@ -1506,9 +1506,6 @@ async fn new_underhill_vm(
         None
     };
 
-    for zzz in runtime_params.dma_preserve_memory_map() {
-        tracing::info!("YSP: yeppers {:X}-{:X}", zzz.start(), zzz.end());
-    }
     // Test with the highest VTL for which we have a GuestMemory object
     let highest_vtl_gm = gm.vtl1().unwrap_or(gm.vtl0());
 

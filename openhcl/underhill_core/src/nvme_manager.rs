@@ -414,6 +414,7 @@ impl NvmeManagerWorker {
             self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
         tracing::info!("YSP: NvmeManagerWorker::restore - done");
+
         Ok(())
     }
 }
@@ -440,11 +441,7 @@ impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
         rsrc: NvmeDiskConfig,
         _input: ResolveDiskParameters<'_>,
     ) -> Result<Self::Output, Self::Error> {
-        tracing::info!(
-            "YSP: NvmeDiskResolver::resolve nsid={} pci_id={}",
-            rsrc.nsid,
-            &rsrc.pci_id.clone()
-        );
+        tracing::info!("YSP: NvmeDiskResolver::resolve nsid={} pci_id={}", rsrc.nsid, &rsrc.pci_id.clone());
         let namespace = self
             .manager
             .get_namespace(rsrc.pci_id, rsrc.nsid)

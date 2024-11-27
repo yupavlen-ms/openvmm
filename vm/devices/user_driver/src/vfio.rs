@@ -91,7 +91,7 @@ impl VfioDevice {
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         keepalive: bool,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: VFIO new/restore {} {}", pci_id, keepalive);
+        tracing::info!("YSP: VFIO new/restore {} keepalive={}", pci_id, keepalive);
         let path = Path::new("/sys/bus/pci/devices").join(pci_id);
 
         // YSP: FIXME: Looks like we can try vfio_set_device_reset_method()
@@ -149,12 +149,7 @@ impl VfioDevice {
         let info = self.device.region_info(n.into())?;
         let mapping = self.device.map(info.offset, info.size as usize, true)?;
         sparse_mmap::initialize_try_copy();
-        tracing::info!(
-            "YSP: map_bar off={:X} size={} addr={:X}",
-            &info.offset,
-            &info.size,
-            mapping.as_ptr() as u64
-        );
+        tracing::info!("YSP: map_bar off={:X} size={} addr={:X}", &info.offset, &info.size, mapping.as_ptr() as u64);
         Ok(MappedRegionWithFallback {
             device: self.device.clone(),
             mapping,
@@ -205,12 +200,7 @@ impl DeviceBacking for VfioDevice {
     }
 
     fn map_interrupt(&mut self, msix: u32, cpu: u32) -> anyhow::Result<DeviceInterrupt> {
-        tracing::info!(
-            "YSP: map_interrupt {} (max={}) to cpu {}",
-            msix,
-            self.msix_info.count,
-            cpu
-        );
+        tracing::info!("YSP: map_interrupt {} (max={}) to cpu {}", msix, self.msix_info.count, cpu);
         if msix >= self.msix_info.count {
             anyhow::bail!("invalid msix index");
         }

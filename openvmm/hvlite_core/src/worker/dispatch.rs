@@ -2523,7 +2523,6 @@ impl LoadedVm {
                 Event::WorkerRpc(Ok(message)) => match message {
                     WorkerRpc::Stop => break,
                     WorkerRpc::Restart(response) => {
-                        tracing::info!("YSP: WorkerRpc::Restart 2");
                         let mut stopped = false;
                         // First run the non-destructive operations.
                         let r = async {
