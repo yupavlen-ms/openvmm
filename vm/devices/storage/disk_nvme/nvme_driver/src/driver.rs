@@ -65,7 +65,7 @@ pub struct NvmeDriver<T: DeviceBacking> {
     /// NVMe namespaces associated with this driver.
     #[inspect(skip)]
     namespaces: Vec<Arc<Namespace>>,
-    /// Keeps the controller connected (CSTS.RDY==1) while servicing.
+    /// Keeps the controller connected (CC.EN==1) while servicing.
     nvme_keepalive: bool,
 }
 
@@ -693,6 +693,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
     /// Change device's behavior when servicing.
     pub fn update_servicing_flags(&mut self, nvme_keepalive: bool) {
+        tracing::info!("YSP: NvmeDriver::update keepalive={}", nvme_keepalive);
         self.nvme_keepalive = nvme_keepalive;
     }
 }
@@ -961,10 +962,18 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             None => None,
         };
 
-        let mut io: Vec<IoQueueSavedState> = Vec::new();
-        for io_q in self.io.iter() {
-            io.push(io_q.save().await?);
-        }
+        let io = join_all(
+                self
+                .io
+                .drain(..)
+                .map(|q| async move {
+                    q.save().await
+                })
+            )
+            .await
+            .into_iter()
+            .flatten()
+            .collect();
 
         Ok(NvmeDriverWorkerSavedState {
             admin,

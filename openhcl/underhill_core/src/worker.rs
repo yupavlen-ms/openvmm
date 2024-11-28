@@ -1799,8 +1799,8 @@ async fn new_underhill_vm(
     // Contents of fixed pool will be preserved during servicing.
     let fixed_mem_pool = if !runtime_params.dma_preserve_memory_map().is_empty() {
         let pools = runtime_params.dma_preserve_memory_map();
-        match servicing_state.mem_pool_state {
-            Some(dma) => Some(FixedPool::restore(pools, dma.unwrap())?),
+        match servicing_state.mem_pool_state.flatten() {
+            Some(dma) => Some(FixedPool::restore(pools, dma)?),
             None => Some(FixedPool::new(pools)?),
         }
     } else {
@@ -1808,12 +1808,12 @@ async fn new_underhill_vm(
     };
 
     let nvme_manager = if env_cfg.nvme_vfio {
-        let nvme_keepalive = fixed_mem_pool.is_some();
+        let save_restore_supported = fixed_mem_pool.is_some();
         let manager = NvmeManager::new(
             &driver_source,
             processor_topology.vp_count(),
             vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref()),
-            nvme_keepalive,
+            save_restore_supported,
             servicing_state.nvme_state.unwrap_or(None),
         );
 
