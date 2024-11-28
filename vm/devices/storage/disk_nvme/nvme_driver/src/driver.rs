@@ -962,14 +962,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             None => None,
         };
 
-        let io = join_all(
-                self
-                .io
-                .drain(..)
-                .map(|q| async move {
-                    q.save().await
-                })
-            )
+        let io = join_all(self.io.drain(..).map(|q| async move { q.save().await }))
             .await
             .into_iter()
             .flatten()

@@ -367,10 +367,7 @@ impl NvmeManagerWorker {
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         saved_state: &NvmeManagerSavedState,
     ) -> anyhow::Result<()> {
-        tracing::info!(
-            "YSP: NvmeManagerWorker::restoring {} disks",
-            &saved_state.nvme_disks.len()
-        );
+        tracing::info!("YSP: NvmeManagerWorker::restoring {} disks", &saved_state.nvme_disks.len());
         self.devices = HashMap::new();
         for disk in &saved_state.nvme_disks {
             tracing::info!("YSP: restoring nvme disk {}", disk.pci_id.clone());

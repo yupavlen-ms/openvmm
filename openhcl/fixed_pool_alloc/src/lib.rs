@@ -347,12 +347,7 @@ impl FixedPoolAllocator {
                 unreachable!()
             }
         };
-        tracing::info!(
-            "YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}",
-            base_pfn,
-            size_pages,
-            index
-        );
+        tracing::info!("YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}", base_pfn, size_pages, index);
 
         Ok(FixedPoolHandle {
             inner: self.inner.clone(),
@@ -481,11 +476,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
 
     /// Restore DMA buffer at the same location after servicing.
     fn restore_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
-        tracing::info!(
-            "YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]",
-            len,
-            base_pfn
-        );
+        tracing::info!("YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]", len, base_pfn);
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }

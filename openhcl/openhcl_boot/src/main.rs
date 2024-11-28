@@ -452,11 +452,7 @@ mod x86_boot {
                 }
                 RangeWalkResult::Both(_, _) => {
                     add_e820_entry(entries.next(), range, E820_RESERVED)?;
-                    log!(
-                        "YSP: added E820_RESERVED {:X} {}",
-                        range.start(),
-                        range.len()
-                    );
+                    log!("YSP: added E820_RESERVED {:X} {}", range.start(), range.len());
                     n += 1;
                 }
             }
@@ -637,10 +633,7 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
     }
 
     validate_vp_hw_ids(partition_info);
-    log!(
-        "YSP: unwrapped: {}",
-        partition_info.preserve_dma_4k_pages.unwrap_or(0)
-    );
+    log!("YSP: unwrapped: {}", partition_info.preserve_dma_4k_pages.unwrap_or(0));
 
     setup_vtl2_vp(partition_info);
     setup_vtl2_memory(&p, partition_info);

@@ -435,10 +435,7 @@ impl LoadedVm {
         deadline: std::time::Instant,
         capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<bool> {
-        tracing::info!(
-            "YSP: capabilities_flags: {}",
-            capabilities_flags.disable_nvme_keepalive()
-        );
+        tracing::info!("YSP: capabilities_flags: {}", capabilities_flags.disable_nvme_keepalive());
         let running = self.state_units.is_running();
         let success = match self
             .handle_servicing_inner(correlation_id, deadline, capabilities_flags)
@@ -645,19 +642,16 @@ impl LoadedVm {
             n.save(vf_keepalive_flag)
                 .instrument(tracing::info_span!("nvme_manager_save"))
                 .await
-                .map(|s| NvmeSavedState {
-                    nvme_state: s,
-                })
+                .map(|s| NvmeSavedState { nvme_state: s })
         } else {
             None
         };
 
         let mem_pool_state = if vf_keepalive_flag {
-            self
-            .fixed_mem_pool
-            .as_ref()
-            .map(|f| f.save().ok())
-            .and_then(|s| s)
+            self.fixed_mem_pool
+                .as_ref()
+                .map(|f| f.save().ok())
+                .and_then(|s| s)
         } else {
             None
         };
