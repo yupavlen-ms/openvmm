@@ -1217,6 +1217,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "disk_layered"
+version = "0.0.0"
+dependencies = [
+ "async-trait",
+ "disk_backend",
+ "disk_backend_resources",
+ "futures",
+ "guestmem",
+ "inspect",
+ "scsi_buffers",
+ "thiserror 2.0.0",
+ "vm_resource",
+]
+
+[[package]]
 name = "disk_nvme"
 version = "0.0.0"
 dependencies = [
@@ -1250,15 +1265,16 @@ name = "disk_ramdisk"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "disk_backend",
  "disk_backend_resources",
+ "disk_layered",
  "event-listener",
  "guestmem",
  "inspect",
  "pal_async",
  "parking_lot",
  "scsi_buffers",
+ "test_with_tracing",
  "thiserror 2.0.0",
  "tracing",
  "vm_resource",
@@ -1992,7 +2008,6 @@ dependencies = [
  "chipset_arc_mutex_device",
  "chipset_device",
  "chipset_device_fuzz",
- "disk_backend",
  "disk_ramdisk",
  "guestmem",
  "ide",
@@ -4197,7 +4212,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "chipset_device",
- "disk_backend",
  "disk_ramdisk",
  "event-listener",
  "futures",
@@ -4550,6 +4564,7 @@ dependencies = [
  "disk_blob",
  "disk_crypt",
  "disk_file",
+ "disk_layered",
  "disk_prwrap",
  "disk_ramdisk",
  "disk_vhd1",
@@ -5983,7 +5998,6 @@ dependencies = [
  "anyhow",
  "async-trait",
  "criterion",
- "disk_backend",
  "disk_ramdisk",
  "event-listener",
  "fast_select",

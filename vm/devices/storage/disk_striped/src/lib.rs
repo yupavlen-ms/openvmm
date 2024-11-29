@@ -591,7 +591,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use disk_ramdisk::RamDisk;
     use guestmem::GuestMemory;
     use hvdef::HV_PAGE_SIZE;
     use pal_async::async_test;
@@ -607,8 +606,9 @@ mod tests {
 
         for _i in 0..disk_count {
             let ramdisk =
-                RamDisk::new(disk_size_in_bytes.unwrap_or(1024 * 1024 * 64), false).unwrap();
-            devices.push(Disk::new(ramdisk).unwrap());
+                disk_ramdisk::ram_disk(disk_size_in_bytes.unwrap_or(1024 * 1024 * 64), false)
+                    .unwrap();
+            devices.push(ramdisk);
         }
 
         StripedDisk::new(devices, chunk_size_in_bytes, logic_sector_count).unwrap()
@@ -944,8 +944,8 @@ mod tests {
         // Creating striping disk using incompatible files shall fail.
         let mut devices = Vec::new();
         for i in 0..2 {
-            let ramdisk = RamDisk::new(1024 * 1024 + i * 64 * 1024, false).unwrap();
-            devices.push(Disk::new(ramdisk).unwrap());
+            let ramdisk = disk_ramdisk::ram_disk(1024 * 1024 + i * 64 * 1024, false).unwrap();
+            devices.push(ramdisk);
         }
 
         match StripedDisk::new(devices, None, None) {
@@ -961,8 +961,8 @@ mod tests {
         // Creating striping disk using invalid chunk size shall fail.
         let mut block_devices = Vec::new();
         for _ in 0..2 {
-            let ramdisk = RamDisk::new(1024 * 1024, false).unwrap();
-            block_devices.push(Disk::new(ramdisk).unwrap());
+            let ramdisk = disk_ramdisk::ram_disk(1024 * 1024, false).unwrap();
+            block_devices.push(ramdisk);
         }
 
         match StripedDisk::new(block_devices, Some(4 * 1024 + 1), None) {
@@ -975,8 +975,8 @@ mod tests {
         // Creating striping disk using invalid logic sector count shall fail.
         let mut block_devices = Vec::new();
         for _ in 0..2 {
-            let ramdisk = RamDisk::new(1024 * 1024, false).unwrap();
-            block_devices.push(Disk::new(ramdisk).unwrap());
+            let ramdisk = disk_ramdisk::ram_disk(1024 * 1024, false).unwrap();
+            block_devices.push(ramdisk);
         }
 
         match StripedDisk::new(
@@ -996,8 +996,8 @@ mod tests {
         // Create a simple striping disk.
         let mut block_devices = Vec::new();
         for _ in 0..2 {
-            let ramdisk = RamDisk::new(1024 * 1024, false).unwrap();
-            block_devices.push(Disk::new(ramdisk).unwrap());
+            let ramdisk = disk_ramdisk::ram_disk(1024 * 1024, false).unwrap();
+            block_devices.push(ramdisk);
         }
 
         let disk = match StripedDisk::new(block_devices, Some(8 * 1024), None) {

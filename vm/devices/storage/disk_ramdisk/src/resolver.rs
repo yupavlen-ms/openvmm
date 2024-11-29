@@ -4,25 +4,18 @@
 //! Resource resolver for RAM disks.
 
 use super::Error;
-use super::RamDisk;
-use async_trait::async_trait;
-use disk_backend::resolve::ResolveDiskParameters;
-use disk_backend::resolve::ResolvedDisk;
-use disk_backend_resources::RamDiffDiskHandle;
-use disk_backend_resources::RamDiskHandle;
-use vm_resource::declare_static_async_resolver;
-use vm_resource::kind::DiskHandleKind;
-use vm_resource::AsyncResolveResource;
-use vm_resource::ResourceResolver;
+use super::RamLayer;
+use disk_backend_resources::layer::RamDiskLayerHandle;
+use disk_layered::resolve::ResolveDiskLayerParameters;
+use disk_layered::resolve::ResolvedDiskLayer;
+use vm_resource::declare_static_resolver;
+use vm_resource::kind::DiskLayerHandleKind;
+use vm_resource::ResolveResource;
 
-/// Resolver for a [`RamDiskHandle`] and [`RamDiffDiskHandle`].
+/// Resolver for a [`RamDiskLayerHandle`].
 pub struct RamDiskResolver;
 
-declare_static_async_resolver!(
-    RamDiskResolver,
-    (DiskHandleKind, RamDiskHandle),
-    (DiskHandleKind, RamDiffDiskHandle)
-);
+declare_static_resolver!(RamDiskResolver, (DiskLayerHandleKind, RamDiskLayerHandle));
 
 /// Error type for [`RamDiskResolver`].
 #[derive(Debug, Error)]
@@ -30,56 +23,19 @@ pub enum ResolveRamDiskError {
     /// Failed to create the RAM disk.
     #[error("failed to create ram disk")]
     Ram(#[source] Error),
-    /// Failed to resolve the inner disk.
-    #[error("failed to resolve inner disk")]
-    Resolve(#[source] vm_resource::ResolveError),
-    /// Invalid disk.
-    #[error("invalid disk")]
-    InvalidDisk(#[source] disk_backend::InvalidDisk),
 }
 
-#[async_trait]
-impl AsyncResolveResource<DiskHandleKind, RamDiskHandle> for RamDiskResolver {
-    type Output = ResolvedDisk;
+impl ResolveResource<DiskLayerHandleKind, RamDiskLayerHandle> for RamDiskResolver {
+    type Output = ResolvedDiskLayer;
     type Error = ResolveRamDiskError;
 
-    async fn resolve(
+    fn resolve(
         &self,
-        _resolver: &ResourceResolver,
-        rsrc: RamDiskHandle,
-        input: ResolveDiskParameters<'_>,
+        rsrc: RamDiskLayerHandle,
+        _input: ResolveDiskLayerParameters<'_>,
     ) -> Result<Self::Output, Self::Error> {
-        ResolvedDisk::new(
-            RamDisk::new(rsrc.len, input.read_only).map_err(ResolveRamDiskError::Ram)?,
-        )
-        .map_err(ResolveRamDiskError::InvalidDisk)
-    }
-}
-
-#[async_trait]
-impl AsyncResolveResource<DiskHandleKind, RamDiffDiskHandle> for RamDiskResolver {
-    type Output = ResolvedDisk;
-    type Error = ResolveRamDiskError;
-
-    async fn resolve(
-        &self,
-        resolver: &ResourceResolver,
-        rsrc: RamDiffDiskHandle,
-        input: ResolveDiskParameters<'_>,
-    ) -> Result<Self::Output, Self::Error> {
-        let lower = resolver
-            .resolve(
-                rsrc.lower,
-                ResolveDiskParameters {
-                    read_only: true,
-                    _async_trait_workaround: &(),
-                },
-            )
-            .await
-            .map_err(ResolveRamDiskError::Resolve)?;
-        ResolvedDisk::new(
-            RamDisk::diff(lower.0, input.read_only).map_err(ResolveRamDiskError::Ram)?,
-        )
-        .map_err(ResolveRamDiskError::InvalidDisk)
+        Ok(ResolvedDiskLayer::new(
+            RamLayer::new(rsrc.len).map_err(ResolveRamDiskError::Ram)?,
+        ))
     }
 }
