@@ -10,7 +10,6 @@ use disk_backend::pr;
 use disk_backend::DiskError;
 use disk_backend::DiskIo;
 use disk_backend::MediumErrorDetails;
-use disk_backend::Unmap;
 use inspect::Inspect;
 use nvme_common::from_nvme_reservation_report;
 use nvme_spec::nvm;
@@ -63,10 +62,6 @@ impl DiskIo for NvmeDisk {
 
     fn is_read_only(&self) -> bool {
         false // TODO
-    }
-
-    fn unmap(&self) -> Option<impl Unmap> {
-        self.namespace.supports_dataset_management().then_some(self)
     }
 
     fn pr(&self) -> Option<&dyn pr::PersistentReservation> {
@@ -148,15 +143,16 @@ impl DiskIo for NvmeDisk {
     async fn wait_resize(&self, sector_count: u64) -> u64 {
         self.namespace.wait_resize(sector_count).await
     }
-}
 
-impl Unmap for NvmeDisk {
     async fn unmap(
         &self,
         sector_offset: u64,
         sector_count: u64,
         _block_level_only: bool,
     ) -> Result<(), DiskError> {
+        if !self.namespace.supports_dataset_management() {
+            return Ok(());
+        }
         let mut processed = 0;
         let max = self.namespace.dataset_management_range_size_limit();
         while processed < sector_count {
@@ -176,6 +172,14 @@ impl Unmap for NvmeDisk {
             processed += lba_count;
         }
         Ok(())
+    }
+
+    fn unmap_behavior(&self) -> disk_backend::UnmapBehavior {
+        if self.namespace.supports_dataset_management() {
+            disk_backend::UnmapBehavior::Unspecified
+        } else {
+            disk_backend::UnmapBehavior::Ignored
+        }
     }
 
     fn optimal_unmap_sectors(&self) -> u32 {

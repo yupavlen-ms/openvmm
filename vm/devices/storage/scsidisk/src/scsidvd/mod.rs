@@ -2448,6 +2448,19 @@ mod tests {
         async fn sync_cache(&self) -> Result<(), DiskError> {
             todo!()
         }
+
+        async fn unmap(
+            &self,
+            _sector: u64,
+            _count: u64,
+            _block_level_only: bool,
+        ) -> Result<(), DiskError> {
+            Ok(())
+        }
+
+        fn unmap_behavior(&self) -> disk_backend::UnmapBehavior {
+            disk_backend::UnmapBehavior::Ignored
+        }
     }
 
     fn new_scsi_dvd(sector_size: u32, sector_count: u64, read_only: bool) -> SimpleScsiDvd {
