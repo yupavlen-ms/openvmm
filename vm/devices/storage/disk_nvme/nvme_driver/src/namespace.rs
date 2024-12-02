@@ -22,7 +22,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::Instrument;
 use vmcore::vm_task::VmTaskDriver;
 use zerocopy::AsBytes;
 use zerocopy::FromBytes;
@@ -77,7 +76,6 @@ impl Namespace {
         rescan_event: Arc<event_listener::Event>,
         controller_identify: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
-        device_id: &str,
         nsid: u32,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::new {}", nsid);
@@ -91,7 +89,6 @@ impl Namespace {
             rescan_event,
             controller_identify.clone(),
             io_issuers,
-            device_id,
             nsid,
             identify,
         )
@@ -104,7 +101,6 @@ impl Namespace {
         rescan_event: Arc<event_listener::Event>,
         controller_identify: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
-        device_id: &str,
         nsid: u32,
         identify: nvm::IdentifyNamespace,
     ) -> Result<Self, NamespaceError> {
@@ -169,11 +165,6 @@ impl Namespace {
                         .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
                         .await
                 }
-                .instrument(tracing::info_span!(
-                    "nvme_poll_rescan",
-                    device_id,
-                    nsid,
-                ))
             })
             .detach();
 
@@ -555,7 +546,6 @@ impl Namespace {
         rescan_event: Arc<event_listener::Event>,
         identify_ctrl: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
-        device_id: &str,
         saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::restore nsid={}", saved_state.nsid);
@@ -567,7 +557,6 @@ impl Namespace {
             rescan_event,
             identify_ctrl.clone(),
             io_issuers,
-            device_id,
             *nsid,
             identify_ns.clone(),
         )

@@ -483,7 +483,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 self.rescan_event.clone(),
                 self.identify.clone().unwrap(),
                 &self.io_issuers,
-                &self.device_id,
                 nsid,
             )
             .await?,
@@ -680,7 +679,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 this.rescan_event.clone(),
                 this.identify.clone().unwrap(),
                 &this.io_issuers,
-                this.device_id.as_ref(),
                 ns,
             )?));
         }
