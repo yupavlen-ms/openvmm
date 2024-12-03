@@ -132,7 +132,7 @@ impl PendingCommands {
                 command: cmd.command,
             })
             .collect();
-        tracing::info!("YSP: save CID {} len={}", self.next_cid_high_bits.0, commands.len());
+        tracing::info!("YSP: save pending len={}", commands.len());
         PendingCommandsSavedState {
             commands,
             next_cid_high_bits: self.next_cid_high_bits.0,
@@ -149,7 +149,7 @@ impl PendingCommands {
             cid_key_bits: _, // TODO: For future use.
         } = saved_state;
 
-        tracing::info!("YSP: restore CID {}", saved_state.next_cid_high_bits);
+        tracing::info!("YSP: restore pending len={}", saved_state.commands.len());
         Ok(Self {
             // Re-create identical Slab where CIDs are correctly mapped.
             commands: commands
@@ -230,6 +230,7 @@ impl QueuePair {
                     cq: CompletionQueue::new(qid, cq_entries, cq_mem_block),
                     commands: PendingCommands::new(),
                     stats: Default::default(),
+                    drain_after_restore: false,
                 }
             }
         };
@@ -613,6 +614,7 @@ struct QueueHandler {
     cq: CompletionQueue,
     commands: PendingCommands,
     stats: QueueStats,
+    drain_after_restore: bool,
 }
 
 #[derive(Inspect, Default)]
@@ -635,26 +637,45 @@ impl QueueHandler {
                 Completion(spec::Completion),
             }
 
-            let event = poll_fn(|cx| {
-                if !self.sq.is_full() && !self.commands.is_full() {
-                    if let Poll::Ready(Some(req)) = recv.poll_next_unpin(cx) {
-                        return Event::Request(req).into();
+            let event = if !self.drain_after_restore {
+                // Normal processing of the requests and completions.
+                poll_fn(|cx| {
+                    if !self.sq.is_full() && !self.commands.is_full() {
+                        if let Poll::Ready(Some(req)) = recv.poll_next_unpin(cx) {
+                            return Event::Request(req).into();
+                        }
                     }
-                }
-                while !self.commands.is_empty() {
-                    if let Some(completion) = self.cq.read() {
-                        return Event::Completion(completion).into();
+                    while !self.commands.is_empty() {
+                        if let Some(completion) = self.cq.read() {
+                            return Event::Completion(completion).into();
+                        }
+                        if interrupt.poll(cx).is_pending() {
+                            break;
+                        }
+                        self.stats.interrupts.increment();
                     }
-                    if interrupt.poll(cx).is_pending() {
-                        break;
+                    self.sq.commit(registers);
+                    self.cq.commit(registers);
+                    Poll::Pending
+                })
+                .await
+            } else {
+                // Only process in-flight completions.
+                poll_fn(|cx| {
+                    while !self.commands.is_empty() {
+                        if let Some(completion) = self.cq.read() {
+                            return Event::Completion(completion).into();
+                        }
+                        if interrupt.poll(cx).is_pending() {
+                            break;
+                        }
+                        self.stats.interrupts.increment();
                     }
-                    self.stats.interrupts.increment();
-                }
-                self.sq.commit(registers);
-                self.cq.commit(registers);
-                Poll::Pending
-            })
-            .await;
+                    self.cq.commit(registers);
+                    Poll::Pending
+                })
+                .await
+            };
 
             match event {
                 Event::Request(req) => match req {
@@ -673,6 +694,10 @@ impl QueueHandler {
                 Event::Completion(completion) => {
                     assert_eq!(completion.sqid, self.sq.id());
                     let respond = self.commands.remove(completion.cid);
+                    if self.drain_after_restore && self.commands.is_empty() {
+                        // Switch to normal processing mode once all in-flight commands completed.
+                        self.drain_after_restore = false;
+                    }
                     self.sq.update_head(completion.sqhd);
                     respond.send(completion);
                     self.stats.completed.increment();
@@ -711,6 +736,9 @@ impl QueueHandler {
             cq: CompletionQueue::restore(cq_mem_block, cq_state)?,
             commands: PendingCommands::restore(pending_cmds)?,
             stats: Default::default(),
+            // Only drain pending commands for I/O queues.
+            // Admin queue is expected to have pending Async Event requests.
+            drain_after_restore: sq_state.sqid != 0 && !pending_cmds.commands.is_empty(),
         })
     }
 }
