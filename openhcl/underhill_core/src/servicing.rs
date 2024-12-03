@@ -8,9 +8,9 @@ pub use state::*;
 use crate::worker::FirmwareType;
 
 mod state {
+    use fixed_pool_alloc::save_restore::MemPoolSavedState;
     use mesh::payload::Protobuf;
     use state_unit::SavedStateUnit;
-    use user_driver::memory::save_restore::MemPoolSavedState;
     use vmcore::save_restore::SaveRestore;
     use vmcore::save_restore::SavedStateRoot;
 
@@ -42,7 +42,7 @@ mod state {
     pub struct NvmeSavedState {
         /// NVMe manager (worker) saved state.
         #[mesh(1)]
-        pub nvme_state: crate::nvme_manager::NvmeManagerSavedState,
+        pub nvme_state: crate::nvme_manager::save_restore::NvmeManagerSavedState,
     }
 
     /// Servicing state needed to create the LoadedVm object.
@@ -127,7 +127,7 @@ impl From<Firmware> for FirmwareType {
 #[allow(clippy::option_option)]
 pub mod transposed {
     use super::*;
-    use user_driver::memory::save_restore::MemPoolSavedState;
+    use fixed_pool_alloc::save_restore::MemPoolSavedState;
     use vmcore::save_restore::SaveRestore;
 
     /// A transposed `Option<ServicingInitState>`, where each field of

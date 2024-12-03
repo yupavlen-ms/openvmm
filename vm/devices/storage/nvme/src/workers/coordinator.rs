@@ -84,7 +84,6 @@ impl NvmeWorkers {
             admin: TaskControl::new(handler),
             reset: None,
         };
-        tracing::info!("YSP: coordinator created");
         let (send, recv) = mesh::mpsc_channel();
         let task = driver.spawn("nvme-coord", coordinator.run(recv));
         Self {
@@ -110,7 +109,6 @@ impl NvmeWorkers {
     }
 
     pub fn enable(&mut self, asq: u64, asqs: u16, acq: u64, acqs: u16) {
-        tracing::info!("YSP: Enable workers");
         if let EnableState::Disabled = self.state {
             self.state = EnableState::Enabling(self.send.call(
                 CoordinatorRequest::EnableAdmin,
@@ -163,7 +161,6 @@ impl NvmeWorkers {
 
     // Reset the workers from whatever state they are in.
     pub async fn reset(&mut self) {
-        tracing::info!("YSP: Reset called");
         loop {
             match &mut self.state {
                 EnableState::Disabled => break,
@@ -233,7 +230,6 @@ struct EnableAdminParams {
 
 impl Coordinator {
     async fn run(mut self, mut recv: mesh::MpscReceiver<CoordinatorRequest>) {
-        tracing::info!("YSP: Entering Coordinator::run");
         loop {
             enum Event {
                 Request(Option<CoordinatorRequest>),
@@ -259,7 +255,6 @@ impl Coordinator {
                 .race()
                 .await;
 
-            tracing::info!("YSP: Coordinator event received");
             match event {
                 Event::Request(Some(req)) => match req {
                     CoordinatorRequest::EnableAdmin(rpc) => rpc.handle_sync(

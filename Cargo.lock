@@ -339,7 +339,6 @@ dependencies = [
  "inspect",
  "loader_defs",
  "memory_range",
- "tracing",
  "vm_topology",
 ]
 
@@ -1627,8 +1626,10 @@ dependencies = [
  "hvdef",
  "inspect",
  "memory_range",
+ "mesh",
  "parking_lot",
  "sparse_mmap",
+ "test_with_tracing",
  "thiserror 2.0.0",
  "tracing",
  "user_driver",
@@ -4278,7 +4279,6 @@ version = "0.0.0"
 dependencies = [
  "bitfield-struct",
  "inspect",
- "mesh",
  "open_enum",
  "storage_string",
  "zerocopy",

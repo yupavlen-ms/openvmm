@@ -5,6 +5,7 @@
 
 use super::spec;
 use super::spec::nvm;
+use crate::driver::save_restore::SavedNamespaceData;
 use crate::driver::IoIssuers;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
@@ -13,7 +14,6 @@ use crate::NVME_PAGE_SHIFT;
 use guestmem::ranges::PagedRange;
 use guestmem::GuestMemory;
 use inspect::Inspect;
-use mesh::payload::Protobuf;
 use mesh::CancelContext;
 use pal_async::task::Spawn;
 use parking_lot::Mutex;
@@ -22,7 +22,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use thiserror::Error;
-use tracing::Instrument;
 use vmcore::vm_task::VmTaskDriver;
 use zerocopy::AsBytes;
 use zerocopy::FromBytes;
@@ -77,7 +76,6 @@ impl Namespace {
         rescan_event: Arc<event_listener::Event>,
         controller_identify: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
-        device_id: &str,
         nsid: u32,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::new {}", nsid);
@@ -85,54 +83,31 @@ impl Namespace {
             .await
             .map_err(NamespaceError::Request)?;
 
-        let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
-        let this = Namespace::new_from_identify(
+        Namespace::new_from_identify(
+            driver,
+            admin,
+            rescan_event,
             controller_identify.clone(),
             io_issuers,
-            cancel_rescan,
             nsid,
             identify,
-        )?;
-
-        // Spawn a task, but detach is so that it doesn't get dropped while NVMe
-        // request is in flight. Use a cancel context, whose cancel gets dropped
-        // when `self` gets dropped, so that it terminates after finishing any
-        // requests.
-        driver
-            .spawn(format!("nvme_poll_rescan_{nsid}"), {
-                let state = this.state.clone();
-                async move {
-                    state
-                        .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
-                        .await
-                }
-                .instrument(tracing::info_span!(
-                    "nvme_poll_rescan",
-                    device_id,
-                    nsid,
-                ))
-            })
-            .detach();
-
-        Ok(this)
+        )
     }
 
     /// Create Namespace object from Identify data structure.
     fn new_from_identify(
+        driver: &VmTaskDriver,
+        admin: Arc<Issuer>,
+        rescan_event: Arc<event_listener::Event>,
         controller_identify: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
-        cancel_rescan: mesh::Cancel,
         nsid: u32,
         identify: nvm::IdentifyNamespace,
     ) -> Result<Self, NamespaceError> {
         if identify.nsze == 0 {
             return Err(NamespaceError::NotFound);
         }
-        tracing::info!(
-            "YSP: identify nsze={} ncap={}",
-            identify.nsze,
-            identify.ncap
-        );
+        tracing::info!("YSP: identify nsze={} ncap={}", identify.nsze, identify.ncap);
 
         let lba_format_index = identify.flbas.low_index();
         if lba_format_index > identify.nlbaf {
@@ -176,6 +151,22 @@ impl Namespace {
             identify: Mutex::new(identify),
             resize_event: Default::default(),
         });
+
+        // Spawn a task, but detach is so that it doesn't get dropped while NVMe
+        // request is in flight. Use a cancel context, whose cancel gets dropped
+        // when `self` gets dropped, so that it terminates after finishing any
+        // requests.
+        let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
+        driver
+            .spawn(format!("nvme_poll_rescan_{nsid}"), {
+                let state = state.clone();
+                async move {
+                    state
+                        .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
+                        .await
+                }
+            })
+            .detach();
 
         Ok(Self {
             nsid,
@@ -535,16 +526,17 @@ impl Namespace {
     }
 
     /// Save namespace object data for servicing.
+    /// Initially we will re-query namespace state after restore
+    /// to avoid possible contention if namespace was changed
+    /// during servicing.
+    /// TODO: Re-enable namespace save/restore once we confirm
+    /// that we can process namespace change AEN.
+    #[allow(dead_code)]
     pub fn save(&self) -> anyhow::Result<SavedNamespaceData> {
-        tracing::info!("YSP: Namespace::save nsid={}", self.nsid);
-        let id = self.state.identify.lock();
-        let mut save_data = SavedNamespaceData {
+        Ok(SavedNamespaceData {
             nsid: self.nsid,
-            block_count: self.state.block_count.load(Ordering::Relaxed),
-            identify_ns: [0; 4096],
-        };
-        save_data.identify_ns.copy_from_slice(id.as_bytes());
-        Ok(save_data)
+            identify_ns: self.state.identify.lock().clone(),
+        })
     }
 
     /// Restore namespace object data after servicing.
@@ -554,45 +546,20 @@ impl Namespace {
         rescan_event: Arc<event_listener::Event>,
         identify_ctrl: Arc<spec::IdentifyController>,
         io_issuers: &Arc<IoIssuers>,
-        device_id: &str,
-        identify_ns: &[u8; 4096],
         saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
         tracing::info!("YSP: Namespace::restore nsid={}", saved_state.nsid);
-        let nsid = saved_state.nsid;
-        let identify = nvm::IdentifyNamespace::read_from_prefix(identify_ns)
-            .unwrap_or(nvm::IdentifyNamespace::new_zeroed());
+        let SavedNamespaceData { nsid, identify_ns } = saved_state;
 
-        let (mut ctx, cancel_rescan) = CancelContext::new().with_cancel();
-        let this = Namespace::new_from_identify(
+        Namespace::new_from_identify(
+            driver,
+            admin,
+            rescan_event,
             identify_ctrl.clone(),
             io_issuers,
-            cancel_rescan,
-            nsid,
-            identify,
-        )?;
-
-        // Spawn a task, but detach is so that it doesn't get dropped while NVMe
-        // request is in flight. Use a cancel context, whose cancel gets dropped
-        // when `self` gets dropped, so that it terminates after finishing any
-        // requests.
-        driver
-            .spawn(format!("nvme_poll_rescan_{nsid}"), {
-                let state = this.state.clone();
-                async move {
-                    state
-                        .poll_for_rescans(&mut ctx, &admin, nsid, &rescan_event)
-                        .await
-                }
-                .instrument(tracing::info_span!(
-                    "nvme_poll_rescan",
-                    device_id,
-                    nsid,
-                ))
-            })
-            .detach();
-
-        Ok(this)
+            *nsid,
+            identify_ns.clone(),
+        )
     }
 }
 
@@ -673,16 +640,4 @@ fn nvm_cmd(opcode: nvm::NvmOpcode, nsid: u32) -> spec::Command {
         nsid,
         ..FromZeroes::new_zeroed()
     }
-}
-
-/// Save/restore NVMe namespace data.
-#[derive(Protobuf, Clone, Debug)]
-#[mesh(package = "underhill")]
-pub struct SavedNamespaceData {
-    #[mesh(1)]
-    pub nsid: u32,
-    #[mesh(2)]
-    pub block_count: u64,
-    #[mesh(3)]
-    pub identify_ns: [u8; 4096], // Alternatively save few fields that we actually use and rebuild from them.
 }

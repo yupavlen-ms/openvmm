@@ -51,12 +51,7 @@ struct RestrictedView {
 impl RestrictedView {
     /// Wraps `mem` and provides a restricted view of it.
     fn new(mem: Arc<dyn MappedDmaTarget>, offset: usize, len: usize) -> Self {
-        tracing::info!(
-            "YSP: RestrictedView::new {:X} +{:X} len={}",
-            mem.base() as usize,
-            offset,
-            len
-        );
+        tracing::info!("YSP: RestrictedView::new {:X} +{:X} len={}", mem.base() as usize, offset, len);
         let mem_len = mem.len();
         assert!(mem_len >= offset && mem_len - offset >= len);
         Self { len, offset, mem }
@@ -107,11 +102,7 @@ unsafe impl Sync for MemoryBlock {}
 impl MemoryBlock {
     /// Creates a new memory block backed by `mem`.
     pub fn new<T: 'static + MappedDmaTarget>(mem: T) -> Self {
-        tracing::info!(
-            "YSP: MemoryBlock::new {:X} len={}",
-            mem.base() as u64,
-            mem.len()
-        );
+        tracing::info!("YSP: MemoryBlock::new {:X} len={}", mem.base() as u64, mem.len());
         Self {
             base: mem.base(),
             len: mem.len(),
@@ -121,12 +112,7 @@ impl MemoryBlock {
 
     /// Returns a view of a subset of the buffer.
     pub fn subblock(&self, offset: usize, len: usize) -> Self {
-        tracing::info!(
-            "YSP: MemoryBlock::subblock {:X} +{:X} len={}",
-            self.base as usize,
-            offset,
-            len
-        );
+        tracing::info!("YSP: MemoryBlock::subblock {:X} +{:X} len={}", self.base as usize, offset, len);
         match self.mem.view(offset, len) {
             Some(view) => view,
             None => Self::new(RestrictedView::new(self.mem.clone(), offset, len)),
@@ -173,40 +159,5 @@ impl MemoryBlock {
     /// returned by [`Self::pfns`].
     pub fn offset_in_page(&self) -> u32 {
         self.base as u32 % PAGE_SIZE as u32
-    }
-
-    /// Returns base address of the memory block.
-    pub fn base_va(&self) -> u64 {
-        self.base as u64
-    }
-}
-
-pub mod save_restore {
-    use mesh::payload::Protobuf;
-
-    #[derive(Protobuf)]
-    #[mesh(package = "underhill")]
-    pub struct MemPoolState {
-        /// Base PFN for the chunk.
-        #[mesh(1)]
-        pub base_pfn: u64,
-        /// Number of pages for this chunk.
-        #[mesh(2)]
-        pub size_pages: u64,
-        /// Allocated or free.
-        #[mesh(3)]
-        pub allocated: bool,
-        /// ID tag.
-        #[mesh(4)]
-        pub tag: String,
-    }
-
-    #[derive(Protobuf)]
-    #[mesh(package = "underhill")]
-    /// Save-restore memory allocation mapping.
-    pub struct MemPoolSavedState {
-        /// Memory pool allocation map.
-        #[mesh(1)]
-        pub mem_pool: Vec<MemPoolState>,
     }
 }

@@ -4,7 +4,7 @@
 //! Implementation of the device driver core.
 
 use super::spec;
-use crate::driver::save_restore::QueuePairSavedState;
+use crate::driver::save_restore::IoQueueSavedState;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
 use crate::queue_pair::QueuePair;
@@ -24,6 +24,7 @@ use mesh::rpc::Rpc;
 use mesh::rpc::RpcSend;
 use pal_async::task::Spawn;
 use pal_async::task::Task;
+use save_restore::NvmeDriverWorkerSavedState;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use task_control::AsyncRun;
@@ -64,7 +65,7 @@ pub struct NvmeDriver<T: DeviceBacking> {
     /// NVMe namespaces associated with this driver.
     #[inspect(skip)]
     namespaces: Vec<Arc<Namespace>>,
-    /// Keeps the controller connected (CSTS.RDY==1) while servicing.
+    /// Keeps the controller connected (CC.EN==1) while servicing.
     nvme_keepalive: bool,
 }
 
@@ -105,12 +106,13 @@ struct IoQueue {
 }
 
 impl IoQueue {
-    pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
+    pub async fn save(&self) -> anyhow::Result<IoQueueSavedState> {
         tracing::info!("YSP: IoQueue::save cpu={} msi={}", self.cpu, self.iv);
-        let mut saved_state = self.queue.save().await?;
-        saved_state.cpu = self.cpu;
-        saved_state.msix = self.iv as u32;
-        Ok(saved_state)
+        Ok(IoQueueSavedState {
+            cpu: self.cpu,
+            msix: self.iv as u32,
+            queue_data: self.queue.save().await?,
+        })
     }
 
     pub fn restore(
@@ -118,21 +120,21 @@ impl IoQueue {
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         mem_block: MemoryBlock,
-        saved_state: &QueuePairSavedState,
+        saved_state: &IoQueueSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: IoQueue::restore");
-        let queue = QueuePair::restore(
-            spawner,
-            interrupt,
-            registers.clone(),
-            mem_block,
-            saved_state,
-        )?;
+        let IoQueueSavedState {
+            cpu,
+            msix,
+            queue_data,
+        } = saved_state;
+        let queue =
+            QueuePair::restore(spawner, interrupt, registers.clone(), mem_block, queue_data)?;
 
         Ok(Self {
             queue,
-            iv: saved_state.msix as u16,
-            cpu: saved_state.cpu,
+            iv: *msix as u16,
+            cpu: *cpu,
         })
     }
 }
@@ -157,7 +159,7 @@ struct IoIssuer {
 enum NvmeWorkerRequest {
     CreateIssuer(Rpc<u32, ()>),
     /// Save worker state.
-    Save(Rpc<(), anyhow::Result<NvmeDriverSavedState>>),
+    Save(Rpc<(), anyhow::Result<NvmeDriverWorkerSavedState>>),
 }
 
 impl<T: DeviceBacking> NvmeDriver<T> {
@@ -268,7 +270,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         // device bugs where differing sizes might be a less common scenario
         //
         // Namely: using differing sizes revealed a bug in the initial NvmeDirectV2 implementation
-        let admin_len = std::cmp::min(QueuePair::MAX_SQSIZE, QueuePair::MAX_CQSIZE);
+        let admin_len = std::cmp::min(QueuePair::MAX_SQ_ENTRIES, QueuePair::MAX_CQ_ENTRIES);
         let admin_sqes = admin_len;
         let admin_cqes = admin_len;
 
@@ -395,8 +397,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let max_io_queues = allocated_io_queue_count.min(requested_io_queue_count);
 
         let qsize = {
-            let io_cqsize = QueuePair::MAX_CQSIZE.min(worker.registers.cap.mqes_z() + 1);
-            let io_sqsize = QueuePair::MAX_SQSIZE.min(worker.registers.cap.mqes_z() + 1);
+            let io_cqsize = QueuePair::MAX_CQ_ENTRIES.min(worker.registers.cap.mqes_z() + 1);
+            let io_sqsize = QueuePair::MAX_SQ_ENTRIES.min(worker.registers.cap.mqes_z() + 1);
 
             // Some hardware (such as ASAP) require that the sq and cq have the same size.
             io_cqsize.min(io_sqsize)
@@ -481,7 +483,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 self.rescan_event.clone(),
                 self.identify.clone().unwrap(),
                 &self.io_issuers,
-                &self.device_id,
                 nsid,
             )
             .await?,
@@ -506,38 +507,41 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     /// Saves the NVMe driver state during servicing.
     pub async fn save(&mut self) -> anyhow::Result<NvmeDriverSavedState> {
         tracing::info!("YSP: NvmeDriver::save");
+        // Nothing to save if Identify Controller was never queried.
+        if self.identify.is_none() {
+            return Err(save_restore::Error::InvalidState.into());
+        }
         self.nvme_keepalive = true;
-        let save_state = match self
+        match self
             .io_issuers
             .send
             .call(NvmeWorkerRequest::Save, ())
             .await?
         {
-            Ok(mut s) => {
-                // Update other fields not accessible by worker task.
-                self.identify
-                    .as_ref()
-                    .unwrap()
-                    .write_to(s.identify_ctrl.as_mut());
-
-                s.device_id = self.device_id.clone();
-                for ns in &self.namespaces {
-                    // TODO: The decision is to re-query namespace data after restore.
-                    // Leave the code in place so it can be restored in future.
-                    // The reason is uncertainty about namespace change during servicing.
-                    let _ns_data = ns.save()?;
-                    // s.namespaces.push(_ns_data);
-                    tracing::info!("YSP: saved nsid={}", ns.nsid());
-                }
-                Ok(s)
+            Ok(s) => {
+                // TODO: The decision is to re-query namespace data after the restore.
+                // Leaving the code in place so it can be restored in future.
+                // The reason is uncertainty about namespace change during servicing.
+                // ------
+                // for ns in &self.namespaces {
+                //     s.namespaces.push(ns.save()?);
+                // }
+                Ok(NvmeDriverSavedState {
+                    identify_ctrl: spec::IdentifyController::read_from(
+                        self.identify.as_ref().unwrap().as_bytes(),
+                    )
+                    .unwrap(),
+                    device_id: self.device_id.clone(),
+                    // TODO: See the description above, save the vector once resolved.
+                    namespaces: vec![],
+                    worker_data: s,
+                })
             }
             Err(e) => {
                 tracing::info!("YSP: save ERROR");
                 Err(e)
             }
-        };
-
-        save_state
+        }
     }
 
     /// Restores NVMe driver state after servicing.
@@ -603,12 +607,13 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let dma_buffer = worker.device.host_allocator();
         // Restore the admin queue pair.
         let admin = saved_state
+            .worker_data
             .admin
             .as_ref()
             .map(|a| {
                 // Restore memory block for admin queue pair.
                 let mem_block = dma_buffer
-                    .attach_dma_buffer(a.mem_len, a.pfns.as_slice())
+                    .attach_dma_buffer(a.mem_len, a.base_pfn)
                     .expect("unable to restore mem block");
                 QueuePair::restore(driver.clone(), interrupt0, registers.clone(), mem_block, a)
                     .unwrap()
@@ -632,49 +637,36 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         });
 
         let state = WorkerState {
-            qsize: saved_state.qsize,
+            qsize: saved_state.worker_data.qsize,
             async_event_task,
-            max_io_queues: saved_state.max_io_queues,
+            max_io_queues: saved_state.worker_data.max_io_queues,
         };
 
         this.admin = Some(admin.issuer().clone());
 
         // Restore I/O queues.
         // Interrupt vector 0 is shared between Admin queue and I/O queue #1.
-        let mut ioq: Vec<IoQueue> = Vec::new();
-        for q_state in &saved_state.io {
-            tracing::info!(
-                "YSP: found IOQ qid={}/{}",
-                q_state.sq_state.sqid,
-                q_state.cq_state.cqid
-            );
-            let interrupt = worker
-                .device
-                .map_interrupt(q_state.msix, q_state.cpu)
-                .context("failed to map interrupt")?;
-
-            let mem_block =
-                dma_buffer.attach_dma_buffer(q_state.mem_len, q_state.pfns.as_slice())?;
-            let q = IoQueue::restore(
-                driver.clone(),
-                interrupt,
-                registers.clone(),
-                mem_block,
-                q_state,
-            )
-            .unwrap();
-
-            let issuer = IoIssuer {
-                issuer: q.queue.issuer().clone(),
-                cpu: q_state.cpu,
-            };
-            this.io_issuers.per_cpu[q_state.cpu as usize]
-                .set(issuer)
-                .unwrap();
-
-            ioq.push(q);
-        }
-        worker.io = ioq;
+        worker.io = saved_state
+            .worker_data
+            .io
+            .iter()
+            .flat_map(|q| -> Result<IoQueue, anyhow::Error> {
+                let interrupt = worker
+                    .device
+                    .map_interrupt(q.msix, q.cpu)
+                    .context("failed to map interrupt")?;
+                let mem_block =
+                    dma_buffer.attach_dma_buffer(q.queue_data.mem_len, q.queue_data.base_pfn)?;
+                let q =
+                    IoQueue::restore(driver.clone(), interrupt, registers.clone(), mem_block, q)?;
+                let issuer = IoIssuer {
+                    issuer: q.queue.issuer().clone(),
+                    cpu: q.cpu,
+                };
+                this.io_issuers.per_cpu[q.cpu as usize].set(issuer).unwrap();
+                Ok(q)
+            })
+            .collect();
 
         // Restore namespace(s).
         for ns in &saved_state.namespaces {
@@ -687,8 +679,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 this.rescan_event.clone(),
                 this.identify.clone().unwrap(),
                 &this.io_issuers,
-                this.device_id.as_ref(),
-                &ns.identify_ns,
                 ns,
             )?));
         }
@@ -699,13 +689,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         Ok(this)
     }
 
-    /// Return estimated DMA size for single NvmeDriver.
-    pub fn required_dma_size(expect_q_count: usize) -> usize {
-        QueuePair::required_dma_size() * expect_q_count
-    }
-
     /// Change device's behavior when servicing.
     pub fn update_servicing_flags(&mut self, nvme_keepalive: bool) {
+        tracing::info!("YSP: NvmeDriver::update keepalive={}", nvme_keepalive);
         self.nvme_keepalive = nvme_keepalive;
     }
 }
@@ -819,11 +805,7 @@ impl<T: DeviceBacking> AsyncRun<WorkerState> for DriverWorkerTask<T> {
 
 impl<T: DeviceBacking> DriverWorkerTask<T> {
     async fn create_io_issuer(&mut self, state: &mut WorkerState, cpu: u32) {
-        tracing::info!(
-            "YSP: create_io_issuer cpu={} qid={}",
-            cpu,
-            self.io.len() + 1
-        );
+        tracing::info!("YSP: create_io_issuer cpu={} qid={}", cpu, self.io.len() + 1);
         if self.io_issuers.per_cpu[cpu as usize].get().is_some() {
             return;
         }
@@ -971,25 +953,25 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
     pub async fn save(
         &mut self,
         worker_state: &mut WorkerState,
-    ) -> anyhow::Result<NvmeDriverSavedState> {
+    ) -> anyhow::Result<NvmeDriverWorkerSavedState> {
         tracing::info!("YSP: NvmeDriverWorkerTask::save");
-        let admin = self.admin.as_ref().unwrap().save().await?;
-        let mut io: Vec<QueuePairSavedState> = Vec::new();
-        for io_q in self.io.iter() {
-            io.push(io_q.save().await?);
-        }
-
-        let save_state = NvmeDriverSavedState {
-            admin: Some(admin),
-            io,
-            identify_ctrl: [0; 4096],  // Will be updated by the caller.
-            device_id: "".to_string(), // Will be updated by the caller.
-            namespaces: vec![],        // Will be updated by the caller.
-            qsize: worker_state.qsize,
-            max_io_queues: worker_state.max_io_queues,
+        let admin = match self.admin.as_ref() {
+            Some(a) => Some(a.save().await?),
+            None => None,
         };
 
-        Ok(save_state)
+        let io = join_all(self.io.drain(..).map(|q| async move { q.save().await }))
+            .await
+            .into_iter()
+            .flatten()
+            .collect();
+
+        Ok(NvmeDriverWorkerSavedState {
+            admin,
+            io,
+            qsize: worker_state.qsize,
+            max_io_queues: worker_state.max_io_queues,
+        })
     }
 }
 
@@ -1002,31 +984,31 @@ impl<T: DeviceBacking> InspectTask<WorkerState> for DriverWorkerTask<T> {
 pub mod save_restore {
     use super::*;
 
+    /// Save and Restore errors for this module.
+    #[derive(Debug, Error)]
+    pub enum Error {
+        /// No data to save.
+        #[error("invalid object state")]
+        InvalidState,
+    }
+
     /// Save/restore state for NVMe driver.
     #[derive(Protobuf, Clone, Debug)]
-    #[mesh(package = "underhill")]
+    #[mesh(package = "nvme_driver")]
     pub struct NvmeDriverSavedState {
-        /// Admin queue state.
-        #[mesh(1)]
-        pub admin: Option<QueuePairSavedState>,
-        /// IO queue states.
-        #[mesh(2)]
-        pub io: Vec<QueuePairSavedState>,
         /// Copy of the controller's IDENTIFY structure.
-        #[mesh(3)]
-        pub identify_ctrl: [u8; 4096],
+        /// It is defined as Option<> in original structure.
+        #[mesh(1, encoding = "mesh::payload::encoding::ZeroCopyEncoding")]
+        pub identify_ctrl: spec::IdentifyController,
         /// Device ID string.
-        #[mesh(4)]
+        #[mesh(2)]
         pub device_id: String,
         /// Namespace data.
-        #[mesh(5)]
-        pub namespaces: Vec<crate::namespace::SavedNamespaceData>,
-        /// Queue size as determined by CAP.MQES.
-        #[mesh(6)]
-        pub qsize: u16,
-        /// Max number of IO queue pairs.
-        #[mesh(7)]
-        pub max_io_queues: u16,
+        #[mesh(3)]
+        pub namespaces: Vec<SavedNamespaceData>,
+        /// NVMe driver worker task data.
+        #[mesh(4)]
+        pub worker_data: NvmeDriverWorkerSavedState,
 
         //registers: Arc<DeviceRegisters<T>>,
         //interrupts: Vec<NotifyChannel>,
@@ -1035,9 +1017,53 @@ pub mod save_restore {
         //async_event_task: Option<Task<()>>,
     }
 
+    /// Save/restore state for NVMe driver worker task.
     #[derive(Protobuf, Clone, Debug)]
-    #[mesh(package = "underhill")]
+    #[mesh(package = "nvme_driver")]
+    pub struct NvmeDriverWorkerSavedState {
+        /// Admin queue state.
+        #[mesh(1)]
+        pub admin: Option<QueuePairSavedState>,
+        /// IO queue states.
+        #[mesh(2)]
+        pub io: Vec<IoQueueSavedState>,
+        /// Queue size as determined by CAP.MQES.
+        #[mesh(3)]
+        pub qsize: u16,
+        /// Max number of IO queue pairs.
+        #[mesh(4)]
+        pub max_io_queues: u16,
+    }
+
+    /// Save/restore state for QueuePair.
+    #[derive(Protobuf, Clone, Debug)]
+    #[mesh(package = "nvme_driver")]
     pub struct QueuePairSavedState {
+        /// Allocated memory size in bytes.
+        #[mesh(1)]
+        pub mem_len: usize,
+        /// First PFN of the physically contiguous block.
+        #[mesh(2)]
+        pub base_pfn: u64,
+        /// Queue ID used when creating the pair
+        /// (SQ and CQ IDs are using same number).
+        #[mesh(3)]
+        pub qid: u16,
+        /// Submission queue entries.
+        #[mesh(4)]
+        pub sq_entries: u16,
+        /// Completion queue entries.
+        #[mesh(5)]
+        pub cq_entries: u16,
+        /// QueueHandler task data.
+        #[mesh(6)]
+        pub handler_data: QueueHandlerSavedState,
+    }
+
+    /// Save/restore state for IoQueue.
+    #[derive(Protobuf, Clone, Debug)]
+    #[mesh(package = "nvme_driver")]
+    pub struct IoQueueSavedState {
         #[mesh(1)]
         /// Which CPU handles requests.
         pub cpu: u32,
@@ -1045,19 +1071,23 @@ pub mod save_restore {
         /// Interrupt vector (MSI-X)
         pub msix: u32,
         #[mesh(3)]
+        pub queue_data: QueuePairSavedState,
+    }
+
+    /// Save/restore state for QueueHandler task.
+    #[derive(Protobuf, Clone, Debug)]
+    #[mesh(package = "nvme_driver")]
+    pub struct QueueHandlerSavedState {
+        #[mesh(1)]
         pub sq_state: SubmissionQueueSavedState,
-        #[mesh(4)]
+        #[mesh(2)]
         pub cq_state: CompletionQueueSavedState,
-        #[mesh(5)]
-        pub mem_len: usize,
-        #[mesh(6)]
-        pub pfns: Vec<u64>, // TODO: Check if region is contiguous and save 1st PFN only if true.
-        #[mesh(7)]
+        #[mesh(3)]
         pub pending_cmds: PendingCommandsSavedState,
     }
 
     #[derive(Protobuf, Clone, Debug)]
-    #[mesh(package = "underhill")]
+    #[mesh(package = "nvme_driver")]
     pub struct SubmissionQueueSavedState {
         #[mesh(1)]
         pub sqid: u16,
@@ -1069,12 +1099,10 @@ pub mod save_restore {
         pub committed_tail: u32,
         #[mesh(5)]
         pub len: u32,
-        #[mesh(6)]
-        pub pfns: Vec<u64>,  // TODO: Check if region is contiguous and save 1st PFN only if true.
     }
 
     #[derive(Protobuf, Clone, Debug)]
-    #[mesh(package = "underhill")]
+    #[mesh(package = "nvme_driver")]
     pub struct CompletionQueueSavedState {
         #[mesh(1)]
         pub cqid: u16,
@@ -1087,25 +1115,33 @@ pub mod save_restore {
         #[mesh(5)]
         /// NVMe completion tag.
         pub phase: bool,
-        #[mesh(6)]
-        pub pfns: Vec<u64>,  // TODO: Check if region is contiguous and save 1st PFN only if true.
     }
 
     #[derive(Protobuf, Clone, Debug)]
-    #[mesh(package = "underhill")]
-    pub struct PendingCommandsSavedState {
-        #[mesh(1)]
-        pub commands: Vec<spec::Command>,
-        #[mesh(2)]
-        pub next_cid_high_bits: u16,
+    #[mesh(package = "nvme_driver")]
+    pub struct PendingCommandSavedState {
+        #[mesh(1, encoding = "mesh::payload::encoding::ZeroCopyEncoding")]
+        pub command: spec::Command,
     }
 
-    #[derive(Protobuf, Clone, Debug, FromBytes, FromZeroes)]
-    #[mesh(package = "underhill")]
-    pub struct PendingCommandSavedState {
+    #[derive(Protobuf, Clone, Debug)]
+    #[mesh(package = "nvme_driver")]
+    pub struct PendingCommandsSavedState {
         #[mesh(1)]
-        pub command: [u8; 64],
+        pub commands: Vec<PendingCommandSavedState>,
         #[mesh(2)]
-        pub cid: u16,
+        pub next_cid_high_bits: u16,
+        #[mesh(3)]
+        pub cid_key_bits: u32,
+    }
+
+    /// NVMe namespace data.
+    #[derive(Protobuf, Clone, Debug)]
+    #[mesh(package = "nvme_driver")]
+    pub struct SavedNamespaceData {
+        #[mesh(1)]
+        pub nsid: u32,
+        #[mesh(2, encoding = "mesh::payload::encoding::ZeroCopyEncoding")]
+        pub identify_ns: nvme_spec::nvm::IdentifyNamespace,
     }
 }

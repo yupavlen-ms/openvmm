@@ -218,8 +218,6 @@ fn parse_memory_openhcl(node: &Node<'_>) -> anyhow::Result<AddressRange> {
         let prop = try_find_property(node, "openhcl,memory-type")
             .context(format!("missing openhcl,memory-type on node {}", node.name))?;
 
-        let zzz = prop.read_u32(0).unwrap();
-        tracing::info!("YSP: vtl_usage {}", zzz);
         MemoryVtlType(prop.read_u32(0).map_err(err_to_owned).context(format!(
             "openhcl memory node {} openhcl,memory-type invalid",
             node.name
@@ -237,7 +235,6 @@ fn parse_memory_openhcl(node: &Node<'_>) -> anyhow::Result<AddressRange> {
                 .read_u32(0)
                 .map_err(err_to_owned)
                 .context(format!("memory node {} invalid igvm type", node.name))?;
-            tracing::info!("YSP: igvm_type {}", value);
             MemoryMapEntryType(value as u16)
         };
 

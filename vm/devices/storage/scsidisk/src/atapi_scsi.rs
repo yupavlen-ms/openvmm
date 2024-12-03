@@ -42,7 +42,6 @@ pub struct AtapiScsiDisk {
 
 impl ScsiSaveRestore for AtapiScsiDisk {
     fn save(&self) -> Result<Option<ScsiSavedState>, SaveError> {
-        tracing::info!("YSP: AtapiScsiDisk::save");
         let sense = self.sense_data.get();
         let sense_data = sense.map(|sense| SavedSenseData {
             sense_key: sense.header.sense_key.0,
@@ -62,7 +61,6 @@ impl ScsiSaveRestore for AtapiScsiDisk {
     }
 
     fn restore(&self, state: &ScsiSavedState) -> Result<(), RestoreError> {
-        tracing::info!("-YSP: AtapiScsiDisk::restore");
         self.inner.restore(state)?;
         match state {
             ScsiSavedState::ScsiDvd(state) => {

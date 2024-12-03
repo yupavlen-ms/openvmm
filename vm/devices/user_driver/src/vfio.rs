@@ -41,7 +41,7 @@ pub trait VfioDmaBuffer: 'static + Send + Sync {
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock>;
 
     /// Restore a dma buffer in the predefined location with the given `len` in bytes.
-    fn restore_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock>;
+    fn restore_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock>;
 }
 
 /// A device backend accessed via VFIO.
@@ -91,7 +91,7 @@ impl VfioDevice {
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         keepalive: bool,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: VFIO new/restore {}", keepalive);
+        tracing::info!("YSP: VFIO new/restore {} keepalive={}", pci_id, keepalive);
         let path = Path::new("/sys/bus/pci/devices").join(pci_id);
 
         // YSP: FIXME: Looks like we can try vfio_set_device_reset_method()
@@ -119,10 +119,10 @@ impl VfioDevice {
         container.set_iommu(IommuType::NoIommu)?;
         if keepalive {
             // Prevent physical hardware interaction when restoring.
-            group.set_keep_alive(path.file_name().unwrap().to_str().unwrap())?;
-            tracing::info!("YSP: VFIO: keep-alive was set");
+            group.set_keep_alive(pci_id)?;
+            tracing::info!("YSP: VFIO: keep-alive was set {}", pci_id);
         }
-        let device = group.open_device(path.file_name().unwrap().to_str().unwrap())?;
+        let device = group.open_device(pci_id)?;
         let msix_info = device.irq_info(vfio_bindings::bindings::vfio::VFIO_PCI_MSIX_IRQ_INDEX)?;
         if msix_info.flags.noresize() {
             anyhow::bail!("unsupported: kernel does not support dynamic msix allocation");
@@ -149,12 +149,7 @@ impl VfioDevice {
         let info = self.device.region_info(n.into())?;
         let mapping = self.device.map(info.offset, info.size as usize, true)?;
         sparse_mmap::initialize_try_copy();
-        tracing::info!(
-            "YSP: map_bar off={:X} size={} addr={:X}",
-            &info.offset,
-            &info.size,
-            mapping.as_ptr() as u64
-        );
+        tracing::info!("YSP: map_bar off={:X} size={} addr={:X}", &info.offset, &info.size, mapping.as_ptr() as u64);
         Ok(MappedRegionWithFallback {
             device: self.device.clone(),
             mapping,
@@ -205,12 +200,7 @@ impl DeviceBacking for VfioDevice {
     }
 
     fn map_interrupt(&mut self, msix: u32, cpu: u32) -> anyhow::Result<DeviceInterrupt> {
-        tracing::info!(
-            "YSP: map_interrupt {} (max={}) to cpu {}",
-            msix,
-            self.msix_info.count,
-            cpu
-        );
+        tracing::info!("YSP: map_interrupt {} (max={}) to cpu {}", msix, self.msix_info.count, cpu);
         if msix >= self.msix_info.count {
             anyhow::bail!("invalid msix index");
         }
@@ -365,10 +355,6 @@ impl DeviceRegisterIo for vfio_sys::MappedRegion {
     fn write_u64(&self, offset: usize, data: u64) {
         self.write_u64(offset, data)
     }
-
-    fn base_va(&self) -> u64 {
-        self.as_ptr() as u64
-    }
 }
 
 impl MappedRegionWithFallback {
@@ -451,10 +437,6 @@ impl DeviceRegisterIo for MappedRegionWithFallback {
             self.write_to_file(offset, &data.to_ne_bytes());
         })
     }
-
-    fn base_va(&self) -> u64 {
-        self.mapping.base_va()
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -497,9 +479,8 @@ impl HostDmaAllocator for LockedMemoryAllocator {
         self.dma_buffer.create_dma_buffer(len)
     }
 
-    fn attach_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
-        tracing::info!("YSP: WRONG attach_dma_buffer len={} pfn[0]={:X}", len, pfns[0]);
-        // Return error 'Not supported'?
-        self.dma_buffer.restore_dma_buffer(len, pfns)
+    fn attach_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG attach_dma_buffer len={} pfn[0]={:X}", len, base_pfn);
+        self.dma_buffer.restore_dma_buffer(len, base_pfn)
     }
 }
