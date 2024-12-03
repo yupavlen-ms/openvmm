@@ -130,7 +130,6 @@ impl NvmeManager {
             tracing::info!("YSP: FIXME: NO skip shutdown");
             // return;
         }
-
         self.client.sender.send(Request::Shutdown {
             span: tracing::info_span!("shutdown_nvme_manager"),
             nvme_keepalive,
@@ -391,7 +390,6 @@ impl NvmeManagerWorker {
             self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
         tracing::info!("YSP: NvmeManagerWorker::restore - done");
-
         Ok(())
     }
 }
