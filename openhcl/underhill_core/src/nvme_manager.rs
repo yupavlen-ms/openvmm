@@ -159,9 +159,8 @@ impl NvmeManager {
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManager::restore");
-        let dma_buffer = worker.dma_buffer.clone();
         worker
-            .restore(dma_buffer, &saved_state.nvme_state)
+            .restore(&saved_state.nvme_state)
             .instrument(tracing::info_span!("nvme_worker_restore"))
             .await?;
 
@@ -365,7 +364,6 @@ impl NvmeManagerWorker {
     /// Restore NVMe manager and device states from the buffer after servicing.
     pub async fn restore(
         &mut self,
-        dma_buffer: Arc<dyn VfioDmaBuffer>,
         saved_state: &NvmeManagerSavedState,
     ) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManagerWorker::restoring {} disks", &saved_state.nvme_disks.len());
@@ -379,7 +377,8 @@ impl NvmeManagerWorker {
                 VfioDevice::restore(
                     &self.driver_source,
                     &disk.pci_id.clone(),
-                    dma_buffer.clone(),
+                    (self.dma_buffer_spawner)(format!("nvme_{}", 0)) // YSP: FIXME: missing 'key'
+                        .map_err(InnerError::DmaBuffer)?,
                     true,
                 )
                 .instrument(tracing::info_span!("vfio_device_restore", pci_id = disk.pci_id.clone()))

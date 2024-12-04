@@ -1172,8 +1172,6 @@ pub struct UhLateParams<'a> {
     pub isolated_memory_protector: Option<Arc<dyn ProtectIsolatedMemory>>,
     /// Allocator for shared visibility pages.
     pub shared_vis_pages_pool: Option<page_pool_alloc::PagePoolAllocator>,
-    /// Allocator for DMA pages to be preserved during servicing.
-    pub dma_pages_pool: Option<fixed_pool_alloc::FixedPoolAllocator>,
 }
 
 /// Trait for CVM-related protections on guest memory.

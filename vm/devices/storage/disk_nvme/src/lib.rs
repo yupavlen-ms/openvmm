@@ -16,6 +16,7 @@ use nvme_spec::nvm;
 use nvme_spec::Status;
 use pal::unix::affinity::get_cpu_number;
 use std::io;
+use std::sync::Arc;
 
 #[derive(Debug, Inspect)]
 pub struct NvmeDisk {
