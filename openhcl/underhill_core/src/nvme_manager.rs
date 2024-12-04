@@ -362,10 +362,7 @@ impl NvmeManagerWorker {
     }
 
     /// Restore NVMe manager and device states from the buffer after servicing.
-    pub async fn restore(
-        &mut self,
-        saved_state: &NvmeManagerSavedState,
-    ) -> anyhow::Result<()> {
+    pub async fn restore(&mut self, saved_state: &NvmeManagerSavedState) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManagerWorker::restoring {} disks", &saved_state.nvme_disks.len());
         self.devices = HashMap::new();
         for disk in &saved_state.nvme_disks {
@@ -430,7 +427,10 @@ impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
             .await
             .context("could not open nvme namespace")?;
 
-        Ok(ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone())).context("invalid disk")?)
+        Ok(
+            ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone()))
+                .context("invalid disk")?,
+        )
     }
 }
 

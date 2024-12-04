@@ -480,10 +480,13 @@ impl user_driver::vfio::VfioDmaBuffer for PagePoolAllocator {
     }
 
     /// Restore a dma buffer in the predefined location with the given `len` in bytes.
-    fn restore_dma_buffer(&self, _len: usize, _base_pfn: u64) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+    fn restore_dma_buffer(
+        &self,
+        _len: usize,
+        _base_pfn: u64
+    ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
         anyhow::bail!("YSP: restore not supported yet");
     }
-
 }
 
 #[cfg(test)]

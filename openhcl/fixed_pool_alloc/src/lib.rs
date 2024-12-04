@@ -290,7 +290,6 @@ impl FixedPool {
             inner: self.inner.clone(),
         }
     }
-    
 }
 
 /// A spawner for [`FixedPoolAllocator`] instances.
@@ -481,7 +480,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         mapping.fill_at(0, 0, len)?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mapping.read_at(0, checker.as_mut_slice())?;

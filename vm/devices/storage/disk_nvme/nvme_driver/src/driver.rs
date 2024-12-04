@@ -591,7 +591,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             driver: driver.clone(),
             io_issuers,
             rescan_event: Default::default(),
-            namespaces: vec![], // YSP: FIXME: check this and below
+            namespaces: vec![],
             nvme_keepalive: true,
         };
 
@@ -1009,12 +1009,6 @@ pub mod save_restore {
         /// NVMe driver worker task data.
         #[mesh(4)]
         pub worker_data: NvmeDriverWorkerSavedState,
-
-        //registers: Arc<DeviceRegisters<T>>,
-        //interrupts: Vec<NotifyChannel>,
-        //io_issuers: Arc<Vec<Arc<Issuer>>>,
-        //rescan_event: Arc<event_listener::Event>,
-        //async_event_task: Option<Task<()>>,
     }
 
     /// Save/restore state for NVMe driver worker task.

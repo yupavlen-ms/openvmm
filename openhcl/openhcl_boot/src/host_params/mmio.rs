@@ -7,8 +7,6 @@ use super::dt::DtError;
 use super::PartitionInfo;
 use memory_range::MemoryRange;
 
-use crate::boot_logger::log; // YSP
-
 /// The start address of MMIO high range.
 const MMIO_HIGH_RANGE_START: u64 = 1 << 32;
 
@@ -34,7 +32,6 @@ impl PartitionInfo {
         // Iterate over the list of MMIO ranges in reverse address order so that
         // the VTL2 range is carved out from the end.
         for range in self.vmbus_vtl0.mmio.iter().rev() {
-            log!("-YSP: mmio range {:X}-{:X}", range.start(), range.end());
             // Do not select low MMIO ranges for VTL2.
             if range.start() < MMIO_HIGH_RANGE_START {
                 continue;

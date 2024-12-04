@@ -173,7 +173,7 @@ async fn test_nvme_save_restore(driver: DefaultDriver) {
     // Add a namespace so Identify Namespace command will succeed later.
     nvme_ctrl
         .client()
-        .add_namespace(1, Arc::new(RamDisk::new(1024 * 1024, false).unwrap()))
+        .add_namespace(1, disk_ramdisk::ram_disk(2 << 20, false).unwrap())
         .await
         .unwrap();
     let device = EmulatedDevice::new(nvme_ctrl, msi_x, emu_mem);

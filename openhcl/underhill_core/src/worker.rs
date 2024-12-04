@@ -1820,9 +1820,7 @@ async fn new_underhill_vm(
             .as_ref()
             .map(|p| p.allocator_spawner());
 
-        let fixed_mem_allocator = fixed_mem_pool
-            .as_ref()
-            .map(|f| f.allocator_spawner());
+        let fixed_mem_allocator = fixed_mem_pool.as_ref().map(|f| f.allocator_spawner());
 
         let save_restore_supported = fixed_mem_pool.is_some();
         let vfio_dma_buffer_spawner = Box::new(
@@ -1834,21 +1832,16 @@ async fn new_underhill_vm(
                             .allocator(device_id)
                             .map(|alloc| Arc::new(alloc) as _)
                     })
-                    .unwrap_or_else(||
-                        
+                    .unwrap_or_else(|| {
                         // YSP: FIXME: original code:
                         // Ok(Arc::new(LockedMemorySpawner) as _)
 
                         // YSP: FIXME: new temporary code:
                         fixed_mem_allocator
                             .as_ref()
-                            .map(|f| {
-                                f.allocator()
-                                .map(|a| Arc::new(a) as _)
-                            })
+                            .map(|f| f.allocator().map(|a| Arc::new(a) as _))
                             .unwrap_or(Ok(Arc::new(LockedMemorySpawner) as _))
-                    
-                    )
+                    })
             },
         );
 
@@ -1868,6 +1861,21 @@ async fn new_underhill_vm(
     } else {
         None
     };
+
+    // NVMe manager is the only client for fixed DMA pool as of now,
+    // run integrity check after restore. Find a better place if more
+    // clients added in future.
+    if fixed_mem_pool.is_some() && nvme_manager.is_some() {
+        match fixed_mem_pool.as_ref().unwrap().validate() {
+            Ok(_) => {
+                tracing::trace!("fixed mem pool integrity OK");
+            }
+            Err(_) => {
+                // Can be converted to panic after comprehensive testing.
+                tracing::trace!("fixed mem pool integrity ERROR");
+            }
+        }
+    }
 
     let initial_generation_id = match dps.general.generation_id.map(u128::from_ne_bytes) {
         Some(0) | None => {
