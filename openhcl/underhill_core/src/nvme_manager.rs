@@ -10,7 +10,7 @@ use crate::servicing::NvmeSavedState;
 use anyhow::Context;
 use async_trait::async_trait;
 use disk_backend::resolve::ResolveDiskParameters;
-use disk_backend::resolve::ResolvedSimpleDisk;
+use disk_backend::resolve::ResolvedDisk;
 use futures::future::join_all;
 use futures::StreamExt;
 use futures::TryFutureExt;
@@ -47,6 +47,8 @@ enum InnerError {
     Vfio(#[source] anyhow::Error),
     #[error("failed to initialize nvme device")]
     DeviceInitFailed(#[source] anyhow::Error),
+    #[error("failed to create dma buffer for device")]
+    DmaBuffer(#[source] anyhow::Error),
     #[error("failed to get namespace {nsid}")]
     Namespace {
         nsid: u32,
@@ -87,7 +89,7 @@ impl NvmeManager {
     pub fn new(
         driver_source: &VmTaskDriverSource,
         vp_count: u32,
-        dma_buffer: Arc<dyn VfioDmaBuffer>,
+        dma_buffer_spawner: Box<dyn Fn(String) -> anyhow::Result<Arc<dyn VfioDmaBuffer>> + Send>,
         save_restore_supported: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
@@ -98,7 +100,7 @@ impl NvmeManager {
             driver_source: driver_source.clone(),
             devices: HashMap::new(),
             vp_count,
-            dma_buffer: dma_buffer.clone(),
+            dma_buffer_spawner,
             save_restore_supported,
         };
         let task = driver.spawn("nvme-manager", async move {
@@ -157,9 +159,8 @@ impl NvmeManager {
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManager::restore");
-        let dma_buffer = worker.dma_buffer.clone();
         worker
-            .restore(dma_buffer, &saved_state.nvme_state)
+            .restore(&saved_state.nvme_state)
             .instrument(tracing::info_span!("nvme_worker_restore"))
             .await?;
 
@@ -213,8 +214,10 @@ struct NvmeManagerWorker {
     driver_source: VmTaskDriverSource,
     #[inspect(iter_by_key)]
     devices: HashMap<String, nvme_driver::NvmeDriver<VfioDevice>>,
+    // TODO: Revisit this Box<fn> into maybe a trait, once we refactor DMA to a
+    // central manager.
     #[inspect(skip)]
-    dma_buffer: Arc<dyn VfioDmaBuffer>,
+    dma_buffer_spawner: Box<dyn Fn(String) -> anyhow::Result<Arc<dyn VfioDmaBuffer>> + Send>,
     vp_count: u32,
     /// Running environment (memory layout) allows save/restore.
     save_restore_supported: bool,
@@ -300,11 +303,15 @@ impl NvmeManagerWorker {
                 entry.into_mut()
             }
             hash_map::Entry::Vacant(entry) => {
-                let device =
-                    VfioDevice::new(&self.driver_source, entry.key(), self.dma_buffer.clone())
-                        .instrument(tracing::info_span!("vfio_device_open", pci_id))
-                        .await
-                        .map_err(InnerError::Vfio)?;
+                let device = VfioDevice::new(
+                    &self.driver_source,
+                    entry.key(),
+                    (self.dma_buffer_spawner)(format!("nvme_{}", entry.key()))
+                        .map_err(InnerError::DmaBuffer)?,
+                )
+                .instrument(tracing::info_span!("vfio_device_open", pci_id))
+                .await
+                .map_err(InnerError::Vfio)?;
 
                 let driver =
                     nvme_driver::NvmeDriver::new(&self.driver_source, self.vp_count, device)
@@ -355,11 +362,7 @@ impl NvmeManagerWorker {
     }
 
     /// Restore NVMe manager and device states from the buffer after servicing.
-    pub async fn restore(
-        &mut self,
-        dma_buffer: Arc<dyn VfioDmaBuffer>,
-        saved_state: &NvmeManagerSavedState,
-    ) -> anyhow::Result<()> {
+    pub async fn restore(&mut self, saved_state: &NvmeManagerSavedState) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManagerWorker::restoring {} disks", &saved_state.nvme_disks.len());
         self.devices = HashMap::new();
         for disk in &saved_state.nvme_disks {
@@ -371,7 +374,8 @@ impl NvmeManagerWorker {
                 VfioDevice::restore(
                     &self.driver_source,
                     &disk.pci_id.clone(),
-                    dma_buffer.clone(),
+                    (self.dma_buffer_spawner)(format!("nvme_{}", 0)) // YSP: FIXME: missing 'key'
+                        .map_err(InnerError::DmaBuffer)?,
                     true,
                 )
                 .instrument(tracing::info_span!("vfio_device_restore", pci_id = disk.pci_id.clone()))
@@ -407,7 +411,7 @@ impl NvmeDiskResolver {
 
 #[async_trait]
 impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
-    type Output = ResolvedSimpleDisk;
+    type Output = ResolvedDisk;
     type Error = anyhow::Error;
 
     async fn resolve(
@@ -423,7 +427,10 @@ impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
             .await
             .context("could not open nvme namespace")?;
 
-        Ok(disk_nvme::NvmeDisk::new(namespace.clone()).into())
+        Ok(
+            ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone()))
+                .context("invalid disk")?,
+        )
     }
 }
 

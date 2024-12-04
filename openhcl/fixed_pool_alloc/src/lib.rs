@@ -283,6 +283,29 @@ impl FixedPool {
             inner: self.inner.clone(),
         }
     }
+
+    /// Return a spawner that allows creating multiple allocators.
+    pub fn allocator_spawner(&self) -> FixedPoolAllocatorSpawner {
+        FixedPoolAllocatorSpawner {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+/// A spawner for [`FixedPoolAllocator`] instances.
+///
+/// Useful when you need to create multiple allocators, without having ownership
+/// of the actual [`FixedPool`].
+#[derive(Debug)]
+pub struct FixedPoolAllocatorSpawner {
+    inner: Arc<Mutex<FixedPoolInner>>,
+}
+
+impl FixedPoolAllocatorSpawner {
+    /// Create an allocator instance that can be used to allocate pages.
+    pub fn allocator(&self) -> anyhow::Result<FixedPoolAllocator> {
+        FixedPoolAllocator::new(&self.inner)
+    }
 }
 
 /// A page allocator for fixed memory.
@@ -296,6 +319,12 @@ pub struct FixedPoolAllocator {
 
 impl FixedPoolAllocator {
     const VFIO_MSHV_TAG: &str = "mshv_dma";
+
+    fn new(inner: &Arc<Mutex<FixedPoolInner>>) -> anyhow::Result<Self> {
+        Ok(Self {
+            inner: inner.clone(),
+        })
+    }
 
     /// Allocate contiguous pages from the fixed pool with the given
     /// tag. If a contiguous region of free pages is not available, then an
@@ -451,7 +480,6 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         mapping.fill_at(0, 0, len)?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
-
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mapping.read_at(0, checker.as_mut_slice())?;

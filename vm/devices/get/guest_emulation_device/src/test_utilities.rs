@@ -263,9 +263,7 @@ pub fn create_host_channel(
         None,
         recv,
         None,
-        Some(Arc::new(
-            disk_ramdisk::RamDisk::new(TEST_VMGS_CAPACITY as u64, false).unwrap(),
-        )),
+        Some(disk_ramdisk::ram_disk(TEST_VMGS_CAPACITY as u64, false).unwrap()),
     );
 
     if let Some(ged_responses) = ged_responses {

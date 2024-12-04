@@ -12,7 +12,6 @@ inspect.workspace = true
 loader_defs = { workspace = true, features = ["inspect"] }
 memory_range = { workspace = true, features = ["inspect"] }
 vm_topology = { workspace = true, features = ["inspect"] }
-tracing.workspace = true
 
 anyhow.workspace = true
 fs-err.workspace = true
