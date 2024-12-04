@@ -42,6 +42,9 @@ vm_resource::register_static_resolvers! {
     net_dio::resolver::DioResolver,
 
     // Disks
+    disk_layered::resolver::LayeredDiskResolver,
+    #[cfg(feature = "disk_crypt")]
+    disk_crypt::resolver::DiskCryptResolver,
     disk_ramdisk::resolver::RamDiskResolver,
     disk_file::FileDiskResolver,
     disk_prwrap::DiskWithReservationsResolver,
@@ -54,6 +57,7 @@ vm_resource::register_static_resolvers! {
     // PCI devices
     gdma::resolver::GdmaDeviceResolver,
     nvme::resolver::NvmeControllerResolver,
+    virtio::resolver::VirtioPciResolver,
 
     // SCSI
     scsidisk::resolver::SimpleScsiResolver,
