@@ -750,7 +750,7 @@ impl UhVmNetworkSettings {
             vps_count as u32,
             nic_max_sub_channels,
             servicing_netvsp_state,
-            vfio_dma_buffer(shared_vis_pages_pool, format!("nic_{}", instance_id), None)
+            vfio_dma_buffer(shared_vis_pages_pool, None, format!("nic_{}", instance_id))
                 .context("creating vfio dma buffer")?,
             self.dma_mode,
         )
@@ -1071,8 +1071,13 @@ fn round_up_to_2mb(bytes: u64) -> u64 {
     (bytes + (2 * 1024 * 1024) - 1) & !((2 * 1024 * 1024) - 1)
 }
 
+/// Return appropriate allocator for the DMA pool.
+///  - use PagePool if shared_vis_page_pool is provided.
+///  - use FixedPool if fixed_mem_range is provided (temporary).
+///  - use LockedMemorySpawner in all other cases.
 fn vfio_dma_buffer(
     shared_vis_pages_pool: &Option<PagePool>,
+    _fixed_mem_pool: Option<&FixedPool>, // YSP: FIXME:
     device_name: String,
 ) -> anyhow::Result<Arc<dyn VfioDmaBuffer>> {
     shared_vis_pages_pool
@@ -1082,24 +1087,13 @@ fn vfio_dma_buffer(
                 .map(|alloc| Arc::new(alloc) as Arc<dyn VfioDmaBuffer>)
         })
         .unwrap_or(Ok(Arc::new(LockedMemorySpawner)))
-}
 
-/// Return appropriate allocator in the following order:
-///  - use SharedPoolAllocator if shared_vis_page_pool is provided.
-///  - use FixedPoolAllocator if fixed_mem_range is provided.
-///  - use LockedMemorySpawner in all other cases.
-fn vfio_dma_buffer_my(
-    shared_vis_pages_pool: &Option<SharedPool>,
-    fixed_mem_pool: Option<&FixedPool>,
-) -> Arc<dyn VfioDmaBuffer> {
-    shared_vis_pages_pool
-        .as_ref()
-        .map(|p| -> Arc<dyn VfioDmaBuffer> { Arc::new(p.allocator()) })
-        .unwrap_or(
-            fixed_mem_pool
-                .map(|f| -> Arc<dyn VfioDmaBuffer> { Arc::new(f.allocator()) })
-                .unwrap_or(Arc::new(LockedMemorySpawner)),
-        )
+//         .unwrap_or(
+//            fixed_mem_pool
+//                .map(|f| -> Arc<dyn VfioDmaBuffer> { Arc::new(f.allocator()) })
+//                .unwrap_or(Arc::new(LockedMemorySpawner)),
+//        )
+
 }
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
@@ -1852,28 +1846,11 @@ async fn new_underhill_vm(
             },
         );
 
-        let manager = NvmeManager::new(
-            &driver_source,
-            processor_topology.vp_count(),
-            vfio_dma_buffer_spawner,
-// my stuff begins
-        let nvme_saved_state = servicing_state.nvme_state.unwrap_or(None);
-        let nvme_dma_buffer = nvme_saved_state
-            .as_ref()
-            .and_then(|n| n.nvme_state.mem_buffer.as_ref());
-        let dma_buffer = vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref());
-        let nvme_dma_memory = vfio_prealloc_or_restore(
-            dma_buffer.clone(),
-            &dps,
-            processor_topology.vp_count(),
-            nvme_dma_buffer,
-        )?;
-        let nvme_keepalive = fixed_mem_pool.is_some();
         let save_restore_supported = fixed_mem_pool.is_some();
         let manager = NvmeManager::new(
             &driver_source,
             processor_topology.vp_count(),
-            vfio_dma_buffer(&shared_vis_pages_pool, fixed_mem_pool.as_ref()),
+            vfio_dma_buffer_spawner,
             save_restore_supported,
             servicing_state.nvme_state.unwrap_or(None),
         );

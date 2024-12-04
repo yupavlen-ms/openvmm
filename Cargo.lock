@@ -1243,11 +1243,7 @@ dependencies = [
  "nvme_spec",
  "pal",
  "scsi_buffers",
-<<<<<<< HEAD
-=======
- "stackfuture",
  "tracing",
->>>>>>> 650e10b (Initial port of the dev branch)
 ]
 
 [[package]]
@@ -4655,8 +4651,10 @@ dependencies = [
  "hvdef",
  "inspect",
  "memory_range",
+ "mesh",
  "parking_lot",
  "sparse_mmap",
+ "test_with_tracing",
  "thiserror 2.0.0",
  "tracing",
  "user_driver",

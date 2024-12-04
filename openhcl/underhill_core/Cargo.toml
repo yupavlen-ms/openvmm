@@ -34,8 +34,6 @@ diag_server.workspace = true
 debug_worker_defs = { workspace = true, optional = true }
 page_pool_alloc =  { workspace = true, features = ["vfio"] }
 fixed_pool_alloc =  { workspace = true, features = ["vfio"] }
-hcl.workspace = true
-shared_pool_alloc =  { workspace = true, features = ["vfio"] }
 virt.workspace = true
 vmm_core.workspace = true
 vmm_core_defs.workspace = true
