@@ -321,9 +321,7 @@ pub struct FixedPoolAllocator {
 impl FixedPoolAllocator {
     const VFIO_MSHV_TAG: &str = "mshv_dma";
 
-    fn new(
-        inner: &Arc<Mutex<FixedPoolInner>>,
-    ) -> anyhow::Result<Self> {
+    fn new(inner: &Arc<Mutex<FixedPoolInner>>) -> anyhow::Result<Self> {
         Ok(Self {
             inner: inner.clone(),
         })
