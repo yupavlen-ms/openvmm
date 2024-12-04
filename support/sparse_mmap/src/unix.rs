@@ -75,12 +75,7 @@ unsafe fn mmap(
     fd: i32,
     offset: i64,
 ) -> Result<*mut c_void, Error> {
-    tracing::info!(
-        "YSP: SparseMapping::mmap addr={:X} len={} flags={:X}",
-        addr as usize,
-        len,
-        flags
-    );
+    tracing::info!("YSP: SparseMapping::mmap addr={:X} len={} flags={:X}", addr as usize, len, flags);
     let address = unsafe { libc::mmap(addr, len, prot, flags, fd, offset) };
     if address == libc::MAP_FAILED {
         return Err(Error::last_os_error());
@@ -231,12 +226,7 @@ impl SparseMapping {
             libc::PROT_READ
         };
 
-        tracing::info!(
-            "YSP: SparseMapping::map_file (shared) {:X} offset={} len={}",
-            self.address as usize,
-            offset,
-            len
-        );
+        tracing::info!("YSP: SparseMapping::map_file (shared) {:X} offset={} len={}", self.address as usize, offset, len);
         // SAFETY: The flags passed in are guaranteed to be valid. MAP_SHARED is required.
         unsafe {
             self.mmap(
@@ -306,11 +296,7 @@ impl SparseMapping {
         // SAFETY: guaranteed by caller and offset + len checks above
         unsafe {
             let address = self.address.add(offset);
-            tracing::info!(
-                "YSP: SparseMapping::mmap_anon {:X} len={}",
-                address as usize,
-                len
-            );
+            tracing::info!("YSP: SparseMapping::mmap_anon {:X} len={}", address as usize, len);
             let mapped_address = mmap(
                 address,
                 len,
@@ -337,11 +323,7 @@ impl SparseMapping {
         // SAFETY: guaranteed by caller and offset + len checks above
         unsafe {
             let address = self.address.add(offset);
-            tracing::info!(
-                "YSP: SparseMapping::unmap-mmap {:X} len={}",
-                address as usize,
-                len
-            );
+            tracing::info!("YSP: SparseMapping::unmap-mmap {:X} len={}", address as usize, len);
             let mapped_address = mmap(
                 address,
                 len,

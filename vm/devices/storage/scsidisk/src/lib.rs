@@ -1287,7 +1287,6 @@ impl AsyncScsiDisk for SimpleScsiDisk {
             if op == ScsiOp::WRITE || op == ScsiOp::WRITE6 || op == ScsiOp::WRITE12 || op == ScsiOp::WRITE16 {
                 //tracing::info!("YSP: WRITE CPL ");
             }
-
             self.process_result(result, op)
         })
     }

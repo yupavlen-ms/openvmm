@@ -72,43 +72,37 @@ impl SubmissionQueue {
 
     /// Saves queue data for servicing.
     pub fn save(&self) -> SubmissionQueueSavedState {
-        tracing::info!(
-            "YSP: SubmissionQueue::save qid={} head={} tail={}/{}",
-            self.sqid,
-            self.head,
-            self.tail,
-            self.committed_tail,
-        );
+        tracing::info!("YSP: SubmissionQueue::save qid={} head={} tail={}/{}", self.sqid, self.head, self.tail, self.committed_tail);
         SubmissionQueueSavedState {
             sqid: self.sqid,
             head: self.head,
             tail: self.tail,
             committed_tail: self.committed_tail,
             len: self.len,
-            pfns: self.mem.pfns().to_vec(),
         }
     }
 
     /// Restores queue data after servicing.
-    pub fn restore(&mut self, saved_state: &SubmissionQueueSavedState) -> anyhow::Result<()> {
-        tracing::info!(
-            "YSP: SubmissionQueue::restore qid={} head={} tail={}/{}",
-            saved_state.sqid,
-            saved_state.head,
-            saved_state.tail,
-            saved_state.committed_tail,
-        );
-        // YSP: TODO: See if we can create object here instead.
-
-        self.sqid = saved_state.sqid;
-        self.head = saved_state.head;
-        self.tail = saved_state.tail;
-        self.committed_tail = saved_state.committed_tail;
-        self.len = saved_state.len;
-
-        // YSP: TODO: Restore memory block.
-
-        Ok(())
+    pub fn restore(
+        mem: MemoryBlock,
+        saved_state: &SubmissionQueueSavedState,
+    ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: SubmissionQueue::restore qid={} head={} tail={}/{}", saved_state.sqid, saved_state.head, saved_state.tail, saved_state.committed_tail);
+        let SubmissionQueueSavedState {
+            sqid,
+            head,
+            tail,
+            committed_tail,
+            len,
+        } = saved_state;
+        Ok(Self {
+            sqid: *sqid,
+            head: *head,
+            tail: *tail,
+            committed_tail: *committed_tail,
+            len: *len,
+            mem,
+        })
     }
 }
 
@@ -165,14 +159,7 @@ impl CompletionQueue {
 
     /// Saves queue data for servicing.
     pub fn save(&self) -> CompletionQueueSavedState {
-        tracing::info!(
-            "YSP: CompletionQueue::save {:X} qid={} head={}/{} tag={}",
-            self.mem.base_va(),
-            self.cqid,
-            self.head,
-            self.committed_head,
-            self.phase,
-        );
+        tracing::info!("YSP: CompletionQueue::save qid={} head={}/{} tag={}", self.cqid, self.head, self.committed_head, self.phase);
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         self.mem.read_at(0, checker.as_mut_slice());
@@ -187,39 +174,25 @@ impl CompletionQueue {
             checker[6],
             checker[7],
         );
-
         CompletionQueueSavedState {
             cqid: self.cqid,
             head: self.head,
             committed_head: self.committed_head,
             len: self.len,
             phase: self.phase,
-            pfns: self.mem.pfns().to_vec(),
         }
     }
 
     /// Restores queue data after servicing.
-    pub fn restore(&mut self, saved_state: &CompletionQueueSavedState) -> anyhow::Result<()> {
-        tracing::info!(
-            "YSP: CompletionQueue::restore {:X} qid={} head={}/{} tag={}",
-            self.mem.base_va(),
-            saved_state.cqid,
-            saved_state.head,
-            saved_state.committed_head,
-            saved_state.phase,
-        );
-        // YSP: TODO: See if we can create object here instead.
-
-        self.cqid = saved_state.cqid;
-        self.head = saved_state.head;
-        self.committed_head = saved_state.committed_head;
-        self.len = saved_state.len;
-        self.phase = saved_state.phase;
-
+    pub fn restore(
+        mem: MemoryBlock,
+        saved_state: &CompletionQueueSavedState,
+    ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: CompletionQueue::restore qid={} head={}/{} tag={}", saved_state.cqid, saved_state.head, saved_state.committed_head, saved_state.phase);
         // YSP: FIXME: Restore memory block.
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
-        self.mem.read_at(0, checker.as_mut_slice());
+        mem.read_at(0, checker.as_mut_slice());
         tracing::info!(
             "YSP: read [{} {} {} {} {} {} {} {}]",
             checker[0],
@@ -231,8 +204,22 @@ impl CompletionQueue {
             checker[6],
             checker[7],
         );
+        let CompletionQueueSavedState {
+            cqid,
+            head,
+            committed_head,
+            len,
+            phase,
+        } = saved_state;
 
-        Ok(())
+        Ok(Self {
+            cqid: *cqid,
+            head: *head,
+            committed_head: *committed_head,
+            len: *len,
+            phase: *phase,
+            mem,
+        })
     }
 }
 

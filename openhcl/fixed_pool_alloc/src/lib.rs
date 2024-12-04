@@ -9,6 +9,8 @@
 mod mapped_dma;
 
 pub use mapped_dma::FixedDmaBuffer;
+pub use save_restore::MemPoolSavedState;
+pub use save_restore::MemPoolState;
 
 use anyhow::Context;
 use hvdef::HV_PAGE_SIZE;
@@ -18,8 +20,6 @@ use parking_lot::Mutex;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use thiserror::Error;
-use user_driver::memory::save_restore::MemPoolSavedState;
-use user_driver::memory::save_restore::MemPoolState;
 use user_driver::memory::MemoryBlock;
 use user_driver::vfio::VfioDmaBuffer;
 use user_driver::HostDmaAllocator;
@@ -347,12 +347,7 @@ impl FixedPoolAllocator {
                 unreachable!()
             }
         };
-        tracing::info!(
-            "YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}",
-            base_pfn,
-            size_pages,
-            index
-        );
+        tracing::info!("YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}", base_pfn, size_pages, index);
 
         Ok(FixedPoolHandle {
             inner: self.inner.clone(),
@@ -480,12 +475,8 @@ impl VfioDmaBuffer for FixedPoolAllocator {
     }
 
     /// Restore DMA buffer at the same location after servicing.
-    fn restore_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
-        tracing::info!(
-            "YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]",
-            len,
-            pfns[0]
-        );
+    fn restore_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]", len, base_pfn);
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }
@@ -495,11 +486,9 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         }
 
         let size_pages = len as u64 / HV_PAGE_SIZE;
-        assert_eq!(size_pages as usize, pfns.len());
-
         let alloc = self
             .restore(
-                pfns[0],
+                base_pfn,
                 size_pages.try_into().expect("already checked nonzero"),
                 FixedPoolAllocator::VFIO_MSHV_TAG.into(),
             )
@@ -540,15 +529,48 @@ impl VfioDmaBuffer for FixedPoolAllocator {
     }
 }
 
+#[cfg(feature = "vfio")]
 impl HostDmaAllocator for FixedPoolAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
         tracing::info!("YSP: CORRECT allocate_dma_buffer {}", len);
         self.create_dma_buffer(len)
     }
 
-    fn attach_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock> {
-        tracing::info!("YSP: CORRECT attach_dma_buffer len={} pfn[0]={:X}", len, pfns[0]);
-        self.restore_dma_buffer(len, pfns)
+    fn attach_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT attach_dma_buffer len={} pfn[0]={:X}", len, base_pfn);
+        self.restore_dma_buffer(len, base_pfn)
+    }
+}
+
+/// Save and restore memory allocation pool state for servicing.
+pub mod save_restore {
+    use mesh::payload::Protobuf;
+
+    #[derive(Protobuf)]
+    #[mesh(package = "page_pool")]
+    /// Fixed pool single chunk state for save/restore.
+    pub struct MemPoolState {
+        /// Base PFN for the chunk.
+        #[mesh(1)]
+        pub base_pfn: u64,
+        /// Number of pages for this chunk.
+        #[mesh(2)]
+        pub size_pages: u64,
+        /// Allocated or free.
+        #[mesh(3)]
+        pub allocated: bool,
+        /// ID tag.
+        #[mesh(4)]
+        pub tag: String,
+    }
+
+    #[derive(Protobuf)]
+    #[mesh(package = "page_pool")]
+    /// Save-restore memory allocation mapping.
+    pub struct MemPoolSavedState {
+        /// Memory pool allocation map.
+        #[mesh(1)]
+        pub mem_pool: Vec<MemPoolState>,
     }
 }
 
@@ -556,6 +578,7 @@ impl HostDmaAllocator for FixedPoolAllocator {
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_with_tracing::test;
 
     #[test]
     fn test_fixed_alloc() {
@@ -588,95 +611,51 @@ mod test {
 
     #[test]
     fn test_fixed_restore() {
-        let state = vec![State::Free {
-            base_pfn: 10,
-            size_pages: 12,
-        }];
-        let alloc = FixedPoolAllocator {
-            inner: Arc::new(Mutex::new(FixedPoolInner { state })),
-        };
+        // Prepare the pool.
+        let mem_range_vec = vec![
+            MemoryRange::from_4k_gpn_range(std::ops::Range {start: 10, end: 90,}),
+        ];
+        let pool = FixedPool::new(&mem_range_vec.as_slice()).unwrap();
+        let alloc = pool.allocator();
 
+        // Allocate some block(s) as a baseline.
         let r1 = alloc
-            .restore(
+            .alloc(
                 13.try_into().unwrap(),
-                1.try_into().unwrap(),
                 "restore1".into(),
             )
             .unwrap();
-        assert_eq!(r1.base_pfn, 13);
-        assert_eq!(r1.size_pages, 1);
+        assert_eq!(r1.base_pfn, 10);
+        assert_eq!(r1.size_pages, 13);
 
         let r2 = alloc
-            .restore(
-                15.try_into().unwrap(),
-                2.try_into().unwrap(),
+            .alloc(
+                30.try_into().unwrap(),
                 "restore2".into(),
             )
             .unwrap();
-        assert_eq!(r2.base_pfn, 15);
-        assert_eq!(r2.size_pages, 2);
+        assert_eq!(r2.base_pfn, 23);
+        assert_eq!(r2.size_pages, 30);
 
-        let r3 = alloc
-            .restore(
-                18.try_into().unwrap(),
-                4.try_into().unwrap(),
-                "restore2".into(),
-            )
-            .unwrap();
-        assert_eq!(r3.base_pfn, 18);
-        assert_eq!(r3.size_pages, 4);
-
-        let r4 = alloc
-            .restore(
-                10.try_into().unwrap(),
-                3.try_into().unwrap(),
-                "restore2".into(),
-            )
-            .unwrap();
-        assert_eq!(r4.base_pfn, 10);
-        assert_eq!(r4.size_pages, 3);
-
-        let r5 = alloc
-            .restore(
-                14.try_into().unwrap(),
-                1.try_into().unwrap(),
-                "restore2".into(),
-            )
-            .unwrap();
-        assert_eq!(r5.base_pfn, 14);
-        assert_eq!(r5.size_pages, 1);
-
-        assert!(alloc
-            .restore(
-                5.try_into().unwrap(),
-                3.try_into().unwrap(),
-                "failed".into()
-            )
-            .is_err());
-        assert!(alloc
-            .restore(
-                100.try_into().unwrap(),
-                10.try_into().unwrap(),
-                "failed".into()
-            )
-            .is_err());
-        assert!(alloc
-            .restore(
-                12.try_into().unwrap(),
-                4.try_into().unwrap(),
-                "failed".into()
-            )
-            .is_err());
-
-        let inner = alloc.inner.lock();
-        assert_eq!(inner.state.len(), 6);
-        // Must be dropped to avoid deadlock after.
-        drop(inner);
-
-        drop(r1);
+        // Save pool state into a datastore.
+        let st = pool.save().unwrap();
+        tracing::info!("YSP: SAVED!!!");
+        assert_eq!(st.mem_pool.len(), 3);
         drop(r2);
-        drop(r3);
-        drop(r4);
-        drop(r5);
+        drop(r1);
+        drop(pool);
+
+        // Create another pool.
+        let pool = FixedPool::restore(&mem_range_vec.as_slice(), st).unwrap();
+
+        // Allocate another chunk on top of restored ones.
+        let r3 = alloc
+            .alloc(
+                25.try_into().unwrap(),
+                "restore3".into(),
+            )
+            .unwrap();
+        assert_eq!(r3.base_pfn, 53);
+        assert_eq!(r3.size_pages, 25);
     }
 }

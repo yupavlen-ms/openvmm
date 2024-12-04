@@ -37,7 +37,7 @@ impl PageAllocator {
     pub fn new(mem: MemoryBlock) -> Self {
         assert_eq!(mem.offset_in_page(), 0);
         assert_eq!(mem.len() % PAGE_SIZE, 0);
-        tracing::info!("YSP: PageAllocator::new {:X}", mem.base_va());
+        tracing::info!("YSP: PageAllocator::new len={}", mem.len());
         let count = mem.len() / PAGE_SIZE;
         Self {
             core: Mutex::new(PageAllocatorCore::new(count)),

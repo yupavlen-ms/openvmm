@@ -58,13 +58,11 @@ pub trait DeviceRegisterIo: Send + Sync {
     fn write_u32(&self, offset: usize, data: u32);
     /// Writes a `u64` register.
     fn write_u64(&self, offset: usize, data: u64);
-    /// Returns base virtual address.
-    fn base_va(&self) -> u64;
 }
 
 pub trait HostDmaAllocator: Send + Sync {
     /// Allocate a new block using default allocation strategy.
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock>;
-    /// Attach to a previously allocated memory block at specific PFNs.
-    fn attach_dma_buffer(&self, len: usize, pfns: &[u64]) -> anyhow::Result<MemoryBlock>;
+    /// Attach to a previously allocated memory block with contiguous PFNs.
+    fn attach_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock>;
 }

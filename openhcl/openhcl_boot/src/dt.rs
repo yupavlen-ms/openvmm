@@ -560,12 +560,7 @@ pub fn write_dt(
             }
             RangeWalkResult::Both(partition_entry, vtl2_entry) => {
                 // This range is in use by VTL2. Indicate that.
-                log!(
-                    "YSP: memory@ {:X}-{:X} {}",
-                    range.start(),
-                    range.end(),
-                    vtl2_entry.memory_type.0
-                );
+                log!("YSP: memory@ {:X}-{:X} {}", range.start(), range.end(), vtl2_entry.memory_type.0);
                 let name = format_fixed!(64, "memory@{:x}", range.start());
                 openhcl_builder = openhcl_builder
                     .start_node(&name)?
