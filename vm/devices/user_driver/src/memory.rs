@@ -51,7 +51,6 @@ struct RestrictedView {
 impl RestrictedView {
     /// Wraps `mem` and provides a restricted view of it.
     fn new(mem: Arc<dyn MappedDmaTarget>, offset: usize, len: usize) -> Self {
-        tracing::info!("YSP: RestrictedView::new {:X} +{:X} len={}", mem.base() as usize, offset, len);
         let mem_len = mem.len();
         assert!(mem_len >= offset && mem_len - offset >= len);
         Self { len, offset, mem }

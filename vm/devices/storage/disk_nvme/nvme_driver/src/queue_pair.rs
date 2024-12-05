@@ -189,6 +189,7 @@ impl QueuePair {
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: QueuePair::new qid={}", qid);
         let total_size =
             QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::PER_QUEUE_PAGES * PAGE_SIZE;
         let mem = device
@@ -215,7 +216,6 @@ impl QueuePair {
         mem: MemoryBlock,
         saved_state: Option<&QueueHandlerSavedState>,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: QueuePair::new_or_restore qid={}", qid);
         // MemoryBlock is either allocated or restored prior calling here.
         let sq_mem_block = mem.subblock(0, QueuePair::SQ_SIZE);
         let cq_mem_block = mem.subblock(QueuePair::SQ_SIZE, QueuePair::CQ_SIZE);
@@ -328,7 +328,7 @@ impl QueuePair {
         mem: MemoryBlock,
         saved_state: &QueuePairSavedState,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: QueuePair::restore");
+        tracing::info!("YSP: QueuePair::restore qid={}", saved_state.qid);
         let QueuePairSavedState {
             mem_len: _,  // Used to restore DMA buffer before calling this.
             base_pfn: _, // Used to restore DMA buffer before calling this.

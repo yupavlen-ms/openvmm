@@ -483,7 +483,7 @@ impl user_driver::vfio::VfioDmaBuffer for PagePoolAllocator {
     fn restore_dma_buffer(
         &self,
         _len: usize,
-        _base_pfn: u64
+        _base_pfn: u64,
     ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
         anyhow::bail!("YSP: restore not supported yet");
     }

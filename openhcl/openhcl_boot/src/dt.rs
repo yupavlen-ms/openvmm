@@ -602,7 +602,6 @@ pub fn write_dt(
 
     // Report accepted ranges underhil openhcl node.
     for range in accepted_ranges {
-        log!("YSP: accepted {:X}-{:X}", range.start(), range.end());
         let name = format_fixed!(64, "accepted-memory@{:x}", range.start());
         openhcl_builder = openhcl_builder
             .start_node(&name)?

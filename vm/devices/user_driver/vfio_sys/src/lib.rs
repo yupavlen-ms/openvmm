@@ -360,7 +360,6 @@ impl Device {
         I: IntoIterator,
         I::Item: AsFd,
     {
-        tracing::info!("YSP: map_msix {}", start);
         #[repr(C)]
         struct VfioIrqSetWithArray {
             header: vfio_irq_set,
@@ -395,7 +394,6 @@ impl Device {
             ioctl::vfio_device_set_irqs(self.file.as_raw_fd(), &param.header)
                 .context("failed to set msi-x trigger")?;
         }
-        tracing::info!("YSP: map_msix {} done", start);
         Ok(())
     }
 }
