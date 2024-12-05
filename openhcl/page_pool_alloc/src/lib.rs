@@ -10,8 +10,6 @@
 mod device_dma;
 
 pub use device_dma::PagePoolDmaBuffer;
-pub use save_restore::MemPoolSavedState;
-pub use save_restore::MemPoolState;
 
 #[cfg(all(feature = "vfio", target_os = "linux"))]
 use anyhow::Context;
@@ -33,15 +31,6 @@ pub struct PagePoolOutOfMemory {
     tag: String,
 }
 
-/// Error returned when unable to restore memory chunk.
-#[derive(Debug, Error)]
-#[error("unable to restore matching chunk pfn {pfn} size {size} with tag {tag}")]
-pub struct PagePoolNoMatchingChunk {
-    pfn: u64,
-    size: u64,
-    tag: String,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum State {
     Free {
@@ -55,20 +44,6 @@ enum State {
         size_pages: u64,
         /// This is an index into the outer [`PagePoolInner`]'s device_ids
         /// vector.
-        device_id: usize,
-        tag: String,
-    },
-    Restored {
-        base_pfn: u64,
-        pfn_bias: u64,
-        size_pages: u64,
-        device_id: usize,
-        tag: String,
-    },
-    Confirmed {
-        base_pfn: u64,
-        pfn_bias: u64,
-        size_pages: u64,
         device_id: usize,
         tag: String,
     },
@@ -138,20 +113,6 @@ impl Inspect for PagePoolInner {
                             size_pages,
                             device_id,
                             tag,
-                        } |
-                        State::Restored {
-                            base_pfn,
-                            pfn_bias,
-                            size_pages,
-                            device_id,
-                            tag
-                        } |
-                        State::Confirmed {
-                            base_pfn,
-                            pfn_bias,
-                            size_pages,
-                            device_id,
-                            tag
                         } => {
                             req.respond()
                                 .field("state", "allocated")
@@ -308,106 +269,7 @@ impl PagePool {
         }
     }
 
-    /// Save memory pool allocation map.
-    pub fn save(&self) -> anyhow::Result<MemPoolSavedState> {
-        let inner = self.inner.lock();
-
-        let mut mem_pool = Vec::new();
-        inner.state.iter().for_each(|e| {
-            if let State::Allocated {
-                base_pfn: base,
-                pfn_bias: bias,
-                size_pages: len,
-                device_id: _,
-                tag: id,
-            }
-            | State::Restored {
-                base_pfn: base,
-                pfn_bias: bias,
-                size_pages: len,
-                device_id: _,
-                tag: id,
-            }
-            | State::Confirmed {
-                base_pfn: base,
-                pfn_bias: bias,
-                size_pages: len,
-                device_id: _,
-                tag: id,
-            } = e
-            {
-                tracing::info!("YSP: saving memblock pfn {} len {}", *base, *len);
-                mem_pool.push(MemPoolState {
-                    base_pfn: *base,
-                    pfn_bias: *bias,
-                    size_pages: *len,
-                    tag: id.clone(),
-                    allocated: true,
-                });
-            } else if let State::Free {
-                base_pfn: base,
-                pfn_bias: bias,
-                size_pages: len,
-            } = e
-            {
-                tracing::info!("YSP: saving FREE memblock pfn {} len {}", *base, *len);
-                mem_pool.push(MemPoolState {
-                    base_pfn: *base,
-                    pfn_bias: *bias,
-                    size_pages: *len,
-                    tag: "".into(),
-                    allocated: false,
-                });
-            } else {
-                unreachable!("invalid mem pool state");
-            }
-        });
-
-        Ok(MemPoolSavedState { mem_pool })
-    }
-
-    /// Restore memory pool from allocation map.
-    pub fn restore(
-        page_pool: &[MemoryRangeWithNode],
-        saved_state: MemPoolSavedState,
-    ) -> anyhow::Result<Self> {
-        let mut pages = Vec::new();
-        saved_state.mem_pool.iter().for_each(|chunk| {
-            let linear = MemoryRangeWithNode {
-                range: memory_range::MemoryRange::new(std::ops::Range {
-                    start: chunk.base_pfn,
-                    end: chunk.base_pfn + chunk.size_pages,
-                }),
-                vnode: 0, // YSP: FIXME: just for testing.
-            };
-            for range in page_pool {
-                if range.range.contains(&linear.range) {
-                    if chunk.allocated {
-                        tracing::info!("YSP: restoring memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
-                        pages.push(State::Restored {
-                            base_pfn: chunk.base_pfn,
-                            pfn_bias: chunk.pfn_bias,
-                            size_pages: chunk.size_pages,
-                            device_id: 0, // YSP: FIXME:
-                            tag: chunk.tag.clone(),
-                        });
-                    } else {
-                        tracing::info!("YSP: restoring FREE memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
-                        pages.push(State::Free {
-                            base_pfn: chunk.base_pfn,
-                            pfn_bias: chunk.pfn_bias,
-                            size_pages: chunk.size_pages,
-                        });
-                    }
-                }
-            }
-        });
-
-        Ok(Self {
-            inner: Arc::new(Mutex::new(PagePoolInner { state: pages, device_ids: vec![] })), // YSP: FIXME:
-            typ: PoolType::Private, // YSP: FIXME:
-        })
-    }
+    // TODO: save method and restore
 }
 
 /// A spawner for [`PagePoolAllocator`] instances.
@@ -449,8 +311,6 @@ pub struct PagePoolAllocator {
 }
 
 impl PagePoolAllocator {
-    const VFIO_MSHV_TAG: &str = "mshv_dma";
-
     fn new(
         inner: &Arc<Mutex<PagePoolInner>>,
         typ: PoolType,
@@ -514,7 +374,7 @@ impl PagePoolAllocator {
                     pfn_bias: _,
                     size_pages: len,
                 } => *len >= size_pages,
-                State::Allocated { .. } | State::Restored { .. } | State::Confirmed { .. } => false,
+                State::Allocated { .. } => false,
             })
             .ok_or(PagePoolOutOfMemory {
                 size: size_pages,
@@ -545,7 +405,7 @@ impl PagePoolAllocator {
 
                 (base, offset)
             }
-            State::Allocated { .. } | State::Restored { .. } | State::Confirmed { .. } => unreachable!(),
+            State::Allocated { .. } => unreachable!(),
         };
 
         Ok(PagePoolHandle {
@@ -554,73 +414,6 @@ impl PagePoolAllocator {
             pfn_bias,
             size_pages,
         })
-    }
-
-        /// Verifies that request to restore a mapping is valid
-    /// and matches the saved state.
-    fn restore(
-        &self,
-        req_pfn: u64,
-        req_pages: NonZeroU64,
-        tag: String,
-    ) -> Result<PagePoolHandle, PagePoolNoMatchingChunk> {
-        let mut inner = self.inner.lock();
-        let req_pages = req_pages.get();
-
-        let index = inner
-            .state
-            .iter()
-            .position(|state| match state {
-                State::Restored {
-                    base_pfn: restored_pfn,
-                    pfn_bias: _,
-                    size_pages: restored_pages,
-                    device_id: _,
-                    tag: _,
-                } => *restored_pfn == req_pfn && *restored_pages == req_pages,
-                State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => false,
-            })
-            .ok_or(PagePoolNoMatchingChunk {
-                pfn: req_pfn,
-                size: req_pages,
-                tag: tag.clone(),
-            })?;
-
-        tracing::info!("YSP: Found matching chunk index={} for pfn={:X} size={}", index, req_pfn, req_pages);
-        match inner.state.swap_remove(index) {
-            State::Restored {
-                base_pfn: _,
-                pfn_bias: _,
-                size_pages: _,
-                device_id: _,
-                tag: _,
-            } => {
-                tracing::info!("YSP: yehaaaw");
-                // Push the requested block to the collection.
-                inner.state.push(State::Confirmed {
-                    base_pfn: req_pfn,
-                    pfn_bias: 0, // YSP: FIXME:
-                    size_pages: req_pages,
-                    device_id: 0, // YSP: FIXME:
-                    tag,
-                });
-
-                Ok(PagePoolHandle {
-                    inner: self.inner.clone(),
-                    base_pfn: req_pfn,
-                    pfn_bias: 0, // YSP: FIXME:
-                    size_pages: req_pages,
-                })
-            }
-            State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => {
-                tracing::info!("YSP: oopsie");
-                Err(PagePoolNoMatchingChunk {
-                    pfn: req_pfn,
-                    size: req_pages,
-                    tag,
-                })
-            }
-        }
     }
 }
 
@@ -686,94 +479,13 @@ impl user_driver::vfio::VfioDmaBuffer for PagePoolAllocator {
         }))
     }
 
-    /// Restore DMA buffer at the same location after servicing.
-    fn restore_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<user_driver::memory::MemoryBlock> {
-        tracing::info!("YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]", len, base_pfn);
-        if len == 0 {
-            anyhow::bail!("allocation of size 0 not supported");
-        }
-
-        if len as u64 % HV_PAGE_SIZE != 0 {
-            anyhow::bail!("not a page-size multiple");
-        }
-
-        let size_pages = len as u64 / HV_PAGE_SIZE;
-        let alloc = self
-            .restore(
-                base_pfn,
-                size_pages.try_into().expect("already checked nonzero"),
-                PagePoolAllocator::VFIO_MSHV_TAG.into(),
-            )
-            .context("failed to restore fixed mem")?;
-
-        let gpa_fd = MshvVtlLow::new().context("failed to open gpa fd")?;
-        let mapping = sparse_mmap::SparseMapping::new(len).context("failed to create mapping")?;
-        let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
-        tracing::info!("YSP: restored pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
-
-        // No need to set bit 63 because this buffer is visible to VTL2 only.
-        mapping
-            .map_file(0, len, gpa_fd.get(), gpa, true)
-            .context("unable to map allocation")?;
-
-        let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
-
-        // YSP: FIXME: Debug code
-        let mut checker: [u8; 8] = [0; 8];
-        mapping.read_at(0, checker.as_mut_slice())?;
-        tracing::info!(
-            "YSP: read [{} {} {} {} {} {} {} {}]",
-            checker[0],
-            checker[1],
-            checker[2],
-            checker[3],
-            checker[4],
-            checker[5],
-            checker[6],
-            checker[7],
-        );
-
-        Ok(user_driver::memory::MemoryBlock::new(PagePoolDmaBuffer {
-            mapping,
-            _alloc: alloc,
-            pfns,
-        }))
-    }
-
-}
-
-/// Save and restore memory allocation pool state for servicing.
-pub mod save_restore {
-    use mesh::payload::Protobuf;
-
-    #[derive(Protobuf)]
-    #[mesh(package = "page_pool")]
-    /// Page pool single chunk state for save/restore.
-    pub struct MemPoolState {
-        /// Base PFN for the chunk.
-        #[mesh(1)]
-        pub base_pfn: u64,
-        /// PFN offset for the chunk.
-        #[mesh(2)]
-        pub pfn_bias: u64,
-        /// Number of pages for this chunk.
-        #[mesh(3)]
-        pub size_pages: u64,
-        /// Allocated or free.
-        #[mesh(4)]
-        pub allocated: bool,
-        /// ID tag.
-        #[mesh(5)]
-        pub tag: String,
-    }
-
-    #[derive(Protobuf)]
-    #[mesh(package = "page_pool")]
-    /// Save-restore memory allocation mapping.
-    pub struct MemPoolSavedState {
-        /// Memory pool allocation map.
-        #[mesh(1)]
-        pub mem_pool: Vec<MemPoolState>,
+    /// Restore a dma buffer in the predefined location with the given `len` in bytes.
+    fn restore_dma_buffer(
+        &self,
+        _len: usize,
+        _base_pfn: u64
+    ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+        anyhow::bail!("YSP: restore not supported yet");
     }
 }
 
