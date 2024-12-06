@@ -1220,6 +1220,7 @@ dependencies = [
 name = "disk_layered"
 version = "0.0.0"
 dependencies = [
+ "anyhow",
  "async-trait",
  "disk_backend",
  "disk_backend_resources",
@@ -1329,6 +1330,7 @@ dependencies = [
  "disk_backend_resources",
  "disk_layered",
  "event-listener",
+ "futures",
  "guestmem",
  "inspect",
  "pal_async",
