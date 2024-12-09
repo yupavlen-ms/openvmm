@@ -173,7 +173,7 @@ impl NvmeManager {
 enum Request {
     Inspect(inspect::Deferred),
     ForceLoadDriver(inspect::DeferredUpdate),
-    GetNamespace(Rpc<(String, u32), Result<nvme_driver::Namespace, NamespaceError>>),
+    GetNamespace(Rpc<(String, u32), Result<Arc<nvme_driver::Namespace>, NamespaceError>>),
     Save(Rpc<(), Result<NvmeManagerSavedState, anyhow::Error>>),
     Shutdown {
         span: tracing::Span,
@@ -191,7 +191,7 @@ impl NvmeManagerClient {
         &self,
         pci_id: String,
         nsid: u32,
-    ) -> anyhow::Result<nvme_driver::Namespace> {
+    ) -> anyhow::Result<Arc<nvme_driver::Namespace>> {
         tracing::info!("YSP: get_namespace nsid={}", nsid);
         Ok(self
             .sender
@@ -335,7 +335,7 @@ impl NvmeManagerWorker {
         &mut self,
         pci_id: String,
         nsid: u32,
-    ) -> Result<nvme_driver::Namespace, InnerError> {
+    ) -> Result<Arc<nvme_driver::Namespace>, InnerError> {
         tracing::info!("YSP: get_namespace: new nsid={}", nsid);
         let driver = self.get_driver(pci_id.to_owned()).await?;
         driver
@@ -432,7 +432,7 @@ impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
             .context("could not open nvme namespace")?;
 
         // YSP: FIXME: This is why we need Arc<Namespace>, otherwise the object is gone.
-        Ok(ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace)).context("invalid disk")?)
+        Ok(ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone())).context("invalid disk")?)
     }
 }
 

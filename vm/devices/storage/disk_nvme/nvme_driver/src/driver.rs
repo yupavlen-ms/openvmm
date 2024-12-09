@@ -65,7 +65,7 @@ pub struct NvmeDriver<T: DeviceBacking> {
     rescan_event: Arc<event_listener::Event>,
     /// NVMe namespaces associated with this driver.
     #[inspect(skip)]
-    namespaces: Vec<Namespace>,
+    namespaces: Vec<Arc<Namespace>>,
     /// Keeps the controller connected (CC.EN==1) while servicing.
     nvme_keepalive: bool,
 }
@@ -472,18 +472,18 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     }
 
     /// Gets the namespace with namespace ID `nsid`.
-    pub async fn namespace(&mut self, nsid: u32) -> Result<Namespace, NamespaceError> {
+    pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
         Ok(match self.namespaces
             .iter()
             .position(|n| n.nsid().eq(&nsid)) {
             Some(n) => {
                 // TODO: Check if we will process Namespace Change AEN instead.
                 tracing::info!("YSP: EXISTING namespace {} for {}", nsid, &self.device_id);
-                self.namespaces.swap_remove(n)
+                self.namespaces[n].clone()
             },
             None => {
                 tracing::info!("YSP: QUERY namespace {} for {}", nsid, &self.device_id);
-                Namespace::new(
+                let ns = Arc::new(Namespace::new(
                     &self.driver,
                     self.admin.as_ref().unwrap().clone(),
                     self.rescan_event.clone(),
@@ -491,7 +491,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     &self.io_issuers,
                     nsid,
                 )
-                .await?
+                .await?);
+                self.namespaces.push(ns.clone());
+                ns
             }
         })
     }
@@ -675,14 +677,14 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             // TODO: Current approach is to re-query namespace data after servicing
             // and this array will be empty. Once we confirm that we can process
             // namespace change notification AEN, the restore code will be re-added.
-            this.namespaces.push(Namespace::restore(
+            this.namespaces.push(Arc::new(Namespace::restore(
                 &driver,
                 admin.issuer().clone(),
                 this.rescan_event.clone(),
                 this.identify.clone().unwrap(),
                 &this.io_issuers,
                 ns,
-            )?);
+            )?));
         }
 
         task.insert(&this.driver, "nvme_worker", state);
