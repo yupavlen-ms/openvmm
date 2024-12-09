@@ -105,6 +105,7 @@ impl<T: DeviceRegisterIo + Inspect> Bar0<T> {
 
     #[instrument(skip_all)]
     pub async fn reset(&self, driver: &dyn Driver) -> bool {
+        tracing::info!("YSP: still resetting");
         let cc = self.cc().with_en(false);
         self.set_cc(cc);
         let mut backoff = Backoff::new(driver);

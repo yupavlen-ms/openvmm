@@ -158,9 +158,11 @@ pub struct FixedPool {
 
 impl FixedPool {
     /// Create a fixed pool allocator, with the specified memory.
+    // YSP: FIXME: See if we need MemoryRangeWithNode?
     pub fn new(fixed_pool: &[MemoryRange]) -> anyhow::Result<Self> {
         let mut pages = Vec::new();
         for range in fixed_pool {
+            tracing::info!("YSP: FixedPool::new pfn={:X} len={}", range.start() / HV_PAGE_SIZE, range.len());
             pages.push(State::Free {
                 base_pfn: range.start() / HV_PAGE_SIZE,
                 size_pages: range.len() / HV_PAGE_SIZE,
@@ -194,6 +196,7 @@ impl FixedPool {
                 tag: id,
             } = e
             {
+                tracing::info!("YSP: saving memblock pfn {} len {}", *base, *len);
                 mem_pool.push(MemPoolState {
                     base_pfn: *base,
                     size_pages: *len,
@@ -205,6 +208,7 @@ impl FixedPool {
                 size_pages: len,
             } = e
             {
+                tracing::info!("YSP: saving FREE memblock pfn {} len {}", *base, *len);
                 mem_pool.push(MemPoolState {
                     base_pfn: *base,
                     size_pages: *len,
@@ -233,12 +237,14 @@ impl FixedPool {
             for range in fixed_pool {
                 if range.contains(&linear) {
                     if chunk.allocated {
+                        tracing::info!("YSP: restoring memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
                         pages.push(State::Restored {
                             base_pfn: chunk.base_pfn,
                             size_pages: chunk.size_pages,
                             tag: chunk.tag.clone(),
                         });
                     } else {
+                        tracing::info!("YSP: restoring FREE memblock pfn {} len {}", chunk.base_pfn, chunk.size_pages);
                         pages.push(State::Free {
                             base_pfn: chunk.base_pfn,
                             size_pages: chunk.size_pages,
@@ -263,8 +269,10 @@ impl FixedPool {
             .count();
 
         if leaked_blocks > 0 {
+            tracing::info!("YSP: validate FAIL count={}", leaked_blocks);
             return Err(FixedPoolIntegrity { leaked_blocks });
         }
+        tracing::info!("YSP: validate SUCCESS");
 
         Ok(())
     }
@@ -368,6 +376,7 @@ impl FixedPoolAllocator {
                 unreachable!()
             }
         };
+        tracing::info!("YSP: FixedPoolAllocator::alloc'd {:X} pages={} index={}", base_pfn, size_pages, index);
 
         Ok(FixedPoolHandle {
             inner: self.inner.clone(),
@@ -404,12 +413,14 @@ impl FixedPoolAllocator {
                 tag: tag.clone(),
             })?;
 
+        tracing::info!("YSP: Found matching chunk index={} for pfn={:X} size={}", index, req_pfn, req_pages);
         match inner.state.swap_remove(index) {
             State::Restored {
                 base_pfn: _,
                 size_pages: _,
                 tag: _,
             } => {
+                tracing::info!("YSP: yehaaaw");
                 // Push the requested block to the collection.
                 inner.state.push(State::Confirmed {
                     base_pfn: req_pfn,
@@ -424,6 +435,7 @@ impl FixedPoolAllocator {
                 })
             }
             State::Free { .. } | State::Allocated { .. } | State::Confirmed { .. } => {
+                tracing::info!("YSP: oopsie");
                 Err(FixedPoolNoMatchingChunk {
                     pfn: req_pfn,
                     size: req_pages,
@@ -438,6 +450,7 @@ impl FixedPoolAllocator {
 impl VfioDmaBuffer for FixedPoolAllocator {
     /// Create new DMA buffer in heap memory.
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: FixedPoolAllocator::create_dma_buffer size={}", len);
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }
@@ -457,6 +470,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
         let mapping = sparse_mmap::SparseMapping::new(len).context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
+        tracing::info!("YSP: fixed buff pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
         // No need to set bit 63 because this buffer is visible to VTL2 only.
         mapping
@@ -466,6 +480,20 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         mapping.fill_at(0, 0, len)?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
+        // YSP: FIXME: Debug code
+        let mut checker: [u8; 8] = [0; 8];
+        mapping.read_at(0, checker.as_mut_slice())?;
+        tracing::info!(
+            "YSP: read [{} {} {} {} {} {} {} {}]",
+            checker[0],
+            checker[1],
+            checker[2],
+            checker[3],
+            checker[4],
+            checker[5],
+            checker[6],
+            checker[7],
+        );
 
         Ok(MemoryBlock::new(FixedDmaBuffer {
             mapping,
@@ -476,6 +504,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
 
     /// Restore DMA buffer at the same location after servicing.
     fn restore_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT FixedPoolAllocator::restore_dma_buffer len={} pfn [{:X}]", len, base_pfn);
         if len == 0 {
             anyhow::bail!("allocation of size 0 not supported");
         }
@@ -496,6 +525,7 @@ impl VfioDmaBuffer for FixedPoolAllocator {
         let gpa_fd = hcl::ioctl::MshvVtlLow::new().context("failed to open gpa fd")?;
         let mapping = sparse_mmap::SparseMapping::new(len).context("failed to create mapping")?;
         let gpa = alloc.base_pfn() * HV_PAGE_SIZE;
+        tracing::info!("YSP: restored pfn {:X} gpa {:X}", alloc.base_pfn(), gpa);
 
         // No need to set bit 63 because this buffer is visible to VTL2 only.
         mapping
@@ -503,6 +533,20 @@ impl VfioDmaBuffer for FixedPoolAllocator {
             .context("unable to map allocation")?;
 
         let pfns: Vec<_> = (alloc.base_pfn()..alloc.base_pfn() + alloc.size_pages).collect();
+        // YSP: FIXME: Debug code
+        let mut checker: [u8; 8] = [0; 8];
+        mapping.read_at(0, checker.as_mut_slice())?;
+        tracing::info!(
+            "YSP: read [{} {} {} {} {} {} {} {}]",
+            checker[0],
+            checker[1],
+            checker[2],
+            checker[3],
+            checker[4],
+            checker[5],
+            checker[6],
+            checker[7],
+        );
 
         Ok(MemoryBlock::new(FixedDmaBuffer {
             mapping,
@@ -512,12 +556,15 @@ impl VfioDmaBuffer for FixedPoolAllocator {
     }
 }
 
+#[cfg(feature = "vfio")]
 impl HostDmaAllocator for FixedPoolAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT allocate_dma_buffer {}", len);
         self.create_dma_buffer(len)
     }
 
     fn attach_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: CORRECT attach_dma_buffer len={} pfn[0]={:X}", len, base_pfn);
         self.restore_dma_buffer(len, base_pfn)
     }
 }
@@ -554,9 +601,11 @@ pub mod save_restore {
     }
 }
 
+// YSP: rewrite
 #[cfg(test)]
 mod test {
     use super::*;
+    use test_with_tracing::test;
 
     #[test]
     fn test_fixed_alloc() {
@@ -585,5 +634,55 @@ mod test {
 
         let inner = alloc.inner.lock();
         assert_eq!(inner.state.len(), 2);
+    }
+
+    #[test]
+    fn test_fixed_restore() {
+        // Prepare the pool.
+        let mem_range_vec = vec![
+            MemoryRange::from_4k_gpn_range(std::ops::Range {start: 10, end: 90,}),
+        ];
+        let pool = FixedPool::new(&mem_range_vec.as_slice()).unwrap();
+        let alloc = pool.allocator();
+
+        // Allocate some block(s) as a baseline.
+        let r1 = alloc
+            .alloc(
+                13.try_into().unwrap(),
+                "restore1".into(),
+            )
+            .unwrap();
+        assert_eq!(r1.base_pfn, 10);
+        assert_eq!(r1.size_pages, 13);
+
+        let r2 = alloc
+            .alloc(
+                30.try_into().unwrap(),
+                "restore2".into(),
+            )
+            .unwrap();
+        assert_eq!(r2.base_pfn, 23);
+        assert_eq!(r2.size_pages, 30);
+
+        // Save pool state into a datastore.
+        let st = pool.save().unwrap();
+        tracing::info!("YSP: SAVED!!!");
+        assert_eq!(st.mem_pool.len(), 3);
+        drop(r2);
+        drop(r1);
+        drop(pool);
+
+        // Create another pool.
+        let pool = FixedPool::restore(&mem_range_vec.as_slice(), st).unwrap();
+
+        // Allocate another chunk on top of restored ones.
+        let r3 = alloc
+            .alloc(
+                25.try_into().unwrap(),
+                "restore3".into(),
+            )
+            .unwrap();
+        assert_eq!(r3.base_pfn, 53);
+        assert_eq!(r3.size_pages, 25);
     }
 }

@@ -10,7 +10,7 @@
 #![allow(unsafe_code)]
 
 mod arch;
-mod boot_logger;
+pub mod boot_logger;
 mod cmdline;
 mod dt;
 mod host_params;
@@ -336,9 +336,17 @@ fn reserved_memory_regions(
             ReservedMemoryType::Vtl2Reserved,
         ));
     }
+
+    // YSP: FIXME: Debug
+    for ra in &partition_info.vtl2_ram {
+        log!("YSP: vtl2_ram {:X}-{:X}", ra.range.start(), ra.range.end());
+    }
+
     let dma_4k_pages = partition_info.preserve_dma_4k_pages.unwrap_or(0);
+    log!("YSP: let_my_people_go {}", dma_4k_pages);
     // If DMA reserved hint was provided by Host, allocate top of VTL2 memory range
     // for that purpose.
+    // TODO: NUMAs.
     if !partition_info.vtl2_ram.is_empty() && (dma_4k_pages > 0) {
         let last_mem_entry = &partition_info.vtl2_ram[partition_info.vtl2_ram.len() - 1];
         if last_mem_entry.range.page_count_4k() > dma_4k_pages {
@@ -367,6 +375,7 @@ fn reserved_memory_regions(
 
 #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 mod x86_boot {
+    use crate::boot_logger::log;
     use crate::host_params::PartitionInfo;
     use crate::single_threaded::off_stack;
     use crate::single_threaded::OffStackRef;
@@ -437,6 +446,7 @@ mod x86_boot {
                 RangeWalkResult::Neither => {}
                 RangeWalkResult::Left(_) => {
                     add_e820_entry(entries.next(), range, E820_RAM)?;
+                    log!("YSP: added E820_RAM {:X} {}", range.start(), range.len());
                     n += 1;
                 }
                 RangeWalkResult::Right(_) => {
@@ -444,6 +454,7 @@ mod x86_boot {
                 }
                 RangeWalkResult::Both(_, _) => {
                     add_e820_entry(entries.next(), range, E820_RESERVED)?;
+                    log!("YSP: added E820_RESERVED {:X} {}", range.start(), range.len());
                     n += 1;
                 }
             }

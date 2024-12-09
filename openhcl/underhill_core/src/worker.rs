@@ -1448,6 +1448,7 @@ async fn new_underhill_vm(
         use_mmio_hypercalls,
         intercept_debug_exceptions: env_cfg.gdbstub,
         hide_isolation,
+        dma_pages_pool: None,
     };
 
     let proto_partition = UhProtoPartition::new(params, |cpu| tp.driver(cpu).clone())
@@ -1807,7 +1808,10 @@ async fn new_underhill_vm(
     // TODO: FixedPool will be replaced with PagePool in subsequent change.
     let fixed_mem_pool = if !runtime_params.dma_preserve_memory_map().is_empty() {
         let pools = runtime_params.dma_preserve_memory_map();
-        Some(FixedPool::new(pools)?)
+        match servicing_state.mem_pool_state.flatten() {
+            Some(dma) => Some(FixedPool::restore(pools, dma)?),
+            None => Some(FixedPool::new(pools)?),
+        }
     } else {
         None
     };

@@ -28,6 +28,7 @@ pub struct NvmeDisk {
 
 impl NvmeDisk {
     pub fn new(namespace: nvme_driver::Namespace) -> Self {
+        tracing::info!("YSP: NvmeDisk::new nsid={}", namespace.nsid());
         Self {
             block_shift: namespace.block_size().trailing_zeros(),
             namespace,

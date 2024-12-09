@@ -17,6 +17,7 @@ inspect.workspace = true
 pal.workspace = true
 
 async-trait.workspace = true
+tracing.workspace = true
 
 [target.'cfg(target_os = "linux")'.dev-dependencies]
 

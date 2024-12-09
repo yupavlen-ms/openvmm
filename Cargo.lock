@@ -1244,6 +1244,7 @@ dependencies = [
  "nvme_spec",
  "pal",
  "scsi_buffers",
+ "tracing",
 ]
 
 [[package]]
@@ -1626,7 +1627,9 @@ dependencies = [
  "mesh",
  "parking_lot",
  "sparse_mmap",
+ "test_with_tracing",
  "thiserror 2.0.0",
+ "tracing",
  "user_driver",
 ]
 
@@ -7337,6 +7340,7 @@ dependencies = [
  "bitvec",
  "build_rs_guest_arch",
  "cfg-if",
+ "fixed_pool_alloc",
  "fs-err",
  "guestmem",
  "hcl",
