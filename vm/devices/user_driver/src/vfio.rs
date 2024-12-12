@@ -80,6 +80,7 @@ impl VfioDevice {
         pci_id: &str,
         dma_buffer: Arc<dyn VfioDmaBuffer>,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: VfioDevice::new {}", pci_id);
         Self::restore(driver_source, pci_id, dma_buffer, false).await
     }
 
@@ -91,6 +92,9 @@ impl VfioDevice {
         dma_buffer: Arc<dyn VfioDmaBuffer>,
         keepalive: bool,
     ) -> anyhow::Result<Self> {
+        if keepalive {
+            tracing::info!("YSP: VfioDevice::restore {}", pci_id);
+        }
         let path = Path::new("/sys/bus/pci/devices").join(pci_id);
 
         // The vfio device attaches asynchronously after the PCI device is added,
@@ -118,6 +122,7 @@ impl VfioDevice {
         if keepalive {
             // Prevent physical hardware interaction when restoring.
             group.set_keep_alive(pci_id)?;
+            tracing::info!("YSP: VFIO: keep-alive was set {}", pci_id);
         }
         let device = group.open_device(pci_id)?;
         let msix_info = device.irq_info(vfio_bindings::bindings::vfio::VFIO_PCI_MSIX_IRQ_INDEX)?;
@@ -184,6 +189,7 @@ impl DeviceBacking for VfioDevice {
     }
 
     fn host_allocator(&self) -> Self::DmaAllocator {
+        tracing::info!("YSP: host_allocator A");
         LockedMemoryAllocator {
             dma_buffer: self.dma_buffer.clone(),
         }
@@ -194,6 +200,7 @@ impl DeviceBacking for VfioDevice {
     }
 
     fn map_interrupt(&mut self, msix: u32, cpu: u32) -> anyhow::Result<DeviceInterrupt> {
+        tracing::info!("YSP: map_interrupt {} to cpu {}", msix, cpu);
         if msix >= self.msix_info.count {
             anyhow::bail!("invalid msix index");
         }
@@ -468,10 +475,12 @@ pub struct LockedMemoryAllocator {
 
 impl HostDmaAllocator for LockedMemoryAllocator {
     fn allocate_dma_buffer(&self, len: usize) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG allocate_dma_buffer {}", len);
         self.dma_buffer.create_dma_buffer(len)
     }
 
     fn attach_dma_buffer(&self, len: usize, base_pfn: u64) -> anyhow::Result<MemoryBlock> {
+        tracing::info!("YSP: WRONG attach_dma_buffer len={} pfn[0]={:X}", len, base_pfn);
         self.dma_buffer.restore_dma_buffer(len, base_pfn)
     }
 }

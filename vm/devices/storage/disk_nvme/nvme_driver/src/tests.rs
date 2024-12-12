@@ -220,9 +220,8 @@ async fn test_nvme_save_restore_inner(driver: DefaultDriver) {
     // Wait for CSTS.RDY to set.
     backoff.back_off().await;
 
-    let _new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, new_emu_mem);
-    // TODO: Memory restore is disabled for emulated DMA, uncomment once fixed.
-    // let _new_nvme_driver = NvmeDriver::restore(&driver_source, CPU_COUNT, new_device, &saved_state)
-    //     .await
-    //     .unwrap();
+    let new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, new_emu_mem);
+    let _new_nvme_driver = NvmeDriver::restore(&driver_source, CPU_COUNT, new_device, &saved_state)
+        .await
+        .unwrap();
 }

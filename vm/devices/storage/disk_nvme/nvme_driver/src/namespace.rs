@@ -78,6 +78,7 @@ impl Namespace {
         io_issuers: &Arc<IoIssuers>,
         nsid: u32,
     ) -> Result<Self, NamespaceError> {
+        tracing::info!("YSP: Namespace::new {}", nsid);
         let identify = identify_namespace(&admin, nsid)
             .await
             .map_err(NamespaceError::Request)?;
@@ -106,6 +107,7 @@ impl Namespace {
         if identify.nsze == 0 {
             return Err(NamespaceError::NotFound);
         }
+        tracing::info!("YSP: identify nsze={} ncap={}", identify.nsze, identify.ncap);
 
         let lba_format_index = identify.flbas.low_index();
         if lba_format_index > identify.nlbaf {
@@ -522,17 +524,12 @@ impl Namespace {
     }
 
     /// Save namespace object data for servicing.
-    /// Initially we will re-query namespace state after restore
-    /// to avoid possible contention if namespace was changed
-    /// during servicing.
-    /// TODO: Re-enable namespace save/restore once we confirm
-    /// that we can process namespace change AEN.
-    #[allow(dead_code)]
-    pub fn save(&self) -> anyhow::Result<SavedNamespaceData> {
-        Ok(SavedNamespaceData {
+    pub fn save(&self) -> SavedNamespaceData {
+        tracing::info!("YSP: Namespace::save nsid={}", self.nsid);
+        SavedNamespaceData {
             nsid: self.nsid,
             identify_ns: self.state.identify.lock().clone(),
-        })
+        }
     }
 
     /// Restore namespace object data after servicing.
@@ -544,6 +541,7 @@ impl Namespace {
         io_issuers: &Arc<IoIssuers>,
         saved_state: &SavedNamespaceData,
     ) -> Result<Self, NamespaceError> {
+        tracing::info!("YSP: Namespace::restore nsid={}", saved_state.nsid);
         let SavedNamespaceData { nsid, identify_ns } = saved_state;
 
         Namespace::new_from_identify(

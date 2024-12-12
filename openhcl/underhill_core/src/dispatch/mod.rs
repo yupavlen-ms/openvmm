@@ -349,6 +349,7 @@ impl LoadedVm {
                     }
                 },
                 Event::ServicingRequest(message) => {
+                    tracing::info!("YSP: ServicingRequest");
                     // Explicitly destructure the message for easier tracking of its changes.
                     let GuestSaveRequest {
                         correlation_id,
@@ -377,6 +378,7 @@ impl LoadedVm {
                     }
                 }
                 Event::ShutdownRequest(rpc) => {
+                    tracing::info!("YSP: ShutdownRequest");
                     rpc.handle(|msg| async {
                         if matches!(msg.shutdown_type, ShutdownType::Hibernate) {
                             self.handle_hibernate_request(false).await;
@@ -432,6 +434,7 @@ impl LoadedVm {
         deadline: std::time::Instant,
         capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<bool> {
+        tracing::info!("YSP: capabilities_flags: {}", capabilities_flags.disable_nvme_keepalive());
         let running = self.state_units.is_running();
         let success = match self
             .handle_servicing_inner(correlation_id, deadline, capabilities_flags)
@@ -477,6 +480,7 @@ impl LoadedVm {
         // capabilities_flags used to explicitly disable the feature
         // which is enabled by default.
         let nvme_keepalive = !capabilities_flags.disable_nvme_keepalive();
+        tracing::info!("YSP: handle_servicing_inner override --> {}", capabilities_flags.disable_nvme_keepalive());
 
         // Do everything before the log flush under a span.
         let mut state = async {
