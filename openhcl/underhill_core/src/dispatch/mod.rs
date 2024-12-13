@@ -436,7 +436,6 @@ impl LoadedVm {
         deadline: std::time::Instant,
         capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<bool> {
-        tracing::info!("YSP: capabilities_flags: {}", capabilities_flags.disable_nvme_keepalive());
         let running = self.state_units.is_running();
         let success = match self
             .handle_servicing_inner(correlation_id, deadline, capabilities_flags)
