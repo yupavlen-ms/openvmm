@@ -472,7 +472,7 @@ impl LoadedVm {
         &mut self,
         correlation_id: Guid,
         deadline: std::time::Instant,
-        _capabilities_flags: SaveGuestVtl2StateFlags,
+        capabilities_flags: SaveGuestVtl2StateFlags,
     ) -> anyhow::Result<ServicingState> {
         if self.isolation.is_isolated() {
             anyhow::bail!("Servicing is not yet supported for isolated VMs");
@@ -480,7 +480,7 @@ impl LoadedVm {
 
         // NOTE: This is set via the corresponding env arg, as this feature is
         // experimental.
-        let nvme_keepalive = self.nvme_keep_alive;
+        let nvme_keepalive = self.nvme_keep_alive && capabilities_flags.enable_nvme_keepalive();
         tracing::info!("YSP: handle_servicing_inner override --> {}", nvme_keepalive);
 
         // Do everything before the log flush under a span.
