@@ -160,8 +160,6 @@ fn build_kernel_command_line(
         "rdinit=/underhill-init",
         // Default to user-mode NVMe driver.
         "OPENHCL_NVME_VFIO=1",
-        // Enable NVMe keep-alive feature.
-        "OPENHCL_NVME_KEEP_ALIVE=1",
         // The next three items reduce the memory overhead of the storvsc driver.
         // Since it is only used for DVD, performance is not critical.
         "hv_storvsc.storvsc_vcpus_per_sub_channel=2048",
@@ -225,6 +223,11 @@ fn build_kernel_command_line(
             "{}=1 ",
             underhill_confidentiality::OPENHCL_CONFIDENTIAL_ENV_VAR_NAME
         )?;
+    }
+
+    // Only when explicitly supported by Host.
+    if partition_info.nvme_keepalive {
+        write!(cmdline, "OPENHCL_NVME_KEEP_ALIVE=1 ")?;
     }
 
     if let Some(sidecar) = sidecar {
