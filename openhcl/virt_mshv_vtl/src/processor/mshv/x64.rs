@@ -124,6 +124,7 @@ struct ProcessorStatsX86 {
 impl BackingPrivate for HypervisorBackedX86 {
     type HclBacking = MshvX64;
     type Shared = ();
+    type EmulationCache = ();
 
     fn shared(_: &BackingShared) -> &Self::Shared {
         &()
