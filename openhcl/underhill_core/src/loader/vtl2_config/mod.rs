@@ -178,10 +178,6 @@ impl Drop for Vtl2ParamsMap<'_> {
 /// Reads the VTL 2 parameters from the config region and VTL2 reserved region.
 pub fn read_vtl2_params() -> anyhow::Result<(RuntimeParameters, MeasuredVtl2Info)> {
     let parsed_openhcl_boot = ParsedBootDtInfo::new().context("failed to parse openhcl_boot dt")?;
-    tracing::info!("YSP: read_vtl2_params");
-    for zzz in &parsed_openhcl_boot.vtl2_memory {
-        tracing::info!("YSP: mem {:X}-{:X}", zzz.range.start(), zzz.range.end());
-    }
 
     let mapping = Vtl2ParamsMap::new(&parsed_openhcl_boot.config_ranges, true)
         .context("failed to map igvm parameters")?;

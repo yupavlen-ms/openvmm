@@ -226,7 +226,7 @@ fn build_kernel_command_line(
     }
 
     // Only when explicitly supported by Host.
-    if partition_info.nvme_keepalive {
+    if partition_info.nvme_keepalive && !partition_info.vtl2_pool_memory.is_empty() {
         write!(cmdline, "OPENHCL_NVME_KEEP_ALIVE=1 ")?;
     }
 
@@ -370,7 +370,6 @@ fn reserved_memory_regions(
 
 #[cfg_attr(not(target_arch = "x86_64"), allow(dead_code))]
 mod x86_boot {
-    use crate::boot_logger::log;
     use crate::host_params::PartitionInfo;
     use crate::single_threaded::off_stack;
     use crate::single_threaded::OffStackRef;
@@ -441,7 +440,6 @@ mod x86_boot {
                 RangeWalkResult::Neither => {}
                 RangeWalkResult::Left(_) => {
                     add_e820_entry(entries.next(), range, E820_RAM)?;
-                    log!("YSP: added E820_RAM {:X} {}", range.start(), range.len());
                     n += 1;
                 }
                 RangeWalkResult::Right(_) => {
@@ -449,7 +447,6 @@ mod x86_boot {
                 }
                 RangeWalkResult::Both(_, _) => {
                     add_e820_entry(entries.next(), range, E820_RESERVED)?;
-                    log!("YSP: added E820_RESERVED {:X} {}", range.start(), range.len());
                     n += 1;
                 }
             }
@@ -918,6 +915,7 @@ mod test {
             memory_allocation_mode: host_fdt_parser::MemoryAllocationMode::Host,
             entropy: None,
             vtl0_alias_map: None,
+            nvme_keepalive: false,
         }
     }
 
