@@ -221,10 +221,6 @@ impl HardwareIsolatedBacking for SnpBacked {
             ),
         }
     }
-
-    fn pat(&self, this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> u64 {
-        this.runner.vmsa(vtl).pat()
-    }
 }
 
 /// Partition-wide shared data for SNP VPs.
@@ -328,10 +324,9 @@ impl BackingPrivate for SnpBacked {
                 .set_xcr(&xcr0)
                 .expect("Resetting to architectural state should succeed");
 
-            let cache_control =
-                vp::CacheControl::at_reset(&this.partition.caps, &this.inner.vp_info);
+            let cache_control = vp::Mtrrs::at_reset(&this.partition.caps, &this.inner.vp_info);
             this.access_state(vtl.into())
-                .set_cache_control(&cache_control)
+                .set_mtrrs(&cache_control)
                 .expect("Resetting to architectural state should succeed");
         };
 
@@ -1893,24 +1888,26 @@ impl AccessVpState for UhVpStateAccess<'_, '_, SnpBacked> {
         Ok(())
     }
 
-    fn cache_control(&mut self) -> Result<vp::CacheControl, Self::Error> {
-        let vmsa = self.vp.runner.vmsa(self.vtl);
-        Ok(vp::CacheControl {
-            msr_cr_pat: vmsa.pat(),
+    fn mtrrs(&mut self) -> Result<vp::Mtrrs, Self::Error> {
+        Ok(vp::Mtrrs {
             msr_mtrr_def_type: 0,
             fixed: [0; 11],
             variable: [0; 16],
         })
     }
 
-    fn set_cache_control(&mut self, value: &vp::CacheControl) -> Result<(), Self::Error> {
-        let vp::CacheControl {
-            msr_cr_pat,
-            msr_mtrr_def_type: _,
-            fixed: _,
-            variable: _,
-        } = *value;
-        self.vp.runner.vmsa_mut(self.vtl).set_pat(msr_cr_pat);
+    fn set_mtrrs(&mut self, _value: &vp::Mtrrs) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    fn pat(&mut self) -> Result<vp::Pat, Self::Error> {
+        let vmsa = self.vp.runner.vmsa(self.vtl);
+        Ok(vp::Pat { value: vmsa.pat() })
+    }
+
+    fn set_pat(&mut self, value: &vp::Pat) -> Result<(), Self::Error> {
+        let vp::Pat { value } = *value;
+        self.vp.runner.vmsa_mut(self.vtl).set_pat(value);
         Ok(())
     }
 

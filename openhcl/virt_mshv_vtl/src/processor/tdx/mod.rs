@@ -503,10 +503,6 @@ impl HardwareIsolatedBacking for TdxBacked {
             ),
         }
     }
-
-    fn pat(&self, this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> u64 {
-        this.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_PAT)
-    }
 }
 
 /// Partition-wide shared data for TDX VPs.
@@ -2898,32 +2894,33 @@ impl AccessVpState for UhVpStateAccess<'_, '_, TdxBacked> {
         Err(vp_state::Error::Unimplemented("xss"))
     }
 
-    fn cache_control(&mut self) -> Result<vp::CacheControl, Self::Error> {
-        let msr_cr_pat = self
-            .vp
-            .runner
-            .read_vmcs64(GuestVtl::Vtl0, VmcsField::VMX_VMCS_GUEST_PAT);
-        Ok(vp::CacheControl {
-            msr_cr_pat,
+    fn mtrrs(&mut self) -> Result<vp::Mtrrs, Self::Error> {
+        Ok(vp::Mtrrs {
             msr_mtrr_def_type: 0, // TODO TDX: MTRRs
             fixed: [0; 11],       // TODO TDX: MTRRs
             variable: [0; 16],    // TODO TDX: MTRRs
         })
     }
 
-    fn set_cache_control(&mut self, value: &vp::CacheControl) -> Result<(), Self::Error> {
-        // TODO TDX: SNP only sets PAT, ignores MTRRs?
-        let vp::CacheControl {
-            msr_cr_pat,
-            msr_mtrr_def_type: _,
-            fixed: _,
-            variable: _,
-        } = *value;
+    fn set_mtrrs(&mut self, _value: &vp::Mtrrs) -> Result<(), Self::Error> {
+        // TODO TDX: MTRRs
+        Ok(())
+    }
+
+    fn pat(&mut self) -> Result<vp::Pat, Self::Error> {
+        let msr_cr_pat = self
+            .vp
+            .runner
+            .read_vmcs64(GuestVtl::Vtl0, VmcsField::VMX_VMCS_GUEST_PAT);
+        Ok(vp::Pat { value: msr_cr_pat })
+    }
+
+    fn set_pat(&mut self, value: &vp::Pat) -> Result<(), Self::Error> {
         self.vp.runner.write_vmcs64(
             GuestVtl::Vtl0,
             VmcsField::VMX_VMCS_GUEST_PAT,
             !0,
-            msr_cr_pat,
+            value.value,
         );
         Ok(())
     }
