@@ -10,7 +10,7 @@
 #![allow(unsafe_code)]
 
 mod arch;
-pub mod boot_logger;
+mod boot_logger;
 mod cmdline;
 mod dt;
 mod host_params;
