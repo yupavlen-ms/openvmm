@@ -777,7 +777,9 @@ type EncodeFn = unsafe fn(MessagePtr) -> Message;
 #[derive(Protobuf)]
 #[mesh(bound = "T: MeshField", resource = "mesh_node::resource::Resource")]
 enum ChannelPayload<T> {
+    #[mesh(transparent)]
     Message(T),
+    #[mesh(transparent)]
     Port(Port),
 }
 
