@@ -5,6 +5,7 @@
 
 use super::spec;
 use crate::driver::save_restore::IoQueueSavedState;
+use crate::driver::save_restore::SavedNamespaceData;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
 use crate::queue_pair::QueuePair;
@@ -476,16 +477,27 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     }
 
     /// Gets the namespace with namespace ID `nsid`.
-    pub async fn namespace(&self, nsid: u32) -> Result<Namespace, NamespaceError> {
-        Namespace::new(
-            &self.driver,
-            self.admin.as_ref().unwrap().clone(),
-            self.rescan_event.clone(),
-            self.identify.clone().unwrap(),
-            &self.io_issuers,
-            nsid,
-        )
-        .await
+    pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
+        Ok(match self.namespaces
+            .iter()
+            .position(|n| n.nsid().eq(&nsid)) {
+            Some(n) => {
+                self.namespaces[n].clone()
+            },
+            None => {
+                let ns = Arc::new(Namespace::new(
+                    &self.driver,
+                    self.admin.as_ref().unwrap().clone(),
+                    self.rescan_event.clone(),
+                    self.identify.clone().unwrap(),
+                    &self.io_issuers,
+                    nsid,
+                )
+                .await?);
+                self.namespaces.push(ns.clone());
+                ns
+            }
+        })
     }
 
     /// Returns the number of CPUs that are in fallback mode (that are using a
@@ -526,8 +538,12 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     )
                     .unwrap(),
                     device_id: self.device_id.clone(),
-                    // TODO: See the description above, save the vector once resolved.
-                    namespaces: vec![],
+                    namespaces: self.namespaces
+                        .iter()
+                        .map(|n| -> SavedNamespaceData {
+                            n.save()
+                        })
+                        .collect::<Vec<SavedNamespaceData>>(),
                     worker_data: s,
                 })
             }
