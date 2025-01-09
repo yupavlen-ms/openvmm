@@ -93,6 +93,7 @@ impl NvmeManager {
         save_restore_supported: bool,
         saved_state: Option<NvmeSavedState>,
     ) -> Self {
+        tracing::info!("YSP: NvmeManager::new save_res_supp={}", save_restore_supported);
         let (send, recv) = mesh::channel();
         let driver = driver_source.simple();
         let mut worker = NvmeManagerWorker {
@@ -130,6 +131,7 @@ impl NvmeManager {
         // TODO: Enable this once tested and approved.
         //
         // if self.nvme_keepalive { return }
+            tracing::info!("YSP: FIXME: NO skip shutdown");
         self.client.sender.send(Request::Shutdown {
             span: tracing::info_span!("shutdown_nvme_manager"),
             nvme_keepalive,
@@ -139,6 +141,7 @@ impl NvmeManager {
 
     /// Save NVMe manager's state during servicing.
     pub async fn save(&self, nvme_keepalive: bool) -> Option<NvmeManagerSavedState> {
+        tracing::info!("YSP: NvmeManager::save supported={} keepalive={}", self.save_restore_supported, nvme_keepalive);
         // NVMe manager has no own data to save, everything will be done
         // in the Worker task which can be contacted through Client.
         if self.save_restore_supported && nvme_keepalive {
@@ -155,6 +158,7 @@ impl NvmeManager {
         worker: &mut NvmeManagerWorker,
         saved_state: &NvmeSavedState,
     ) -> anyhow::Result<()> {
+        tracing::info!("YSP: NvmeManager::restore");
         worker
             .restore(&saved_state.nvme_state)
             .instrument(tracing::info_span!("nvme_worker_restore"))
@@ -167,7 +171,7 @@ impl NvmeManager {
 enum Request {
     Inspect(inspect::Deferred),
     ForceLoadDriver(inspect::DeferredUpdate),
-    GetNamespace(Rpc<(String, u32), Result<nvme_driver::Namespace, NamespaceError>>),
+    GetNamespace(Rpc<(String, u32), Result<Arc<nvme_driver::Namespace>, NamespaceError>>),
     Save(Rpc<(), Result<NvmeManagerSavedState, anyhow::Error>>),
     Shutdown {
         span: tracing::Span,
@@ -185,7 +189,8 @@ impl NvmeManagerClient {
         &self,
         pci_id: String,
         nsid: u32,
-    ) -> anyhow::Result<nvme_driver::Namespace> {
+    ) -> anyhow::Result<Arc<nvme_driver::Namespace>> {
+        tracing::info!("YSP: get_namespace nsid={}", nsid);
         Ok(self
             .sender
             .call(Request::GetNamespace, (pci_id.clone(), nsid))
@@ -196,6 +201,7 @@ impl NvmeManagerClient {
 
     /// Send an RPC call to save NVMe worker data.
     pub async fn save(&self) -> Option<NvmeManagerSavedState> {
+        tracing::info!("YSP: NvmeManagerClient::save");
         match self.sender.call(Request::Save, ()).await {
             Ok(s) => s.ok(),
             Err(_) => None,
@@ -269,7 +275,7 @@ impl NvmeManagerWorker {
 
         // When nvme_keepalive flag is set then this block is unreachable
         // because the Shutdown request is never sent.
-        //
+        tracing::info!("YSP: QUIT save_supp={} keepalive={}", self.save_restore_supported, nvme_keepalive);
         // Tear down all the devices if nvme_keepalive is not set.
         if !nvme_keepalive || !self.save_restore_supported {
             async {
@@ -282,6 +288,9 @@ impl NvmeManagerWorker {
             }
             .instrument(join_span)
             .await;
+            tracing::info!("YSP: vfio nvme shutdown completed");
+        } else {
+            tracing::info!("YSP: skipping vfio nvme shutdown");
         }
     }
 
@@ -290,7 +299,10 @@ impl NvmeManagerWorker {
         pci_id: String,
     ) -> Result<&mut nvme_driver::NvmeDriver<VfioDevice>, InnerError> {
         let driver = match self.devices.entry(pci_id.to_owned()) {
-            hash_map::Entry::Occupied(entry) => entry.into_mut(),
+            hash_map::Entry::Occupied(entry) => {
+                tracing::info!("YSP: existing entry");
+                entry.into_mut()
+            }
             hash_map::Entry::Vacant(entry) => {
                 let device = VfioDevice::new(
                     &self.driver_source,
@@ -321,7 +333,8 @@ impl NvmeManagerWorker {
         &mut self,
         pci_id: String,
         nsid: u32,
-    ) -> Result<nvme_driver::Namespace, InnerError> {
+    ) -> Result<Arc<nvme_driver::Namespace>, InnerError> {
+        tracing::info!("YSP: get_namespace: new nsid={}", nsid);
         let driver = self.get_driver(pci_id.to_owned()).await?;
         driver
             .namespace(nsid)
@@ -331,6 +344,7 @@ impl NvmeManagerWorker {
 
     /// Saves NVMe device's states into buffer during servicing.
     pub async fn save(&mut self) -> anyhow::Result<NvmeManagerSavedState> {
+        tracing::info!("YSP: NvmeManagerWorker::save (vp_count={})", self.vp_count);
         let mut nvme_disks: Vec<NvmeSavedDiskConfig> = Vec::new();
         for (pci_id, driver) in self.devices.iter_mut() {
             nvme_disks.push(NvmeSavedDiskConfig {
@@ -350,9 +364,11 @@ impl NvmeManagerWorker {
 
     /// Restore NVMe manager and device states from the buffer after servicing.
     pub async fn restore(&mut self, saved_state: &NvmeManagerSavedState) -> anyhow::Result<()> {
+        tracing::info!("YSP: NvmeManagerWorker::restore {} disks", &saved_state.nvme_disks.len());
         self.devices = HashMap::new();
         for disk in &saved_state.nvme_disks {
             let pci_id = disk.pci_id.clone();
+            tracing::info!("YSP: restoring nvme disk {}", pci_id);
             let vfio_device =
                 // This code can wait on each VFIO device until it is arrived.
                 // A potential optimization would be to delay VFIO operation
@@ -375,9 +391,11 @@ impl NvmeManagerWorker {
             )
             .instrument(tracing::info_span!("nvme_driver_restore"))
             .await?;
+            tracing::info!("YSP: after NvmeDriver::restore");
 
             self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
+        tracing::info!("YSP: NvmeManagerWorker::restore - done");
         Ok(())
     }
 }
@@ -388,6 +406,7 @@ pub struct NvmeDiskResolver {
 
 impl NvmeDiskResolver {
     pub fn new(manager: NvmeManagerClient) -> Self {
+        tracing::info!("YSP: NvmeDiskResolver::new");
         Self { manager }
     }
 }
@@ -403,13 +422,15 @@ impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
         rsrc: NvmeDiskConfig,
         _input: ResolveDiskParameters<'_>,
     ) -> Result<Self::Output, Self::Error> {
+        tracing::info!("YSP: NvmeDiskResolver::resolve nsid={} pci_id={}", rsrc.nsid, &rsrc.pci_id.clone());
         let namespace = self
             .manager
             .get_namespace(rsrc.pci_id, rsrc.nsid)
             .await
             .context("could not open nvme namespace")?;
 
-        Ok(ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace)).context("invalid disk")?)
+        // YSP: FIXME: This is why we need Arc<Namespace>, otherwise the object is gone.
+        Ok(ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone())).context("invalid disk")?)
     }
 }
 

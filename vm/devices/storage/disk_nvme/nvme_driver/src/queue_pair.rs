@@ -128,6 +128,7 @@ impl PendingCommands {
                 command: cmd.command,
             })
             .collect();
+        tracing::info!("YSP: PendingCommands::save len={}", commands.len());
         PendingCommandsSavedState {
             commands,
             next_cid_high_bits: self.next_cid_high_bits.0,
@@ -144,6 +145,7 @@ impl PendingCommands {
             cid_key_bits: _, // TODO: For future use.
         } = saved_state;
 
+        tracing::info!("YSP: PendingCommands::restore len={}", saved_state.commands.len());
         Ok(Self {
             // Re-create identical Slab where CIDs are correctly mapped.
             commands: commands
@@ -182,6 +184,7 @@ impl QueuePair {
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: QueuePair::new qid={}", qid);
         let total_size =
             QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::PER_QUEUE_PAGES * PAGE_SIZE;
         let mem = device
@@ -248,6 +251,20 @@ impl QueuePair {
         );
         let alloc: PageAllocator =
             PageAllocator::new(mem.subblock(data_offset, QueuePair::PER_QUEUE_PAGES * PAGE_SIZE));
+        // YSP: FIXME: Debug code
+        let mut checker: [u8; 8] = [0; 8];
+        mem.read_at(0, checker.as_mut_slice());
+        tracing::info!(
+            "YSP: read [{} {} {} {} {} {} {} {}]",
+            checker[0],
+            checker[1],
+            checker[2],
+            checker[3],
+            checker[4],
+            checker[5],
+            checker[6],
+            checker[7],
+        );
 
         Ok(Self {
             task,
@@ -279,6 +296,7 @@ impl QueuePair {
 
     /// Save queue pair state for servicing.
     pub async fn save(&self) -> anyhow::Result<QueuePairSavedState> {
+        tracing::info!("YSP: QueuePair::save sq={:X} cq={:X}", self.sq_addr(), self.cq_addr());
         // Return error if the queue does not have any memory allocated.
         if self.mem.pfns().is_empty() {
             return Err(Error::InvalidState.into());
@@ -305,6 +323,7 @@ impl QueuePair {
         mem: MemoryBlock,
         saved_state: &QueuePairSavedState,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: QueuePair::restore qid={}", saved_state.qid);
         let QueuePairSavedState {
             mem_len: _,  // Used to restore DMA buffer before calling this.
             base_pfn: _, // Used to restore DMA buffer before calling this.
@@ -681,10 +700,12 @@ impl QueueHandler {
                 }
             }
         }
+        tracing::info!("YSP: quit queue loop");
     }
 
     /// Save queue data for servicing.
     pub async fn save(&self) -> anyhow::Result<QueueHandlerSavedState> {
+        tracing::info!("YSP: QueueHandler::save qid={}/{}", self.sq.id(), self.cq._id());
         // The data is collected from both QueuePair and QueueHandler.
         Ok(QueueHandlerSavedState {
             sq_state: self.sq.save(),
@@ -699,6 +720,7 @@ impl QueueHandler {
         cq_mem_block: MemoryBlock,
         saved_state: &QueueHandlerSavedState,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: QueueHandler::restore qid={}/{}", saved_state.sq_state.sqid, saved_state.cq_state.cqid);
         let QueueHandlerSavedState {
             sq_state,
             cq_state,

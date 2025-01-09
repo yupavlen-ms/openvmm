@@ -108,6 +108,7 @@ unsafe impl Sync for MemoryBlock {}
 impl MemoryBlock {
     /// Creates a new memory block backed by `mem`.
     pub fn new<T: 'static + MappedDmaTarget>(mem: T) -> Self {
+        tracing::info!("YSP: MemoryBlock::new {:X} len={}", mem.base() as u64, mem.len());
         Self {
             base: mem.base(),
             len: mem.len(),
@@ -117,6 +118,7 @@ impl MemoryBlock {
 
     /// Returns a view of a subset of the buffer.
     pub fn subblock(&self, offset: usize, len: usize) -> Self {
+        tracing::info!("YSP: MemoryBlock::subblock {:X} +{:X} len={}", self.base as usize, offset, len);
         match self.mem.view(offset, len) {
             Some(view) => view,
             None => Self::new(RestrictedView::new(self.mem.clone(), offset, len)),

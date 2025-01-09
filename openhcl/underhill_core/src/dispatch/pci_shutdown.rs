@@ -37,9 +37,9 @@ pub async fn shutdown_pci_devices() -> Result<(), ShutdownError> {
                 let pci_id = entry.file_name();
                 let pci_id_str = pci_id.to_string_lossy().into_owned();
                 if driver_name == "vfio-pci" {
-                    tracing::debug!(
+                    tracing::info!(
                         pci_id = pci_id_str.as_str(),
-                        "skipping unbind for vfio device"
+                        "YSP: skipping unbind for vfio device"
                     );
                     return Ok(());
                 }

@@ -5,6 +5,7 @@
 
 use super::spec;
 use crate::driver::save_restore::IoQueueSavedState;
+use crate::driver::save_restore::SavedNamespaceData;
 use crate::queue_pair::admin_cmd;
 use crate::queue_pair::Issuer;
 use crate::queue_pair::QueuePair;
@@ -111,6 +112,7 @@ struct IoQueue {
 
 impl IoQueue {
     pub async fn save(&self) -> anyhow::Result<IoQueueSavedState> {
+        tracing::info!("YSP: IoQueue::save cpu={} msi={}", self.cpu, self.iv);
         Ok(IoQueueSavedState {
             cpu: self.cpu,
             msix: self.iv as u32,
@@ -125,6 +127,7 @@ impl IoQueue {
         mem_block: MemoryBlock,
         saved_state: &IoQueueSavedState,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: IoQueue::restore");
         let IoQueueSavedState {
             cpu,
             msix,
@@ -171,6 +174,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         cpu_count: u32,
         device: T,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: NvmeDriver::new");
         let pci_id = device.id().to_owned();
         let mut this = Self::new_disabled(driver_source, cpu_count, device)
             .instrument(tracing::info_span!("nvme_new_disabled", pci_id))
@@ -199,6 +203,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         cpu_count: u32,
         mut device: T,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: new_disabled");
         let driver = driver_source.simple();
         let bar0 = Bar0(
             device
@@ -208,6 +213,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         let cc = bar0.cc();
         if cc.en() || bar0.csts().rdy() {
+            tracing::info!("YSP: already enabled - will reset");
             if !bar0
                 .reset(&driver)
                 .instrument(tracing::info_span!(
@@ -261,6 +267,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     async fn enable(&mut self, requested_io_queue_count: u16) -> anyhow::Result<()> {
         const ADMIN_QID: u16 = 0;
 
+        tracing::info!("YSP: enable controller");
         let task = &mut self.task.as_mut().unwrap();
         let worker = task.task_mut();
 
@@ -473,16 +480,30 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     }
 
     /// Gets the namespace with namespace ID `nsid`.
-    pub async fn namespace(&self, nsid: u32) -> Result<Namespace, NamespaceError> {
-        Namespace::new(
-            &self.driver,
-            self.admin.as_ref().unwrap().clone(),
-            self.rescan_event.clone(),
-            self.identify.clone().unwrap(),
-            &self.io_issuers,
-            nsid,
-        )
-        .await
+    pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
+        Ok(match self.namespaces
+            .iter()
+            .position(|n| n.nsid().eq(&nsid)) {
+            Some(n) => {
+                // TODO: Check if we will process Namespace Change AEN instead.
+                tracing::info!("YSP: EXISTING namespace {} for {}", nsid, &self.device_id);
+                self.namespaces[n].clone()
+            },
+            None => {
+                tracing::info!("YSP: QUERY namespace {} for {}", nsid, &self.device_id);
+                let ns = Arc::new(Namespace::new(
+                    &self.driver,
+                    self.admin.as_ref().unwrap().clone(),
+                    self.rescan_event.clone(),
+                    self.identify.clone().unwrap(),
+                    &self.io_issuers,
+                    nsid,
+                )
+                .await?);
+                self.namespaces.push(ns.clone());
+                ns
+            }
+        })
     }
 
     /// Returns the number of CPUs that are in fallback mode (that are using a
@@ -498,6 +519,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
     /// Saves the NVMe driver state during servicing.
     pub async fn save(&mut self) -> anyhow::Result<NvmeDriverSavedState> {
+        tracing::info!("YSP: NvmeDriver::save");
         // Nothing to save if Identify Controller was never queried.
         if self.identify.is_none() {
             return Err(save_restore::Error::InvalidState.into());
@@ -510,25 +532,26 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .await?
         {
             Ok(s) => {
-                // TODO: The decision is to re-query namespace data after the restore.
-                // Leaving the code in place so it can be restored in future.
-                // The reason is uncertainty about namespace change during servicing.
-                // ------
-                // for ns in &self.namespaces {
-                //     s.namespaces.push(ns.save()?);
-                // }
+                tracing::info!("YSP: namespace len={}", self.namespaces.len());
                 Ok(NvmeDriverSavedState {
                     identify_ctrl: spec::IdentifyController::read_from(
                         self.identify.as_ref().unwrap().as_bytes(),
                     )
                     .unwrap(),
                     device_id: self.device_id.clone(),
-                    // TODO: See the description above, save the vector once resolved.
-                    namespaces: vec![],
+                    namespaces: self.namespaces
+                        .iter()
+                        .map(|n| -> SavedNamespaceData {
+                            n.save()
+                        })
+                        .collect::<Vec<SavedNamespaceData>>(),
                     worker_data: s,
                 })
             }
-            Err(e) => Err(e),
+            Err(e) => {
+                tracing::info!("YSP: save ERROR");
+                Err(e)
+            }
         }
     }
 
@@ -539,6 +562,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         mut device: T,
         saved_state: &NvmeDriverSavedState,
     ) -> anyhow::Result<Self> {
+        tracing::info!("YSP: NvmeDriver::restore");
         let driver = driver_source.simple();
         let bar0_mapping = device
             .map_bar(0)
@@ -547,6 +571,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // It is expected the device to be alive when restoring.
         if !bar0.csts().rdy() {
+            tracing::info!("YSP: RDY not set");
             anyhow::bail!("device is gone");
         }
 
@@ -677,6 +702,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
     /// Change device's behavior when servicing.
     pub fn update_servicing_flags(&mut self, nvme_keepalive: bool) {
+        tracing::info!("YSP: NvmeDriver::update keepalive={}", nvme_keepalive);
         self.nvme_keepalive = nvme_keepalive;
     }
 }
@@ -738,6 +764,8 @@ impl<T: DeviceBacking> Drop for NvmeDriver<T> {
                 // dropped while their memory is aliased.
                 let reset = self.reset();
                 self.driver.spawn("nvme_drop", reset).detach();
+            } else {
+                tracing::info!("YSP: skipping drop-reset");
             }
         }
     }
@@ -774,7 +802,10 @@ impl<T: DeviceBacking> AsyncRun<WorkerState> for DriverWorkerTask<T> {
                     Some(NvmeWorkerRequest::CreateIssuer(rpc)) => {
                         rpc.handle(|cpu| self.create_io_issuer(state, cpu)).await
                     }
-                    Some(NvmeWorkerRequest::Save(rpc)) => rpc.handle(|_| self.save(state)).await,
+                    Some(NvmeWorkerRequest::Save(rpc)) => {
+                        tracing::info!("YSP: NvmeWorkerRequest::Save");
+                        rpc.handle(|_| self.save(state)).await
+                    }
                     None => break,
                 }
             }
@@ -785,7 +816,7 @@ impl<T: DeviceBacking> AsyncRun<WorkerState> for DriverWorkerTask<T> {
 
 impl<T: DeviceBacking> DriverWorkerTask<T> {
     async fn create_io_issuer(&mut self, state: &mut WorkerState, cpu: u32) {
-        tracing::debug!(cpu, "issuer request");
+        tracing::info!("YSP: create_io_issuer cpu={} qid={}", cpu, self.io.len() + 1);
         if self.io_issuers.per_cpu[cpu as usize].get().is_some() {
             return;
         }
@@ -833,6 +864,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
         let qid = self.io.len() as u16 + 1;
 
         tracing::debug!(cpu, qid, "creating io queue");
+        tracing::info!("YSP: create_io_queue cpu={} qid={}", cpu, qid);
 
         // Share IO queue 1's interrupt with the admin queue.
         let iv = self.io.len() as u16;
@@ -933,6 +965,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
         &mut self,
         worker_state: &mut WorkerState,
     ) -> anyhow::Result<NvmeDriverWorkerSavedState> {
+        tracing::info!("YSP: NvmeDriverWorkerTask::save");
         let admin = match self.admin.as_ref() {
             Some(a) => Some(a.save().await?),
             None => None,

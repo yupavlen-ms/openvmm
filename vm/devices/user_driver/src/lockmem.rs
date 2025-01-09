@@ -95,6 +95,7 @@ impl LockedMemory {
         let mapping = Mapping::new(len).context("failed to create mapping")?;
         mapping.lock().context("failed to lock mapping")?;
         let pages = mapping.pages()?;
+        tracing::info!("YSP: LockedMemory::new {}", len);
         Ok(Self {
             mapping,
             pfns: pages,
@@ -128,6 +129,7 @@ pub struct LockedMemorySpawner;
 #[cfg(feature = "vfio")]
 impl crate::vfio::VfioDmaBuffer for LockedMemorySpawner {
     fn create_dma_buffer(&self, len: usize) -> anyhow::Result<crate::memory::MemoryBlock> {
+        tracing::info!("YSP: create_dma_buffer {}", len);
         Ok(crate::memory::MemoryBlock::new(LockedMemory::new(len)?))
     }
 
@@ -137,6 +139,7 @@ impl crate::vfio::VfioDmaBuffer for LockedMemorySpawner {
         _len: usize,
         _base_pfn: u64,
     ) -> anyhow::Result<crate::memory::MemoryBlock> {
+        tracing::error!("YSP: WRONG restore_dma_buffer len={}", _len);
         anyhow::bail!("restore not supported for lockmem")
     }
 }

@@ -306,6 +306,7 @@ impl<T: 'static + Send + InspectMut + MmioIntercept> DeviceBacking for EmulatedD
 
     /// Returns an object that can allocate host memory to be shared with the device.
     fn host_allocator(&self) -> Self::DmaAllocator {
+        tracing::info!("YSP: host_allocator B");
         EmulatedDmaAllocator {
             shared_mem: self.shared_mem.clone(),
         }

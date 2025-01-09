@@ -336,6 +336,11 @@ impl PartitionInfo {
 
         let command_line = params.command_line();
 
+        if parsed.device_dma_page_count.is_some() {
+            log!("YSP: Hooray2 {}", parsed.device_dma_page_count.unwrap());
+        } else {
+            log!("YSP: Oopsie2");
+        }
         // Always write the measured command line.
         write!(
             storage.cmdline,
@@ -520,6 +525,7 @@ impl PartitionInfo {
             memory_allocation_mode: _,
             entropy,
             vtl0_alias_map: _,
+            nvme_keepalive,
         } = storage;
 
         assert!(!vtl2_used_ranges.is_empty());
@@ -541,6 +547,7 @@ impl PartitionInfo {
         *com3_serial = parsed.com3_serial;
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
+        *nvme_keepalive = parsed.nvme_keepalive;
 
         Ok(Some(storage))
     }
