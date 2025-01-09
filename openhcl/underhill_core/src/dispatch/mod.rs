@@ -477,7 +477,7 @@ impl LoadedVm {
 
         // NOTE: This is set via the corresponding env arg, as this feature is
         // experimental.
-        let nvme_keepalive = self.nvme_keep_alive;
+        let nvme_keepalive = self.nvme_keep_alive; // TEST: Ignore capabilities_flags for older OSes.
 
         // Do everything before the log flush under a span.
         let mut state = async {

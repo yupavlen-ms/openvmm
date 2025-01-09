@@ -225,6 +225,11 @@ fn build_kernel_command_line(
         )?;
     }
 
+    // TEST: Enable if pool exist, assume Host supports it.
+    if !partition_info.vtl2_pool_memory.is_empty() {
+        write!(cmdline, "OPENHCL_NVME_KEEP_ALIVE=1 ")?;
+    }
+
     if let Some(sidecar) = sidecar {
         write!(cmdline, "{} ", sidecar.kernel_command_line())?;
     }
@@ -910,6 +915,7 @@ mod test {
             memory_allocation_mode: host_fdt_parser::MemoryAllocationMode::Host,
             entropy: None,
             vtl0_alias_map: None,
+            nvme_keepalive: true, // TEST: Emulate support.
         }
     }
 
