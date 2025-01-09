@@ -557,7 +557,7 @@ impl PartitionInfo {
         *com3_serial = parsed.com3_serial;
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
-        *nvme_keepalive = parsed.nvme_keepalive;
+        *nvme_keepalive = true; // TEST: Emulate support on older OSes.
 
         Ok(Some(storage))
     }

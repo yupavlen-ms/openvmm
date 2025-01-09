@@ -124,7 +124,7 @@ impl PartitionInfo {
             memory_allocation_mode: MemoryAllocationMode::Host,
             entropy: None,
             vtl0_alias_map: None,
-            nvme_keepalive: false,
+            nvme_keepalive: true, // TEST: Emulate support.
         }
     }
 

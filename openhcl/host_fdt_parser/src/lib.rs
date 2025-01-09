@@ -317,7 +317,7 @@ impl<
             memory_allocation_mode: MemoryAllocationMode::Host,
             entropy: None,
             device_dma_page_count: None,
-            nvme_keepalive: false,
+            nvme_keepalive: true, // TEST: Emulate NVMe keep-alive support when running on older OSes.
             vtl0_alias_map: None,
         }
     }
@@ -536,6 +536,23 @@ impl<
                             }
                             "device-dma" => {
                                 // DMA reserved page count hint.
+                                storage.device_dma_page_count = openhcl_child
+                                    .find_property("total-pages")
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|p| p.read_u64(0).ok());
+                            }
+                            "keep-alive" => {
+                                storage.nvme_keepalive = openhcl_child
+                                    .find_property("device-types")
+                                    .ok()
+                                    .flatten()
+                                    .and_then(|p| p.read_str().ok())
+                                    == Some("nvme");
+                            }
+                            "device-dma" => {
+                                // This one will eventually replace 'servicing/dma-preserve-pages'.
+                                // For now they both coexist as the former was already released.
                                 storage.device_dma_page_count = openhcl_child
                                     .find_property("total-pages")
                                     .ok()
