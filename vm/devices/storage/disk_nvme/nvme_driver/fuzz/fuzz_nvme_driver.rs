@@ -18,6 +18,7 @@ use pal_async::DefaultDriver;
 use pci_core::msi::MsiInterruptSet;
 use scsi_buffers::OwnedRequestBuffers;
 use std::convert::TryFrom;
+use std::sync::Arc;
 use user_driver::emulated::DeviceSharedMemory;
 use vmcore::vm_task::SingleDriverBackend;
 use vmcore::vm_task::VmTaskDriverSource;
@@ -25,7 +26,7 @@ use vmcore::vm_task::VmTaskDriverSource;
 /// Nvme driver fuzzer
 pub struct FuzzNvmeDriver {
     driver: Option<NvmeDriver<FuzzEmulatedDevice<NvmeController>>>,
-    namespace: Namespace,
+    namespace: Arc<Namespace>,
     payload_mem: GuestMemory,
     cpu_count: u32,
 }
@@ -72,7 +73,7 @@ impl FuzzNvmeDriver {
 
         Ok(Self {
             driver: Some(nvme_driver),
-            namespace,
+            namespace: namespace.clone(),
             payload_mem,
             cpu_count,
         })

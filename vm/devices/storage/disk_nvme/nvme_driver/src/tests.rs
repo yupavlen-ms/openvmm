@@ -74,7 +74,7 @@ async fn test_nvme_driver(driver: DefaultDriver, allow_dma: bool) {
 
     let device = EmulatedDevice::new(nvme, msi_set, mem);
 
-    let driver = NvmeDriver::new(&driver_source, CPU_COUNT, device)
+    let mut driver = NvmeDriver::new(&driver_source, CPU_COUNT, device)
         .await
         .unwrap();
 
@@ -188,10 +188,7 @@ async fn test_nvme_save_restore_inner(driver: DefaultDriver) {
         .unwrap();
     let _ns1 = nvme_driver.namespace(1).await.unwrap();
     let saved_state = nvme_driver.save().await.unwrap();
-    // As of today we do not save namespace data to avoid possible conflict
-    // when namespace has changed during servicing.
-    // TODO: Review and re-enable in future.
-    assert_eq!(saved_state.namespaces.len(), 0);
+    assert_eq!(saved_state.namespaces.len(), 1);
 
     // Create a second set of devices since the ownership has been moved.
     let new_emu_mem = DeviceSharedMemory::new(base_len, payload_len);
@@ -220,9 +217,8 @@ async fn test_nvme_save_restore_inner(driver: DefaultDriver) {
     // Wait for CSTS.RDY to set.
     backoff.back_off().await;
 
-    let _new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, new_emu_mem);
-    // TODO: Memory restore is disabled for emulated DMA, uncomment once fixed.
-    // let _new_nvme_driver = NvmeDriver::restore(&driver_source, CPU_COUNT, new_device, &saved_state)
-    //     .await
-    //     .unwrap();
+    let new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, new_emu_mem);
+    let _new_nvme_driver = NvmeDriver::restore(&driver_source, CPU_COUNT, new_device, &saved_state)
+        .await
+        .unwrap();
 }
