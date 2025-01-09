@@ -547,6 +547,7 @@ impl<
                         }
                     }
                 }
+
                 _ if child.name.starts_with("memory@") => {
                     let igvm_type = if let Some(igvm_type) = child
                         .find_property(igvm_defs::dt::IGVM_DT_IGVM_TYPE_PROPERTY)
