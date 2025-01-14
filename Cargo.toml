@@ -30,6 +30,7 @@ members = [
   "vm/devices/storage/disk_nvme/nvme_driver/fuzz",
   "vm/devices/storage/ide/fuzz",
   "vm/devices/storage/scsi_buffers/fuzz",
+  "vm/devices/storage/storvsp/fuzz",
   "vm/vmcore/guestmem/fuzz",
   "vm/x86/x86emu/fuzz",
   # in-guest test bins
@@ -48,7 +49,7 @@ exclude = [
 ]
 
 [workspace.package]
-rust-version = "1.82"
+rust-version = "1.84"
 
 [workspace.dependencies]
 xtask_fuzz = { path = "xtask/xtask_fuzz" }
@@ -602,9 +603,6 @@ unsafe_op_in_unsafe_fn = "forbid"
 
 # TODO: Needed for xshell compatibility, fixed in v0.2.7
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(trick_rust_analyzer_into_highlighting_interpolated_bits)'] }
-
-# TODO: Remove when we update to Rust 1.84, needed for if-let-rescope
-unknown_lints = "allow"
 
 [workspace.lints.clippy]
 dbg_macro = "warn"
