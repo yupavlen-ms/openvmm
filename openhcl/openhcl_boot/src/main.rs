@@ -226,6 +226,7 @@ fn build_kernel_command_line(
     }
 
     // Only when explicitly supported by Host.
+    // TODO: Move from command line to device tree when stabilized.
     if partition_info.nvme_keepalive && !partition_info.vtl2_pool_memory.is_empty() {
         write!(cmdline, "OPENHCL_NVME_KEEP_ALIVE=1 ")?;
     }
@@ -319,7 +320,7 @@ enum ReservedMemoryType {
 fn reserved_memory_regions(
     partition_info: &PartitionInfo,
     sidecar: Option<&SidecarConfig<'_>>,
-) -> OffStackRef<'static, impl AsRef<[(MemoryRange, ReservedMemoryType)]>> {
+) -> OffStackRef<'static, impl AsRef<[(MemoryRange, ReservedMemoryType)]> + use<>> {
     let mut reserved = off_stack!(ArrayVec<(MemoryRange, ReservedMemoryType), MAX_RESERVED_MEM_RANGES>, ArrayVec::new_const());
     reserved.clear();
     reserved.extend(
