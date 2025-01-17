@@ -890,7 +890,6 @@ impl UhProcessor<'_, TdxBacked> {
         // Check for interrupt requests from the host and kernel IPI offload.
         // TODO TDX GUEST VSM supporting VTL 1 proxy irrs requires kernel changes
         if vtl == GuestVtl::Vtl0 {
-            // TODO TDX: filter proxy IRRs by setting the `proxy_irr_blocked` field of the run page
             if let Some(irr) = self.runner.proxy_irr() {
                 // We can't put the interrupts directly on the APIC page because we might need
                 // to clear the tmr state. This can happen if a vector was previously used for a level
