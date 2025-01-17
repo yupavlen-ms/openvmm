@@ -6918,6 +6918,7 @@ dependencies = [
  "cvm_tracing",
  "disk_backend",
  "disklayer_ram",
+ "get_protocol",
  "getrandom",
  "guest_emulation_transport",
  "guid",
@@ -6933,6 +6934,7 @@ dependencies = [
  "time",
  "tracing",
  "vmgs",
+ "vmgs_format",
  "zerocopy",
 ]
 
