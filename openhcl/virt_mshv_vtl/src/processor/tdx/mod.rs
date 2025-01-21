@@ -689,13 +689,12 @@ impl BackingPrivate for TdxBacked {
         let pfns = pfns_handle.base_pfn()..pfns_handle.base_pfn() + pfns_handle.size_pages();
         let overlays: Vec<_> = pfns.collect();
 
-        // TODO TDX: This needs to come from a private pool
         let flush_page = params
             .partition
-            .shared_vis_pages_pool
+            .private_vis_pages_pool
             .as_ref()
-            .expect("shared pool exists for cvm")
-            .alloc(1.try_into().unwrap(), "tdx_tlb_flush".into())
+            .expect("private pool exists for cvm")
+            .alloc_with_mapping(1.try_into().unwrap(), "tdx_tlb_flush".into())
             .expect("not out of memory");
 
         let untrusted_synic = params
@@ -3411,7 +3410,7 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressListEx
             let mut flush_state = self.vp.shared.flush_state[vtl].write();
 
             // If there are too many provided gvas then promote this request to a flush entire.
-            // TODO do we need the extended check? I don't think so
+            // TODO TDX GUEST VSM do we need the extended check? I don't think so
             if gva_ranges.len() > FLUSH_GVA_LIST_SIZE {
                 if flags.non_global_mappings_only() {
                     flush_state.s.flush_entire_non_global_counter += 1;
@@ -3421,9 +3420,9 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressListEx
             } else {
                 for range in gva_ranges {
                     if flush_state.gva_list.len() == FLUSH_GVA_LIST_SIZE {
-                        flush_state.gva_list.pop_back();
+                        flush_state.gva_list.pop_front();
                     }
-                    flush_state.gva_list.push_front(*range);
+                    flush_state.gva_list.push_back(*range);
                     flush_state.s.gva_list_count += 1;
                 }
             }
