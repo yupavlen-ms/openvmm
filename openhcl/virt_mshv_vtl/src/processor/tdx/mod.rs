@@ -473,6 +473,7 @@ pub struct ExitStats {
     pub hlt: Counter,
     pub pause: Counter,
     pub needs_interrupt_reinject: Counter,
+    pub exception: Counter,
 }
 
 /// The number of shared pages required per cpu.
@@ -702,6 +703,27 @@ impl BackingPrivate for TdxBacked {
             .untrusted_synic
             .as_ref()
             .map(|synic| synic.add_vp(params.vp_info.base.vp_index));
+
+        // Set the exception bitmap for VTL0.
+        if params.partition.intercept_debug_exceptions {
+            if cfg!(feature = "gdb") {
+                let initial_exception_bitmap = params
+                    .runner
+                    .read_vmcs32(GuestVtl::Vtl0, VmcsField::VMX_VMCS_EXCEPTION_BITMAP);
+
+                let exception_bitmap =
+                    initial_exception_bitmap | (1 << x86defs::Exception::DEBUG.0);
+
+                params.runner.write_vmcs32(
+                    GuestVtl::Vtl0,
+                    VmcsField::VMX_VMCS_EXCEPTION_BITMAP,
+                    !0,
+                    exception_bitmap,
+                );
+            } else {
+                return Err(super::Error::InvalidDebugConfiguration);
+            }
+        }
 
         Ok(Self {
             vtls: VtlArray::from_fn(|vtl| TdxVtl {
@@ -1868,6 +1890,14 @@ impl UhProcessor<'_, TdxBacked> {
                             .with_interruption_type(INTERRUPT_TYPE_HARDWARE_EXCEPTION);
                 }
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.tdcall
+            }
+            VmxExit::EXCEPTION => {
+                tracing::trace!(
+                    "Caught Exception: {:?}",
+                    exit_info._exit_interruption_info()
+                );
+                breakpoint_debug_exception = true;
+                &mut self.backing.vtls[intercepted_vtl].exit_stats.exception
             }
             VmxExit::TRIPLE_FAULT => {
                 return Err(VpHaltReason::TripleFault {

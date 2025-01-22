@@ -231,6 +231,7 @@ struct UhPartitionInner {
     no_sidecar_hotplug: AtomicBool,
     use_mmio_hypercalls: bool,
     backing_shared: BackingShared,
+    intercept_debug_exceptions: bool,
     #[cfg(guest_arch = "x86_64")]
     // N.B For now, only one device vector table i.e. for VTL0 only
     #[inspect(with = "|x| inspect::iter_by_index(x.read().into_inner().map(inspect::AsHex))")]
@@ -1401,10 +1402,10 @@ impl<'a> UhProtoPartition<'a> {
         let is_hardware_isolated = isolation.is_hardware_isolated();
 
         // Intercept Debug Exceptions
-        // TODO TDX: This currently works on TDX because all Underhill TDs today
-        // have the debug policy bit set, allowing the hypervisor to install the
-        // intercept on behalf of the guest. In the future, Underhill should
-        // register for these intercepts itself.
+        // On TDX because all OpenHCL TDs today have the debug policy bit set,
+        // OpenHCL registers for the intercepts itself.
+        // However, on non-TDX platforms hypervisor installs the
+        // intercept on behalf of the guest.
         if params.intercept_debug_exceptions {
             if !cfg!(feature = "gdb") {
                 return Err(Error::InvalidDebugConfiguration);
@@ -1412,13 +1413,15 @@ impl<'a> UhProtoPartition<'a> {
 
             cfg_if::cfg_if! {
                 if #[cfg(guest_arch = "x86_64")] {
-                    let debug_exception_vector = 0x1;
-                    hcl.register_intercept(
-                        HvInterceptType::HvInterceptTypeException,
-                        HV_INTERCEPT_ACCESS_MASK_EXECUTE,
-                        HvInterceptParameters::new_exception(debug_exception_vector),
-                    )
-                    .map_err(|err| Error::InstallIntercept(HvInterceptType::HvInterceptTypeException, err))?;
+                    if isolation != IsolationType::Tdx {
+                        let debug_exception_vector = 0x1;
+                        hcl.register_intercept(
+                            HvInterceptType::HvInterceptTypeException,
+                            HV_INTERCEPT_ACCESS_MASK_EXECUTE,
+                            HvInterceptParameters::new_exception(debug_exception_vector),
+                        )
+                        .map_err(|err| Error::InstallIntercept(HvInterceptType::HvInterceptTypeException, err))?;
+                    }
                 } else {
                     return Err(Error::InvalidDebugConfiguration);
                 }
@@ -1670,6 +1673,7 @@ impl<'a> UhProtoPartition<'a> {
             backing_shared: BackingShared::new(isolation, BackingSharedParams { cvm_state })?,
             #[cfg(guest_arch = "x86_64")]
             device_vector_table: RwLock::new(IrrBitmap::new(Default::default())),
+            intercept_debug_exceptions: params.intercept_debug_exceptions,
         });
 
         if cfg!(guest_arch = "x86_64") {
