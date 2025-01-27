@@ -502,7 +502,8 @@ fn build_device_tree(
         .end_node()?;
 
     // TODO: This is defined by GED when running on WHP. What is OpenVMM way?
-    let reserved_dma: Option<u64> = Some(16);
+    let reserved_dma: Option<u64> = Some(1024);
+    //let reserved_dma = None;
     if let Some(reserved_dma) = reserved_dma {
         // Provide a hint to OpenHCL about reserved DMA size.
         openhcl = openhcl.start_node("device-dma")?
