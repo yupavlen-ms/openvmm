@@ -5072,9 +5072,11 @@ name = "petri"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chipset_resources",
  "diag_client",
  "disk_backend_resources",
+ "disk_vhd1",
  "fatfs",
  "framebuffer",
  "fs-err",
@@ -5126,6 +5128,7 @@ dependencies = [
  "vmgs_format",
  "vmm_core_defs",
  "vmotherboard",
+ "vmsocket",
  "vtl2_settings_proto",
 ]
 
@@ -5219,6 +5222,7 @@ dependencies = [
  "mesh_remote",
  "pal_async",
  "pipette_protocol",
+ "socket2",
  "tracing",
  "tracing-subscriber",
  "unicycle",
