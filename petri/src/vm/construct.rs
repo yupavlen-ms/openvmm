@@ -170,6 +170,16 @@ impl PetriVmConfig {
 
         let (firmware_event_send, firmware_event_recv) = mesh::mpsc_channel();
 
+        let mut vsock_temp_paths = Vec::new();
+        let mut make_vsock_listener = || -> anyhow::Result<(UnixListener, PathBuf)> {
+            let (listener, temppath) = tempfile::Builder::new()
+                .make(|path| UnixListener::bind(path))?
+                .into_parts();
+            let path = temppath.to_path_buf();
+            vsock_temp_paths.push(temppath);
+            Ok((listener, path))
+        };
+
         let (with_vtl2, vtl2_vmbus, openhcl_diag_handler, ged, ged_send, mut vtl2_settings) =
             if firmware.is_openhcl() {
                 let (ged, ged_send) = setup.config_openhcl_vmbus_devices(
@@ -178,8 +188,7 @@ impl PetriVmConfig {
                     &firmware_event_send,
                     framebuffer.is_some(),
                 )?;
-                let (vtl2_vsock_listener, vtl2_vsock_path) =
-                    tempfile_helpers::with_temp_path(|path| UnixListener::bind(path))?;
+                let (vtl2_vsock_listener, vtl2_vsock_path) = make_vsock_listener()?;
                 let ged_send = Arc::new(ged_send);
                 (
                     Some(Vtl2Config {
@@ -263,8 +272,7 @@ impl PetriVmConfig {
         ));
 
         // Make a vmbus vsock path for pipette connections
-        let (vmbus_vsock_listener, vmbus_vsock_path) =
-            tempfile_helpers::with_temp_path(|path| UnixListener::bind(path))?;
+        let (vmbus_vsock_listener, vmbus_vsock_path) = make_vsock_listener()?;
 
         let chipset = chipset
             .build()
@@ -386,6 +394,7 @@ impl PetriVmConfig {
                 driver: driver.clone(),
                 resolver,
                 output_dir,
+                _vsock_temp_paths: vsock_temp_paths,
             },
 
             hvlite_log_file: hvlite_file,
