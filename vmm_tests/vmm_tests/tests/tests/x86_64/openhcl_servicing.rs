@@ -45,5 +45,16 @@ async fn openhcl_servicing(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::E
     ).await
 }
 
+/// Test servicing an OpenHCL VM from the current version to itself
+/// with VF keepalive support.
+#[openvmm_test(openhcl_linux_direct_x64)]
+async fn openhcl_servicing_keepalive(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::Error> {
+    openhcl_servicing_core(
+        config,
+        LATEST_LINUX_DIRECT_TEST_X64,
+        SaveGuestVtl2StateFlags::new().with_enable_nvme_keepalive(true),
+    ).await
+}
+
 // TODO: add tests with guest workloads while doing servicing.
 // TODO: add tests from previous release branch to current.
