@@ -4652,6 +4652,7 @@ dependencies = [
  "futures",
  "futures-concurrency",
  "gdma_resources",
+ "get_protocol",
  "get_resources",
  "getrandom",
  "guid",

@@ -358,7 +358,7 @@ impl PetriVmInner {
             .as_ref()
             .context("openhcl not configured")?;
 
-        let igvm_path = self.resources.resolver.resolve(new_openhcl);
+        let igvm_path: std::path::PathBuf = self.resources.resolver.resolve(new_openhcl);
         let igvm_file = fs_err::File::open(igvm_path).context("failed to open igvm file")?;
         self.worker
             .restart_openhcl(ged_send, flags.into(), igvm_file.into())
