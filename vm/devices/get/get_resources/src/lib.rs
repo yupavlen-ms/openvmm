@@ -45,7 +45,6 @@ pub mod crash {
 
 /// Guest Emulation Device resources.
 pub mod ged {
-    use get_protocol::SaveGuestVtl2StateFlags;
     use mesh::error::RemoteError;
     use mesh::payload::Protobuf;
     use mesh::rpc::Rpc;

@@ -2693,6 +2693,7 @@ async fn run_control(driver: &DefaultDriver, mesh: &VmmMesh, opt: Options) -> an
                         hvlite_helpers::underhill::service_underhill(
                             &vm_rpc,
                             resources.ged_rpc.as_ref().context("no GED")?,
+                            0,
                             file.into(),
                         )
                         .await?;

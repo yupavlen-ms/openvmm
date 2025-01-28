@@ -2934,6 +2934,7 @@ dependencies = [
  "disk_vhdmp",
  "futures",
  "futures-concurrency",
+ "get_protocol",
  "get_resources",
  "hvlite_defs",
  "mesh",
