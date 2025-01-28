@@ -27,7 +27,7 @@ pub async fn service_underhill(
     // blocked while waiting for the guest.
     tracing::debug!("waiting for guest to send saved state");
     let r = send
-        .call_failable(GuestEmulationRequest::SaveGuestVtl2State, ())
+        .call_failable(GuestEmulationRequest::SaveGuestVtl2State, 0)
         .await
         .context("failed to save VTL2 state");
 

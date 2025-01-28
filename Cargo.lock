@@ -2334,6 +2334,7 @@ dependencies = [
 name = "get_resources"
 version = "0.0.0"
 dependencies = [
+ "get_protocol",
  "mesh",
  "thiserror 2.0.0",
  "vm_resource",
@@ -5084,6 +5085,7 @@ dependencies = [
  "fscommon",
  "futures",
  "futures-concurrency",
+ "get_protocol",
  "get_resources",
  "gptman",
  "guid",
@@ -8429,6 +8431,7 @@ dependencies = [
  "build_rs_guest_arch",
  "disk_backend_resources",
  "gdma_resources",
+ "get_protocol",
  "guid",
  "hvlite_defs",
  "hvlite_ttrpc_vmservice",
