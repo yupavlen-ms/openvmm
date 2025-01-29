@@ -2334,7 +2334,6 @@ dependencies = [
 name = "get_resources"
 version = "0.0.0"
 dependencies = [
- "get_protocol",
  "mesh",
  "thiserror 2.0.0",
  "vm_resource",

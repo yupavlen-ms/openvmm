@@ -42,7 +42,8 @@ async fn openhcl_servicing(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::E
         config,
         LATEST_LINUX_DIRECT_TEST_X64,
         SaveGuestVtl2StateFlags::new().with_enable_nvme_keepalive(false),
-    ).await
+    )
+    .await
 }
 
 /// Test servicing an OpenHCL VM from the current version to itself
@@ -53,7 +54,8 @@ async fn openhcl_servicing_keepalive(config: PetriVmConfigOpenVmm) -> Result<(),
         config,
         LATEST_LINUX_DIRECT_TEST_X64,
         SaveGuestVtl2StateFlags::new().with_enable_nvme_keepalive(true),
-    ).await
+    )
+    .await
 }
 
 // TODO: add tests with guest workloads while doing servicing.

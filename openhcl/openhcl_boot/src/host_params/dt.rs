@@ -472,12 +472,15 @@ impl PartitionInfo {
                 IsolationType::Tdx => parsed.cpus.len() as u64,
                 _ => 0,
             };
+            log!("YSP: dt_page_count: {:X}", dt_page_count.unwrap_or(0));
+            log!("YSP: cmdline_page_count: {:X}", cmdline_page_count.unwrap_or(0));
 
             max(
                 dt_page_count.unwrap_or(0) + isolation_requirements,
                 cmdline_page_count.unwrap_or(0),
             )
         };
+        log!("YSP: vtl2_gpa_pool_size: {:X}", vtl2_gpa_pool_size);
         if vtl2_gpa_pool_size != 0 {
             // Reserve the specified number of pages for the pool. Use the used
             // ranges to figure out which VTL2 memory is free to allocate from.

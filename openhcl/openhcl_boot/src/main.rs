@@ -587,12 +587,15 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
 
     let boot_reftime = get_ref_time(p.isolation_type);
 
+    log!("YSP: before partition_info");
     let mut dt_storage = off_stack!(PartitionInfo, PartitionInfo::new());
     let partition_info = match PartitionInfo::read_from_dt(&p, &mut dt_storage, can_trust_host) {
         Ok(Some(val)) => val,
         Ok(None) => panic!("host did not provide a device tree"),
         Err(e) => panic!("unable to read device tree params {}", e),
     };
+    log!("YSP: partition_info parsed. nvme_keepalive={}", partition_info.nvme_keepalive);
+    log!("YSP: vtl2_pool_memory=[{:X}-{:X}]", partition_info.vtl2_pool_memory.start(), partition_info.vtl2_pool_memory.end());
 
     // Fill out the non-devicetree derived parts of PartitionInfo.
     if !p.isolation_type.is_hardware_isolated()
