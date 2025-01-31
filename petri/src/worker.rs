@@ -70,7 +70,7 @@ impl Worker {
             GuestServicingFlags {
                 nvme_keepalive: flags.enable_nvme_keepalive,
             },
-            file
+            file,
         )
         .await
     }

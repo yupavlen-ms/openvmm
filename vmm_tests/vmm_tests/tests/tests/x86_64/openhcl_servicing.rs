@@ -3,9 +3,9 @@
 
 //! Integration tests for x86_64 OpenHCL servicing.
 
-use petri::OpenHclServicingFlags;
 use petri::openvmm::PetriVmConfigOpenVmm;
 use petri::ArtifactHandle;
+use petri::OpenHclServicingFlags;
 use petri_artifacts_vmm_test::artifacts::openhcl_igvm::LATEST_LINUX_DIRECT_TEST_X64;
 use vmm_core_defs::HaltReason;
 use vmm_test_macros::openvmm_test;
@@ -53,7 +53,9 @@ async fn openhcl_servicing_keepalive(config: PetriVmConfigOpenVmm) -> Result<(),
     openhcl_servicing_core(
         config,
         LATEST_LINUX_DIRECT_TEST_X64,
-        OpenHclServicingFlags { enable_nvme_keepalive: true },
+        OpenHclServicingFlags {
+            enable_nvme_keepalive: true,
+        },
     )
     .await
 }
