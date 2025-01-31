@@ -18,6 +18,7 @@ use crate::GuestVtl;
 use crate::WakeReason;
 use guestmem::GuestMemory;
 use hv1_emulator::RequestInterrupt;
+use hv1_hypercall::HvRepResult;
 use hvdef::hypercall::HvFlushFlags;
 use hvdef::hypercall::TranslateGvaResultCode;
 use hvdef::HvCacheType;
@@ -811,7 +812,7 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::GetVpRegisters
         vtl: Option<Vtl>,
         registers: &[hvdef::HvRegisterName],
         output: &mut [hvdef::HvRegisterValue],
-    ) -> hvdef::HvRepResult {
+    ) -> HvRepResult {
         if partition_id != hvdef::HV_PARTITION_ID_SELF {
             return Err((HvError::AccessDenied, 0));
         }
@@ -841,7 +842,7 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::SetVpRegisters
         vp_index: u32,
         vtl: Option<Vtl>,
         registers: &[hvdef::hypercall::HvRegisterAssoc],
-    ) -> hvdef::HvRepResult {
+    ) -> HvRepResult {
         if partition_id != hvdef::HV_PARTITION_ID_SELF {
             return Err((HvError::AccessDenied, 0));
         }
@@ -952,7 +953,7 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::ModifyVtlProtectionMask
         map_flags: HvMapGpaFlags,
         target_vtl: Option<Vtl>,
         gpa_pages: &[u64],
-    ) -> hvdef::HvRepResult {
+    ) -> HvRepResult {
         if partition_id != hvdef::HV_PARTITION_ID_SELF {
             return Err((HvError::AccessDenied, 0));
         }

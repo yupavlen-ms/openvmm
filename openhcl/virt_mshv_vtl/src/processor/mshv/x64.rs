@@ -30,6 +30,7 @@ use hcl::ioctl::ApplyVtlProtectionsError;
 use hcl::protocol;
 use hv1_emulator::hv::ProcessorVtlHv;
 use hv1_emulator::synic::ProcessorSynic;
+use hv1_hypercall::HvRepResult;
 use hvdef::hypercall;
 use hvdef::HvDeliverabilityNotificationsRegister;
 use hvdef::HvError;
@@ -1686,7 +1687,7 @@ impl<T> hv1_hypercall::SetVpRegisters for UhHypercallHandler<'_, '_, T, Hypervis
         vp_index: u32,
         vtl: Option<Vtl>,
         registers: &[hypercall::HvRegisterAssoc],
-    ) -> hvdef::HvRepResult {
+    ) -> HvRepResult {
         if partition_id != hvdef::HV_PARTITION_ID_SELF {
             return Err((HvError::AccessDenied, 0));
         }
@@ -1723,7 +1724,7 @@ impl<T> hv1_hypercall::ModifyVtlProtectionMask
         _map_flags: HvMapGpaFlags,
         target_vtl: Option<Vtl>,
         gpa_pages: &[u64],
-    ) -> hvdef::HvRepResult {
+    ) -> HvRepResult {
         if partition_id != hvdef::HV_PARTITION_ID_SELF {
             return Err((HvError::AccessDenied, 0));
         }
