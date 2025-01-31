@@ -330,6 +330,13 @@ impl BackingPrivate for HypervisorBackedX86 {
     fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic> {
         None
     }
+
+    fn handle_vp_start_enable_vtl_wake(
+        _this: &mut UhProcessor<'_, Self>,
+        _vtl: GuestVtl,
+    ) -> Result<(), UhRunVpError> {
+        unimplemented!()
+    }
 }
 
 fn parse_sidecar_exit(message: &hvdef::HvMessage) -> SidecarRemoveExit {
@@ -1334,7 +1341,6 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, HypervisorBackedX86> {
             hv1_hypercall::HvPostMessage,
             hv1_hypercall::HvSignalEvent,
             hv1_hypercall::HvRetargetDeviceInterrupt,
-            hv1_hypercall::HvX64StartVirtualProcessor,
             hv1_hypercall::HvGetVpIndexFromApicId,
             hv1_hypercall::HvSetVpRegisters,
             hv1_hypercall::HvModifyVtlProtectionMask
