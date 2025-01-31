@@ -37,6 +37,7 @@ use get_protocol::VmgsIoStatus;
 use get_protocol::MAX_PAYLOAD_SIZE;
 use get_resources::ged::FirmwareEvent;
 use get_resources::ged::GuestEmulationRequest;
+use get_resources::ged::GuestServicingFlags;
 use get_resources::ged::ModifyVtl2SettingsError;
 use get_resources::ged::SaveRestoreError;
 use get_resources::ged::Vtl0StartError;
@@ -316,7 +317,7 @@ pub struct GedChannel<T: RingMem = GpadlRingMem> {
 }
 
 struct InProgressSave {
-    rpc: Rpc<(), Result<(), SaveRestoreError>>,
+    rpc: Rpc<GuestServicingFlags, Result<(), SaveRestoreError>>,
     buffer: Vec<u8>,
 }
 
@@ -535,7 +536,8 @@ impl<T: RingMem + Unpin> GedChannel<T> {
                             get_protocol::GuestNotifications::SAVE_GUEST_VTL2_STATE,
                         ),
                         correlation_id: Guid::ZERO,
-                        capabilities_flags: SaveGuestVtl2StateFlags::new(),
+                        capabilities_flags: SaveGuestVtl2StateFlags::new()
+                            .with_enable_nvme_keepalive(rpc.input().nvme_keepalive),
                         timeout_hint_secs: 60,
                     };
 
@@ -1266,6 +1268,7 @@ impl<T: RingMem + Unpin> GedChannel<T> {
                     watchdog_enabled: false,
                     always_relay_host_mmio: false,
                     imc_enabled: false,
+                    cxl_memory_enabled: false,
                 },
                 dynamic: get_protocol::dps_json::HclDevicePlatformSettingsV2Dynamic {
                     is_servicing_scenario: state.save_restore_buf.is_some(),

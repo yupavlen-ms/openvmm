@@ -2,12 +2,14 @@
 # Licensed under the MIT License.
 
 [package]
-name = "tempfile_helpers"
-edition.workspace = true
+name = "loan_cell"
 rust-version.workspace = true
+edition.workspace = true
 
 [dependencies]
-tempfile.workspace = true
+
+[dev-dependencies]
+static_assertions.workspace = true
 
 [lints]
 workspace = true
