@@ -41,6 +41,7 @@ use crate::loader::LoadKind;
 use crate::nvme_manager::NvmeDiskConfig;
 use crate::nvme_manager::NvmeDiskResolver;
 use crate::nvme_manager::NvmeManager;
+use crate::options::TestScenarioConfig;
 use crate::reference_time::ReferenceTime;
 use crate::servicing;
 use crate::servicing::transposed::OptionServicingInitState;
@@ -104,6 +105,7 @@ use state_unit::SpawnedUnit;
 use state_unit::StateUnits;
 use std::collections::HashMap;
 use std::ffi::CString;
+use std::future;
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -298,6 +300,9 @@ pub struct UnderhillEnvCfg {
     pub hide_isolation: bool,
     /// Enable nvme keep alive.
     pub nvme_keep_alive: bool,
+
+    /// test configuration
+    pub test_configuration: Option<TestScenarioConfig>,
 }
 
 /// Bundle of config + runtime objects for hooking into the underhill remote
@@ -491,6 +496,13 @@ impl UnderhillVmWorker {
                 servicing_state.is_none(),
                 "cannot have saved state from two different sources"
             );
+
+            if let Some(TestScenarioConfig::RestoreStuck) = params.env_cfg.test_configuration {
+                tracing::info!(
+                    "Test configuration SERVICING_RESTORE_STUCK is set. Waiting indefinitely in restore."
+                );
+                future::pending::<()>().await;
+            }
 
             tracing::info!("VTL2 restart, getting servicing state from the host");
 
@@ -3061,6 +3073,7 @@ async fn new_underhill_vm(
         shared_vis_pool: shared_vis_pages_pool,
         private_pool,
         nvme_keep_alive: env_cfg.nvme_keep_alive,
+        test_configuration: env_cfg.test_configuration,
     };
 
     Ok(loaded_vm)
