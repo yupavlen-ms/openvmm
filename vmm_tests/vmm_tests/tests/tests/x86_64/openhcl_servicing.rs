@@ -18,6 +18,7 @@ async fn openhcl_servicing_core(
 ) -> anyhow::Result<()> {
     let (mut vm, agent) = config
         .with_openhcl_command_line(openhcl_cmdline)
+        .with_vmbus_redirect() // YSP: FIXME: move to a different fn
         .run().await?;
 
     agent.ping().await?;
@@ -52,7 +53,8 @@ async fn openhcl_servicing(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::E
 
 /// Test servicing an OpenHCL VM from the current version to itself
 /// with VF keepalive support.
-#[openvmm_test(openhcl_linux_direct_x64)]
+//#[openvmm_test(openhcl_linux_direct_x64)]
+#[openvmm_test(openhcl_uefi_x64[nvme](vhd(ubuntu_2204_server_x64)))]
 async fn openhcl_servicing_keepalive(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::Error> {
     openhcl_servicing_core(
         config,
