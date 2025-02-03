@@ -1,5 +1,8 @@
 #!/usr/bin/python3
 
+# Copyright (c) Microsoft Corporation.
+# Licensed under the MIT License.
+
 #
 # There is a similar tool implemented in C inside the Linux kernel source tree.
 # The goal for this one has been to be independent of the kernel source tree,
