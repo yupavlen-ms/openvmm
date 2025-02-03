@@ -96,16 +96,13 @@ impl PetriVmConfigOpenVmm {
     pub fn new(
         firmware: Firmware,
         arch: MachineArch,
-        resolver: TestArtifacts,
+        artifacts: TestArtifacts,
         driver: &DefaultDriver,
     ) -> anyhow::Result<Self> {
-        let test_name = crate::get_test_name()?;
-
         let setup = PetriVmConfigSetupCore {
-            test_name: &test_name,
             arch,
             firmware: &firmware,
-            resolver: &resolver,
+            artifacts: &artifacts,
             driver,
         };
 
@@ -384,7 +381,7 @@ impl PetriVmConfigOpenVmm {
                 openhcl_diag_handler,
                 linux_direct_serial_agent,
                 driver: driver.clone(),
-                resolver,
+                artifacts,
                 output_dir,
                 _vsock_temp_paths: vsock_temp_paths,
             },
@@ -399,10 +396,9 @@ impl PetriVmConfigOpenVmm {
 }
 
 struct PetriVmConfigSetupCore<'a> {
-    test_name: &'a str,
     arch: MachineArch,
     firmware: &'a Firmware,
-    resolver: &'a TestArtifacts,
+    artifacts: &'a TestArtifacts,
     driver: &'a DefaultDriver,
 }
 
@@ -442,12 +438,11 @@ impl PetriVmConfigSetupCore<'_> {
     fn create_log_files(&self) -> anyhow::Result<TestLogFiles> {
         // DEVNOTE: This function runs before tracing is set up.
 
-        let test_log_dir = self.resolver.resolve(common_artifacts::TEST_LOG_DIRECTORY);
-        let output_dir = test_log_dir.join(self.test_name);
+        let output_dir = self.artifacts.get(common_artifacts::TEST_LOG_DIRECTORY);
         if output_dir.exists() {
-            std::fs::remove_dir_all(&output_dir)?;
+            std::fs::remove_dir_all(output_dir)?;
         }
-        std::fs::create_dir_all(&output_dir)?;
+        std::fs::create_dir_all(output_dir)?;
 
         // NOTE: Due to a WSL + Windows defender bug, .txt extensions take forever to create within WSL
         // when cross compiling. Name them .log which works around it.
@@ -468,7 +463,7 @@ impl PetriVmConfigSetupCore<'_> {
         }
 
         Ok(TestLogFiles {
-            output_dir,
+            output_dir: output_dir.to_owned(),
             hvlite_file,
             guest_file,
             petri_file,
@@ -610,14 +605,14 @@ impl PetriVmConfigSetupCore<'_> {
         Ok(match (self.arch, &self.firmware) {
             (MachineArch::X86_64, Firmware::LinuxDirect { .. }) => {
                 let kernel = File::open(
-                    self.resolver
-                        .resolve(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64),
+                    self.artifacts
+                        .get(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64),
                 )
                 .context("Failed to open kernel")?
                 .into();
                 let initrd = File::open(
-                    self.resolver
-                        .resolve(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64),
+                    self.artifacts
+                        .get(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64),
                 )
                 .context("Failed to open initrd")?
                 .into();
@@ -631,14 +626,14 @@ impl PetriVmConfigSetupCore<'_> {
             }
             (MachineArch::Aarch64, Firmware::LinuxDirect { .. }) => {
                 let kernel = File::open(
-                    self.resolver
-                        .resolve(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_AARCH64),
+                    self.artifacts
+                        .get(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_AARCH64),
                 )
                 .context("Failed to open kernel")?
                 .into();
                 let initrd = File::open(
-                    self.resolver
-                        .resolve(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_INITRD_AARCH64),
+                    self.artifacts
+                        .get(hvlite_artifacts::loadable::LINUX_DIRECT_TEST_INITRD_AARCH64),
                 )
                 .context("Failed to open initrd")?
                 .into();
@@ -652,9 +647,8 @@ impl PetriVmConfigSetupCore<'_> {
             }
             (MachineArch::X86_64, Firmware::Pcat { .. }) => {
                 let firmware = hvlite_pcat_locator::find_pcat_bios(
-                    self.resolver
-                        .try_resolve(hvlite_artifacts::loadable::PCAT_FIRMWARE_X64)
-                        .as_deref(),
+                    self.artifacts
+                        .try_get(hvlite_artifacts::loadable::PCAT_FIRMWARE_X64),
                 )
                 .context("Failed to load packaged PCAT binary")?;
                 LoadMode::Pcat {
@@ -663,7 +657,7 @@ impl PetriVmConfigSetupCore<'_> {
                 }
             }
             (_, Firmware::Uefi { .. }) => {
-                let firmware = File::open(self.resolver.resolve(match self.arch {
+                let firmware = File::open(self.artifacts.get(match self.arch {
                     MachineArch::X86_64 => hvlite_artifacts::loadable::UEFI_FIRMWARE_X64.erase(),
                     MachineArch::Aarch64 => {
                         hvlite_artifacts::loadable::UEFI_FIRMWARE_AARCH64.erase()
@@ -709,7 +703,7 @@ impl PetriVmConfigSetupCore<'_> {
                         false,
                     ),
                 };
-                let path = self.resolver.resolve(igvm_artifact);
+                let path = self.artifacts.get(igvm_artifact);
                 let file = File::open(path)
                     .context("failed to open openhcl firmware file")?
                     .into();
@@ -756,8 +750,8 @@ impl PetriVmConfigSetupCore<'_> {
                 // Nothing to do, no guest
             }
             Firmware::Pcat { guest } => {
-                let path = self.resolver.resolve(guest.artifact());
-                let inner_disk = open_disk_type(&path, true)?;
+                let path = self.artifacts.get(guest.artifact());
+                let inner_disk = open_disk_type(path, true)?;
                 let guest_media = match guest {
                     PcatGuest::Vhd(_) => GuestMedia::Disk {
                         read_only: false,
@@ -792,7 +786,7 @@ impl PetriVmConfigSetupCore<'_> {
                 vtl2_nvme_boot: false,
                 ..
             } => {
-                let path = self.resolver.resolve(guest.artifact());
+                let path = self.artifacts.get(guest.artifact());
                 devices.extend([Device::Vmbus(
                     DeviceVtl::Vtl0,
                     ScsiControllerHandle {
@@ -811,7 +805,7 @@ impl PetriVmConfigSetupCore<'_> {
                                 disk: LayeredDiskHandle {
                                     layers: vec![
                                         RamDiskLayerHandle { len: None }.into_resource().into(),
-                                        DiskLayerHandle(open_disk_type(&path, true)?)
+                                        DiskLayerHandle(open_disk_type(path, true)?)
                                             .into_resource()
                                             .into(),
                                     ],
@@ -830,7 +824,7 @@ impl PetriVmConfigSetupCore<'_> {
                 vtl2_nvme_boot: true,
                 ..
             } => {
-                let path = self.resolver.resolve(guest.artifact());
+                let path = self.artifacts.get(guest.artifact());
                 devices.extend([Device::Vpci(VpciDeviceConfig {
                     vtl: DeviceVtl::Vtl2,
                     instance_id: BOOT_NVME_INSTANCE,
@@ -843,7 +837,7 @@ impl PetriVmConfigSetupCore<'_> {
                             disk: LayeredDiskHandle {
                                 layers: vec![
                                     RamDiskLayerHandle { len: None }.into_resource().into(),
-                                    DiskLayerHandle(open_disk_type(&path, true)?)
+                                    DiskLayerHandle(open_disk_type(path, true)?)
                                         .into_resource()
                                         .into(),
                                 ],
@@ -927,8 +921,9 @@ impl PetriVmConfigSetupCore<'_> {
 
         let (crash, task) = spawn_dump_handler(
             self.driver,
-            self.resolver
-                .resolve(hvlite_artifacts::OPENHCL_DUMP_DIRECTORY),
+            self.artifacts
+                .get(hvlite_artifacts::OPENHCL_DUMP_DIRECTORY)
+                .to_owned(),
             None,
         );
         task.detach();
@@ -980,9 +975,8 @@ impl PetriVmConfigSetupCore<'_> {
         let video_dev = match self.firmware {
             Firmware::Pcat { .. } => Some(VideoDevice::Vga(
                 hvlite_pcat_locator::find_svga_bios(
-                    self.resolver
-                        .try_resolve(hvlite_artifacts::loadable::SVGA_FIRMWARE_X64)
-                        .as_deref(),
+                    self.artifacts
+                        .try_get(hvlite_artifacts::loadable::SVGA_FIRMWARE_X64),
                 )
                 .context("Failed to load VGA BIOS")?,
             )),
