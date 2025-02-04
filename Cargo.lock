@@ -9167,6 +9167,7 @@ dependencies = [
  "ignore",
  "log",
  "mbrman",
+ "object",
  "rayon",
  "serde",
  "serde_json",
