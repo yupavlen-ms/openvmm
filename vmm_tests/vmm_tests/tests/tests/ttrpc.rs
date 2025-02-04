@@ -5,37 +5,39 @@
 
 #![cfg_attr(guest_arch = "aarch64", allow(unused_imports))]
 
-use crate::prelude::*;
 use anyhow::Context;
 use guid::Guid;
 use hvlite_ttrpc_vmservice as vmservice;
 use pal_async::DefaultPool;
+use petri::TestArtifactRequirements;
 use petri_artifacts_vmm_test::artifacts;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use std::process::Stdio;
 use unix_socket::UnixStream;
-use vmm_test_petri_support::TestArtifactResolverExt;
+use vmm_test_petri_support::TestArtifactRequirementsExt;
 
 #[cfg(guest_arch = "x86_64")]
-#[test]
-fn test_ttrpc_interface() -> anyhow::Result<()> {
-    // This test doesn't use a Petri VM, so it needs to initialize tracing itself.
-    test_with_tracing::init();
-
-    let artifacts = vmm_tests_artifact_resolver()
-        .require_hvlite_standard(None)
+petri::test!(
+    test_ttrpc_interface,
+    TestArtifactRequirements::new()
+        .require_openvmm_standard(None)
         .require(artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64)
         .require(artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64)
-        .finalize();
+);
+
+#[cfg(guest_arch = "x86_64")]
+fn test_ttrpc_interface(_name: &str, artifacts: &petri::TestArtifacts) -> anyhow::Result<()> {
+    // This test doesn't use a Petri VM, so it needs to initialize tracing itself.
+    test_with_tracing::init();
 
     let mut socket_path = std::env::temp_dir();
     socket_path.push(Guid::new_random().to_string());
 
     tracing::info!(socket_path = %socket_path.display(), "launching hvlite with ttrpc");
 
-    let mut child = std::process::Command::new(artifacts.resolve(artifacts::OPENVMM_NATIVE))
+    let mut child = std::process::Command::new(artifacts.get(artifacts::OPENVMM_NATIVE))
         .arg("--ttrpc")
         .arg(&socket_path)
         .stdin(Stdio::null())
@@ -58,8 +60,8 @@ fn test_ttrpc_interface() -> anyhow::Result<()> {
         }
     });
 
-    let kernel_path = artifacts.resolve(artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64);
-    let initrd_path = artifacts.resolve(artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64);
+    let kernel_path = artifacts.get(artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64);
+    let initrd_path = artifacts.get(artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64);
 
     let ttrpc_path = socket_path.clone();
     DefaultPool::run_with(|driver| async move {
