@@ -28,6 +28,7 @@ async fn nvme_relay_test_core(
     Ok(())
 }
 
+/// Servicing tests with NVMe devices attached.
 async fn nvme_relay_servicing_core(
     config: PetriVmConfigOpenVmm,
     openhcl_cmdline: &str,
@@ -36,7 +37,7 @@ async fn nvme_relay_servicing_core(
 ) -> Result<(), anyhow::Error> {
     let (mut vm, agent) = config
         .with_openhcl_command_line(openhcl_cmdline)
-        .with_vmbus_redirect() // YSP: FIXME: move to a different fn
+        .with_vmbus_redirect()
         .run()
         .await?;
 
@@ -84,9 +85,12 @@ async fn nvme_relay_private_pool(config: PetriVmConfigOpenVmm) -> Result<(), any
     nvme_relay_test_core(config, "OPENHCL_ENABLE_VTL2_GPA_POOL=1024").await
 }
 
+/// Servicing test of an OpenHCL uefi VM with a NVME disk assigned to VTL2 that boots
+/// linux, with vmbus relay. This should expose a disk to VTL0 via vmbus.
+/// Use the private pool override to test the private pool dma path.
+/// Pass 'keepalive' servicing flag which impacts NVMe save/restore.
 #[openvmm_test(openhcl_uefi_x64[nvme](vhd(ubuntu_2204_server_x64)))]
 async fn nvme_keepalive(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::Error> {
-    // Number of pages to reserve as a private pool.
     nvme_relay_servicing_core(
         config,
         "OPENHCL_ENABLE_VTL2_GPA_POOL=1024",
