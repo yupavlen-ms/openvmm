@@ -40,8 +40,7 @@ use user_driver::memory::MemoryBlock;
 use user_driver::memory::PAGE_SIZE;
 use user_driver::memory::PAGE_SIZE64;
 use user_driver::DeviceBacking;
-use user_driver::HostDmaAllocator;
-use zerocopy::FromZeroes;
+use zerocopy::FromZeros;
 
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
 const INVALID_PAGE_ADDR: u64 = !(PAGE_SIZE as u64 - 1);
@@ -187,8 +186,8 @@ impl QueuePair {
         tracing::info!("YSP: QueuePair::new qid={}", qid);
         let total_size =
             QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::PER_QUEUE_PAGES * PAGE_SIZE;
-        let mem = device
-            .host_allocator()
+        let dma_client = device.dma_client();
+        let mem = dma_client
             .allocate_dma_buffer(total_size)
             .context("failed to allocate memory for queues")?;
 
@@ -742,6 +741,6 @@ impl QueueHandler {
 pub(crate) fn admin_cmd(opcode: spec::AdminOpcode) -> spec::Command {
     spec::Command {
         cdw0: spec::Cdw0::new().with_opcode(opcode.0),
-        ..FromZeroes::new_zeroed()
+        ..FromZeros::new_zeroed()
     }
 }
