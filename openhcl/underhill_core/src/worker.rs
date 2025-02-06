@@ -20,6 +20,8 @@ use crate::dispatch::vtl2_settings_worker::wait_for_mana;
 use crate::dispatch::vtl2_settings_worker::InitialControllers;
 use crate::dispatch::LoadedVm;
 use crate::dispatch::LoadedVmNetworkSettings;
+use crate::dma_manager::DmaClientSpawner;
+use crate::dma_manager::GlobalDmaManager;
 use crate::emuplat::firmware::UnderhillLogger;
 use crate::emuplat::firmware::UnderhillVsmConfig;
 use crate::emuplat::framebuffer::FramebufferRemoteControl;
@@ -71,6 +73,7 @@ use guest_emulation_transport::GuestEmulationTransportClient;
 use guestmem::GuestMemory;
 use guid::Guid;
 use hcl_compat_uefi_nvram_storage::HclCompatNvramQuirks;
+use hcl_mapper::HclMapper;
 use hvdef::hypercall::HvGuestOsId;
 use hvdef::HvRegisterValue;
 use hvdef::Vtl;
@@ -169,7 +172,7 @@ use vmotherboard::options::BaseChipsetFoundation;
 use vmotherboard::BaseChipsetBuilder;
 use vmotherboard::BaseChipsetBuilderOutput;
 use vmotherboard::ChipsetDeviceHandle;
-use zerocopy::FromZeroes;
+use zerocopy::FromZeros;
 
 pub(crate) const PM_BASE: u16 = 0x400;
 pub(crate) const SYSTEM_IRQ_ACPI: u32 = 9;
@@ -742,17 +745,19 @@ impl UhVmNetworkSettings {
         driver_source: &VmTaskDriverSource,
         uevent_listener: &UeventListener,
         servicing_netvsp_state: &Option<Vec<crate::emuplat::netvsp::SavedState>>,
-        shared_vis_pages_pool: &Option<PagePool>,
         partition: Arc<UhPartition>,
         state_units: &StateUnits,
         tp: &AffinitizedThreadpool,
         vmbus_server: &Option<VmbusServerHandle>,
+        dma_client_spawner: DmaClientSpawner,
     ) -> anyhow::Result<RuntimeSavedState> {
         let instance_id = nic_config.instance_id;
         let nic_max_sub_channels = nic_config
             .max_sub_channels
             .unwrap_or(MAX_SUBCHANNELS_PER_VNIC)
             .min(vps_count as u16);
+
+        let dma_client = dma_client_spawner.create_client(format!("nic_{}", nic_config.pci_id))?;
 
         let (vf_manager, endpoints, save_state) = HclNetworkVFManager::new(
             nic_config.instance_id,
@@ -764,9 +769,8 @@ impl UhVmNetworkSettings {
             vps_count as u32,
             nic_max_sub_channels,
             servicing_netvsp_state,
-            vfio_dma_buffer(shared_vis_pages_pool, format!("nic_{}", instance_id))
-                .context("creating vfio dma buffer")?,
             self.dma_mode,
+            dma_client,
         )
         .await?;
 
@@ -877,10 +881,10 @@ impl LoadedVmNetworkSettings for UhVmNetworkSettings {
         threadpool: &AffinitizedThreadpool,
         uevent_listener: &UeventListener,
         servicing_netvsp_state: &Option<Vec<crate::emuplat::netvsp::SavedState>>,
-        shared_vis_pages_pool: &Option<PagePool>,
         partition: Arc<UhPartition>,
         state_units: &StateUnits,
         vmbus_server: &Option<VmbusServerHandle>,
+        dma_client_spawner: DmaClientSpawner,
     ) -> anyhow::Result<RuntimeSavedState> {
         if self.vf_managers.contains_key(&instance_id) {
             return Err(NetworkSettingsError::VFManagerExists(instance_id).into());
@@ -908,11 +912,11 @@ impl LoadedVmNetworkSettings for UhVmNetworkSettings {
                 &driver_source,
                 uevent_listener,
                 servicing_netvsp_state,
-                shared_vis_pages_pool,
                 partition,
                 state_units,
                 threadpool,
                 vmbus_server,
+                dma_client_spawner,
             )
             .await?;
 
@@ -1086,19 +1090,6 @@ fn build_vtl0_memory_layout(
 
 fn round_up_to_2mb(bytes: u64) -> u64 {
     (bytes + (2 * 1024 * 1024) - 1) & !((2 * 1024 * 1024) - 1)
-}
-
-fn vfio_dma_buffer(
-    shared_vis_pages_pool: &Option<PagePool>,
-    device_name: String,
-) -> anyhow::Result<Arc<dyn VfioDmaBuffer>> {
-    shared_vis_pages_pool
-        .as_ref()
-        .map(|p| -> anyhow::Result<Arc<dyn VfioDmaBuffer>> {
-            p.allocator(device_name)
-                .map(|alloc| Arc::new(alloc) as Arc<dyn VfioDmaBuffer>)
-        })
-        .unwrap_or(Ok(Arc::new(LockedMemorySpawner)))
 }
 
 #[cfg_attr(guest_arch = "aarch64", allow(dead_code))]
@@ -1525,6 +1516,7 @@ async fn new_underhill_vm(
                 .vtom_offset_bit
                 .map(|bit| 1 << bit)
                 .unwrap_or(0),
+            HclMapper::new().context("failed to create hcl mapper")?,
         )
         .context("failed to create shared vis page pool")?;
 
@@ -1551,8 +1543,11 @@ async fn new_underhill_vm(
         use vmcore::save_restore::SaveRestore;
 
         let ranges = runtime_params.private_pool_ranges();
-        let mut pool =
-            PagePool::new_private_pool(ranges).context("failed to create private pool")?;
+        let mut pool = PagePool::new_private_pool(
+            ranges,
+            HclMapper::new().context("failed to create hcl mapper")?,
+        )
+        .context("failed to create private pool")?;
 
         if let Some(pool_state) = servicing_state.private_pool_state.flatten() {
             pool.restore(pool_state)
@@ -1876,42 +1871,46 @@ async fn new_underhill_vm(
         crate::inspect_proc::periodic_telemetry_task(driver_source.simple()),
     );
 
+    let shared_vis_pool_spawner = shared_vis_pages_pool
+        .as_ref()
+        .map(|p| p.allocator_spawner());
+
+    let private_pool_spanwer = private_pool.as_ref().map(|p| p.allocator_spawner());
+
+    let private_pool_spawner_available = private_pool_spanwer.is_some();
+
+    let vfio_dma_buffer_spawner = Box::new(
+        move |device_id: String| -> anyhow::Result<Arc<dyn VfioDmaBuffer>> {
+            shared_vis_pool_spawner
+                .as_ref()
+                .map(|spawner| {
+                    spawner
+                        .allocator(device_id.clone())
+                        .map(|alloc| Arc::new(alloc) as _)
+                })
+                .unwrap_or_else(|| {
+                    private_pool_spanwer
+                        .as_ref()
+                        .map(|spawner| {
+                            spawner
+                                .allocator(device_id.clone())
+                                .map(|alloc| Arc::new(alloc) as _)
+                        })
+                        .unwrap_or(Ok(Arc::new(LockedMemorySpawner) as _))
+                })
+        },
+    );
+
+    let dma_manager = GlobalDmaManager::new(vfio_dma_buffer_spawner);
     let nvme_manager = if env_cfg.nvme_vfio {
-        let shared_vis_pool_spawner = shared_vis_pages_pool
-            .as_ref()
-            .map(|p| p.allocator_spawner());
-
-        let private_pool_spanwer = private_pool.as_ref().map(|p| p.allocator_spawner());
-
-        let save_restore_supported = env_cfg.nvme_keep_alive && private_pool_spanwer.is_some();
-        let vfio_dma_buffer_spawner = Box::new(
-            move |device_id: String| -> anyhow::Result<Arc<dyn VfioDmaBuffer>> {
-                shared_vis_pool_spawner
-                    .as_ref()
-                    .map(|spawner| {
-                        spawner
-                            .allocator(device_id.clone())
-                            .map(|alloc| Arc::new(alloc) as _)
-                    })
-                    .unwrap_or_else(|| {
-                        private_pool_spanwer
-                            .as_ref()
-                            .map(|spawner| {
-                                spawner
-                                    .allocator(device_id.clone())
-                                    .map(|alloc| Arc::new(alloc) as _)
-                            })
-                            .unwrap_or(Ok(Arc::new(LockedMemorySpawner) as _))
-                    })
-            },
-        );
+        let save_restore_supported = env_cfg.nvme_keep_alive && private_pool_spawner_available;
 
         let manager = NvmeManager::new(
             &driver_source,
             processor_topology.vp_count(),
-            vfio_dma_buffer_spawner,
             save_restore_supported,
             servicing_state.nvme_state.unwrap_or(None),
+            dma_manager.get_client_spawner().clone(),
         );
 
         resolver.add_async_resolver::<DiskHandleKind, _, NvmeDiskConfig, _>(NvmeDiskResolver::new(
@@ -2848,10 +2847,10 @@ async fn new_underhill_vm(
                     tp,
                     &uevent_listener,
                     &servicing_state.emuplat.netvsp_state,
-                    &shared_vis_pages_pool,
                     partition.clone(),
                     &state_units,
                     &vmbus_server,
+                    dma_manager.get_client_spawner().clone(),
                 )
                 .await?;
 
@@ -3074,6 +3073,7 @@ async fn new_underhill_vm(
         private_pool,
         nvme_keep_alive: env_cfg.nvme_keep_alive,
         test_configuration: env_cfg.test_configuration,
+        dma_manager,
     };
 
     Ok(loaded_vm)
