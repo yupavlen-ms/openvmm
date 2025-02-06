@@ -2677,6 +2677,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "hcl_mapper"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "hcl",
+ "hvdef",
+ "inspect",
+ "page_pool_alloc",
+ "sparse_mmap",
+ "tracing",
+]
+
+[[package]]
 name = "heck"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4873,7 +4886,6 @@ name = "page_pool_alloc"
 version = "0.0.0"
 dependencies = [
  "anyhow",
- "hcl",
  "hvdef",
  "inspect",
  "memory_range",
@@ -7067,6 +7079,7 @@ dependencies = [
  "guestmem",
  "guid",
  "hcl_compat_uefi_nvram_storage",
+ "hcl_mapper",
  "hvdef",
  "hyperv_ic_guest",
  "hyperv_ic_resources",
