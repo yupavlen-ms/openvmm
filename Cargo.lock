@@ -5149,6 +5149,7 @@ dependencies = [
  "fscommon",
  "futures",
  "futures-concurrency",
+ "gdma_resources",
  "get_resources",
  "gptman",
  "guid",
@@ -5167,6 +5168,7 @@ dependencies = [
  "mesh",
  "mesh_process",
  "mesh_worker",
+ "net_backend_resources",
  "nvme_resources",
  "pal",
  "pal_async",
@@ -8495,13 +8497,11 @@ dependencies = [
  "anyhow",
  "build_rs_guest_arch",
  "disk_backend_resources",
- "gdma_resources",
  "guid",
  "hvlite_defs",
  "hvlite_ttrpc_vmservice",
  "mesh",
  "mesh_rpc",
- "net_backend_resources",
  "nvme_resources",
  "pal_async",
  "petri",
@@ -8816,7 +8816,6 @@ dependencies = [
  "criterion",
  "win_import_lib",
  "winapi",
- "zerocopy 0.8.14",
 ]
 
 [[package]]
