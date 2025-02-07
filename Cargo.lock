@@ -2582,6 +2582,7 @@ dependencies = [
  "mesh_protobuf",
  "thiserror 2.0.0",
  "winapi",
+ "windows",
  "windows-sys 0.52.0",
  "zerocopy 0.8.14",
 ]
@@ -4926,6 +4927,7 @@ dependencies = [
  "widestring",
  "win_import_lib",
  "winapi",
+ "windows",
 ]
 
 [[package]]
@@ -8072,13 +8074,13 @@ dependencies = [
  "futures",
  "guestmem",
  "mesh",
- "ntapi",
  "pal",
  "pal_async",
  "pal_event",
  "tracing",
  "vmbus_core",
- "winapi",
+ "widestring",
+ "windows",
  "zerocopy 0.8.14",
 ]
 
@@ -8241,7 +8243,7 @@ dependencies = [
  "vmbus_proxy",
  "vmbus_ring",
  "vmcore",
- "winapi",
+ "windows",
  "zerocopy 0.8.14",
 ]
 
