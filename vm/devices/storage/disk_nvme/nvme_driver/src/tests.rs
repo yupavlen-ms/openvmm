@@ -51,7 +51,7 @@ async fn test_nvme_ioqueue_max_mqes(driver: DefaultDriver) {
     const CPU_COUNT: u32 = 64;
 
     let base_len = 64 << 20;
-    let payload_len = 4 << 30;
+    let payload_len = 4 << 20;
     let mem = DeviceSharedMemory::new(base_len, payload_len);
 
     let driver_source = VmTaskDriverSource::new(SingleDriverBackend::new(driver));
@@ -85,7 +85,7 @@ async fn test_nvme_ioqueue_invalid_mqes(driver: DefaultDriver) {
     const CPU_COUNT: u32 = 64;
 
     let base_len = 64 << 20;
-    let payload_len = 4 << 30;
+    let payload_len = 4 << 20;
     let mem = DeviceSharedMemory::new(base_len, payload_len);
 
     let driver_source = VmTaskDriverSource::new(SingleDriverBackend::new(driver));
@@ -117,7 +117,7 @@ async fn test_nvme_driver(driver: DefaultDriver, allow_dma: bool) {
     const CPU_COUNT: u32 = 64;
 
     let base_len = 64 << 20;
-    let payload_len = 4 << 30;
+    let payload_len = 4 << 20;
     let mem = DeviceSharedMemory::new(base_len, payload_len);
     let payload_mem = mem
         .guest_memory()
