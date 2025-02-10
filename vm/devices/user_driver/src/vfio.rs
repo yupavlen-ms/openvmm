@@ -76,7 +76,7 @@ impl VfioDevice {
         pci_id: &str,
         dma_client: Arc<dyn DmaClient>,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: VfioDevice::new {}", pci_id);
+        tracing::info!("YSP: VfioDevice::new {} keepalive = false", pci_id);
         Self::restore(driver_source, pci_id, false, dma_client).await
     }
 

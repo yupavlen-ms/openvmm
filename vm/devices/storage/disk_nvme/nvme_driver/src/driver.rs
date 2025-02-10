@@ -202,7 +202,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         cpu_count: u32,
         mut device: T,
     ) -> anyhow::Result<Self> {
-        tracing::info!("YSP: new_disabled");
+        tracing::info!("YSP: new_disabled cpu_count={}", cpu_count);
         let driver = driver_source.simple();
         let bar0 = Bar0(
             device
@@ -362,6 +362,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             anyhow::bail!("bad device behavior: max_interrupt_count == 0");
         }
 
+        tracing::info!("YSP: requested_io_queue_count={requested_io_queue_count} max_interrupt_count={max_interrupt_count}");
         let requested_io_queue_count = if max_interrupt_count < requested_io_queue_count as u32 {
             tracing::warn!(
                 max_interrupt_count,
@@ -392,6 +393,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let dw0 = spec::Cdw11FeatureNumberOfQueues::from(completion.dw0);
         let sq_count = dw0.nsq_z() + 1;
         let cq_count = dw0.ncq_z() + 1;
+        tracing::info!("YSP: sq_count={sq_count} cq_count{cq_count}");
         let allocated_io_queue_count = sq_count.min(cq_count);
         if allocated_io_queue_count < requested_io_queue_count {
             tracing::warn!(

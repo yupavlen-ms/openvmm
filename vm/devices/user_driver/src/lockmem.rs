@@ -137,7 +137,7 @@ impl crate::DmaClient for LockedMemorySpawner {
         _len: usize,
         _base_pfn: u64,
     ) -> anyhow::Result<crate::memory::MemoryBlock> {
-        tracing::error!("YSP: WRONG restore_dma_buffer len={}", _len);
+        tracing::error!("YSP: WRONG attach_dma_buffer len={}", _len);
         anyhow::bail!("restore not supported for lockmem")
     }
 }

@@ -261,7 +261,7 @@ async fn test_nvme_save_restore_inner(driver: DefaultDriver) {
         .await
         .unwrap();
 
-    let device = EmulatedDevice::new(nvme_ctrl, msi_x, mem);
+    let device = EmulatedDevice::new(nvme_ctrl, msi_x, mem.clone());
     let mut nvme_driver = NvmeDriver::new(&driver_source, CPU_COUNT, device)
         .await
         .unwrap();
@@ -270,11 +270,10 @@ async fn test_nvme_save_restore_inner(driver: DefaultDriver) {
     assert_eq!(saved_state.namespaces.len(), 1);
 
     // Create a second set of devices since the ownership has been moved.
-    let new_emu_mem = DeviceSharedMemory::new(base_len, payload_len);
     let mut new_msi_x = MsiInterruptSet::new();
     let mut new_nvme_ctrl = nvme::NvmeController::new(
         &driver_source,
-        new_emu_mem.guest_memory().clone(),
+        mem.guest_memory().clone(),
         &mut new_msi_x,
         &mut ExternallyManagedMmioIntercepts,
         NvmeControllerCaps {
@@ -296,7 +295,7 @@ async fn test_nvme_save_restore_inner(driver: DefaultDriver) {
     // Wait for CSTS.RDY to set.
     backoff.back_off().await;
 
-    let new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, new_emu_mem);
+    let new_device = EmulatedDevice::new(new_nvme_ctrl, new_msi_x, mem.clone());
     let _new_nvme_driver = NvmeDriver::restore(&driver_source, CPU_COUNT, new_device, &saved_state)
         .await
         .unwrap();
