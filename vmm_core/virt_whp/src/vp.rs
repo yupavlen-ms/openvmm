@@ -1450,6 +1450,7 @@ mod x86 {
                 });
 
             if let Err(MsrError::Unknown) = r {
+                tracing::warn!("YSP: MsrError::Unknown");
                 if self.send_unknown_msrs_to_vtl2() {
                     self.send_msr_to_vtl2(
                         self.new_intercept_header(
@@ -1461,13 +1462,15 @@ mod x86 {
                         0,
                     );
                     return Ok(true);
+                } else {
+                    tracing::warn!("YSP: not sending to vtl2");
                 }
             }
 
             let v = match r {
                 Ok(v) => Some(v),
                 Err(err) => {
-                    tracing::warn!(rip = exit.vp_context.Rip, msr, ?err, "invalid msr read");
+                    tracing::warn!(rip = exit.vp_context.Rip, msr, ?err, "YSP: invalid msr read");
                     None
                 }
             };

@@ -136,6 +136,7 @@ mod x86_64 {
                 HvX64RegisterName::ReferenceTsc => whp::abi::WHvRegisterReferenceTsc,
 
                 HvX64RegisterName::VpAssistPage => whp::abi::WHvRegisterVpAssistPage,
+                HvX64RegisterName::RegisterPage => whp::abi::WHvRegisterPage,
 
                 HvX64RegisterName::Sversion => whp::abi::WHvRegisterSversion,
                 HvX64RegisterName::Scontrol => whp::abi::WHvRegisterScontrol,

@@ -490,6 +490,7 @@ pub trait MsrErrorExt: Sized {
 
 impl<T> MsrErrorExt for Result<T, MsrError> {
     fn or_else_if_unknown(self, f: impl FnOnce() -> Self) -> Self {
+        tracing::warn!("YSP: or_else_if_unknown");
         match self {
             Err(MsrError::Unknown) => f(),
             r => r,
