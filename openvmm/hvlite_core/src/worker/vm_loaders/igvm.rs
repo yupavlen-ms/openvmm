@@ -497,13 +497,14 @@ fn build_device_tree(
     }
 
     // Indicate that NVMe keep-alive feature is supported by this VMM.
-    openhcl = openhcl.start_node("keep-alive")?
+    openhcl = openhcl
+        .start_node("keep-alive")?
         .add_str(p_vf_keep_alive_devs, "nvme")?
         .end_node()?;
 
     // TODO: This is defined by GED when running on WHP. What is OpenVMM way?
-    let reserved_dma: Option<u64> = Some(1024);
-    //let reserved_dma = None;
+    // let reserved_dma: Option<u64> = Some(1024);
+    let reserved_dma = None;
     if let Some(reserved_dma) = reserved_dma {
         // Provide a hint to OpenHCL about reserved DMA size.
         openhcl = openhcl.start_node("device-dma")?
