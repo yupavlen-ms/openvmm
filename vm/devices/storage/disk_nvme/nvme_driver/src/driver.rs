@@ -38,12 +38,11 @@ use user_driver::backoff::Backoff;
 use user_driver::interrupt::DeviceInterrupt;
 use user_driver::memory::MemoryBlock;
 use user_driver::DeviceBacking;
-use user_driver::HostDmaAllocator;
 use vmcore::vm_task::VmTaskDriver;
 use vmcore::vm_task::VmTaskDriverSource;
-use zerocopy::AsBytes;
 use zerocopy::FromBytes;
-use zerocopy::FromZeroes;
+use zerocopy::FromZeros;
+use zerocopy::IntoBytes;
 
 /// An NVMe driver.
 ///
@@ -350,7 +349,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                         .into(),
                     ..admin_cmd(spec::AdminOpcode::IDENTIFY)
                 },
-                Arc::get_mut(identify).unwrap().as_bytes_mut(),
+                Arc::get_mut(identify).unwrap().as_mut_bytes(),
             )
             .await
             .context("failed to identify controller")?;
@@ -538,7 +537,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             Ok(s) => {
                 tracing::info!("YSP: namespace len={}", self.namespaces.len());
                 Ok(NvmeDriverSavedState {
-                    identify_ctrl: spec::IdentifyController::read_from(
+                    identify_ctrl: spec::IdentifyController::read_from_bytes(
                         self.identify.as_ref().unwrap().as_bytes(),
                     )
                     .unwrap(),
@@ -600,8 +599,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             })),
             admin: None, // Updated below.
             identify: Some(Arc::new(
-                spec::IdentifyController::read_from(saved_state.identify_ctrl.as_bytes())
-                    .ok_or(RestoreError::InvalidData)?,
+                spec::IdentifyController::read_from_bytes(saved_state.identify_ctrl.as_bytes())
+                    .map_err(|_| RestoreError::InvalidData)?, // TODO: zerocopy: map_err (https://github.com/microsoft/openvmm/issues/759)
             )),
             driver: driver.clone(),
             io_issuers,
@@ -619,7 +618,8 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .map_interrupt(0, 0)
             .context("failed to map interrupt 0")?;
 
-        let dma_buffer = worker.device.host_allocator();
+        let dma_client = worker.device.dma_client();
+
         // Restore the admin queue pair.
         let admin = saved_state
             .worker_data
@@ -627,7 +627,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .as_ref()
             .map(|a| {
                 // Restore memory block for admin queue pair.
-                let mem_block = dma_buffer
+                let mem_block = dma_client
                     .attach_dma_buffer(a.mem_len, a.base_pfn)
                     .expect("unable to restore mem block");
                 QueuePair::restore(driver.clone(), interrupt0, registers.clone(), mem_block, a)
@@ -671,7 +671,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     .map_interrupt(q.msix, q.cpu)
                     .context("failed to map interrupt")?;
                 let mem_block =
-                    dma_buffer.attach_dma_buffer(q.queue_data.mem_len, q.queue_data.base_pfn)?;
+                    dma_client.attach_dma_buffer(q.queue_data.mem_len, q.queue_data.base_pfn)?;
                 let q =
                     IoQueue::restore(driver.clone(), interrupt, registers.clone(), mem_block, q)?;
                 let issuer = IoIssuer {
@@ -737,7 +737,7 @@ async fn handle_asynchronous_events(
                                 .into(),
                             ..admin_cmd(spec::AdminOpcode::GET_LOG_PAGE)
                         },
-                        list.as_bytes_mut(),
+                        list.as_mut_bytes(),
                     )
                     .await
                     .context("failed to query changed namespace list")?;

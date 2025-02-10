@@ -9,35 +9,33 @@ use anyhow::Context;
 use guid::Guid;
 use hvlite_ttrpc_vmservice as vmservice;
 use pal_async::DefaultPool;
-use petri::TestArtifactRequirements;
+use petri::ResolvedArtifact;
 use petri_artifacts_vmm_test::artifacts;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use std::process::Stdio;
 use unix_socket::UnixStream;
-use vmm_test_petri_support::TestArtifactRequirementsExt;
 
 #[cfg(guest_arch = "x86_64")]
-petri::test!(
-    test_ttrpc_interface,
-    TestArtifactRequirements::new()
-        .require_openvmm_standard(None)
-        .require(artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64)
-        .require(artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64)
-);
+petri::test!(test_ttrpc_interface, |resolver| {
+    let openvmm = resolver.require(artifacts::OPENVMM_NATIVE);
+    let kernel = resolver.require(artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64);
+    let initrd = resolver.require(artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64);
+    [openvmm.erase(), kernel.erase(), initrd.erase()]
+});
 
 #[cfg(guest_arch = "x86_64")]
-fn test_ttrpc_interface(_name: &str, artifacts: &petri::TestArtifacts) -> anyhow::Result<()> {
-    // This test doesn't use a Petri VM, so it needs to initialize tracing itself.
-    test_with_tracing::init();
-
+fn test_ttrpc_interface(
+    params: petri::PetriTestParams<'_>,
+    [openvmm, kernel_path, initrd_path]: [ResolvedArtifact; 3],
+) -> anyhow::Result<()> {
     let mut socket_path = std::env::temp_dir();
     socket_path.push(Guid::new_random().to_string());
 
     tracing::info!(socket_path = %socket_path.display(), "launching hvlite with ttrpc");
 
-    let mut child = std::process::Command::new(artifacts.get(artifacts::OPENVMM_NATIVE))
+    let mut child = std::process::Command::new(openvmm)
         .arg("--ttrpc")
         .arg(&socket_path)
         .stdin(Stdio::null())
@@ -53,15 +51,13 @@ fn test_ttrpc_interface(_name: &str, artifacts: &petri::TestArtifacts) -> anyhow
     // Copy the child's stderr to this process's, since internally this is
     // wrapped by the test harness.
     let stderr = child.stderr.take().context("failed to take stderr")?;
+    let stderr_log = params.logger.log_file("stderr").unwrap();
     std::thread::spawn(move || {
         let stderr = BufReader::new(stderr);
         for line in stderr.lines() {
-            tracing::info!(target: "stderr_log", "{}", line.unwrap());
+            stderr_log.write_entry(line.unwrap());
         }
     });
-
-    let kernel_path = artifacts.get(artifacts::loadable::LINUX_DIRECT_TEST_KERNEL_X64);
-    let initrd_path = artifacts.get(artifacts::loadable::LINUX_DIRECT_TEST_INITRD_X64);
 
     let ttrpc_path = socket_path.clone();
     DefaultPool::run_with(|driver| async move {
@@ -89,8 +85,8 @@ fn test_ttrpc_interface(_name: &str, artifacts: &petri::TestArtifacts) -> anyhow
                             }),
                             boot_config: Some(vmservice::vm_config::BootConfig::DirectBoot(
                                 vmservice::DirectBoot {
-                                    kernel_path: kernel_path.to_string_lossy().to_string(),
-                                    initrd_path: initrd_path.to_string_lossy().to_string(),
+                                    kernel_path: kernel_path.get().to_string_lossy().to_string(),
+                                    initrd_path: initrd_path.get().to_string_lossy().to_string(),
                                     kernel_cmdline:
                                         "console=ttyS0 rdinit=/bin/busybox panic=-1 -- poweroff -f"
                                             .to_string(),
@@ -112,12 +108,16 @@ fn test_ttrpc_interface(_name: &str, artifacts: &petri::TestArtifacts) -> anyhow
 
             let com1 = UnixStream::connect(&com1_path).unwrap();
 
+            let com1_log = params.logger.log_file("linux").unwrap();
             std::thread::spawn(move || {
                 let read = BufReader::new(com1);
                 for line in read.lines() {
                     match line {
-                        Ok(line) => tracing::info!(target: "linux_console", "{}", line),
-                        Err(e) => tracing::error!(target: "linux_console", "{}", e),
+                        Ok(line) => com1_log.write_entry(line),
+                        Err(e) => tracing::error!(
+                            error = &e as &dyn std::error::Error,
+                            "failed to read from com1"
+                        ),
                     }
                 }
             });
