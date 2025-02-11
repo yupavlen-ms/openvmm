@@ -3687,15 +3687,18 @@ dependencies = [
 name = "lxutil"
 version = "0.0.0"
 dependencies = [
+ "bitfield-struct",
  "libc",
  "lx",
  "ntapi",
  "pal",
  "parking_lot",
+ "static_assertions",
  "tempfile",
  "tracing",
  "widestring",
  "winapi",
+ "windows",
  "zerocopy 0.8.14",
 ]
 
