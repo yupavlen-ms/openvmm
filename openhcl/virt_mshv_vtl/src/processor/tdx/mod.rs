@@ -31,6 +31,7 @@ use hv1_emulator::synic::ProcessorSynic;
 use hv1_hypercall::AsHandler;
 use hv1_hypercall::HvRepResult;
 use hv1_hypercall::HypercallIo;
+use hv1_structs::ProcessorSet;
 use hv1_structs::VtlArray;
 use hvdef::hypercall::HvFlushFlags;
 use hvdef::hypercall::HvGvaRange;
@@ -3368,7 +3369,7 @@ impl<T> HypercallIo for TdHypercall<'_, '_, T> {
 impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressList for UhHypercallHandler<'_, '_, T, TdxBacked> {
     fn flush_virtual_address_list(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
         gva_ranges: &[HvGvaRange],
     ) -> HvRepResult {
@@ -3386,11 +3387,11 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressListEx
 {
     fn flush_virtual_address_list_ex(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
         gva_ranges: &[HvGvaRange],
     ) -> HvRepResult {
-        self.hcvm_validate_flush_inputs(&processor_set, flags, true)
+        self.hcvm_validate_flush_inputs(processor_set, flags, true)
             .map_err(|e| (e, 0))?;
 
         let vtl = self.intercepted_vtl;
@@ -3426,7 +3427,7 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpace
 {
     fn flush_virtual_address_space(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
     ) -> hvdef::HvResult<()> {
         hv1_hypercall::FlushVirtualAddressSpaceEx::flush_virtual_address_space_ex(
@@ -3442,10 +3443,10 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpaceEx
 {
     fn flush_virtual_address_space_ex(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
     ) -> hvdef::HvResult<()> {
-        self.hcvm_validate_flush_inputs(&processor_set, flags, false)?;
+        self.hcvm_validate_flush_inputs(processor_set, flags, false)?;
         let vtl = self.intercepted_vtl;
 
         {
@@ -3499,13 +3500,13 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, TdxBacked> {
     fn wake_processors_for_tlb_flush(
         &mut self,
         target_vtl: GuestVtl,
-        processor_set: Option<Vec<u32>>,
+        processor_set: Option<ProcessorSet<'_>>,
     ) {
         match processor_set {
             Some(processors) => {
                 self.wake_processors_for_tlb_flush_inner(
                     target_vtl,
-                    processors.into_iter().map(|x| x as usize),
+                    processors.iter().map(|x| x as usize),
                 );
             }
             None => {

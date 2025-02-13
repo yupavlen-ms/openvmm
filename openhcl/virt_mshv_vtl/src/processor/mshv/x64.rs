@@ -1718,7 +1718,7 @@ impl<T: CpuIo> hv1_hypercall::RetargetDeviceInterrupt
         device_id: u64,
         address: u64,
         data: u32,
-        params: &hv1_hypercall::HvInterruptParameters<'_>,
+        params: hv1_hypercall::HvInterruptParameters<'_>,
     ) -> hvdef::HvResult<()> {
         self.retarget_virtual_interrupt(
             device_id,

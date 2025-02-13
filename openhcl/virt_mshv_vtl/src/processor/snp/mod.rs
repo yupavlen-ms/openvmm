@@ -27,6 +27,7 @@ use hv1_emulator::hv::ProcessorVtlHv;
 use hv1_emulator::synic::ProcessorSynic;
 use hv1_hypercall::HvRepResult;
 use hv1_hypercall::HypercallIo;
+use hv1_structs::ProcessorSet;
 use hv1_structs::VtlArray;
 use hvdef::hypercall::Control;
 use hvdef::hypercall::HvFlushFlags;
@@ -2233,7 +2234,7 @@ impl<T: CpuIo> hv1_hypercall::VtlSwitchOps for UhHypercallHandler<'_, '_, T, Snp
 impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressList for UhHypercallHandler<'_, '_, T, SnpBacked> {
     fn flush_virtual_address_list(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
         gva_ranges: &[HvGvaRange],
     ) -> HvRepResult {
@@ -2251,17 +2252,17 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressListEx
 {
     fn flush_virtual_address_list_ex(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
         gva_ranges: &[HvGvaRange],
     ) -> HvRepResult {
-        self.hcvm_validate_flush_inputs(&processor_set, flags, true)
+        self.hcvm_validate_flush_inputs(processor_set, flags, true)
             .map_err(|e| (e, 0))?;
 
         // As a performance optimization if we are asked to do too large an amount of work
         // just do a flush entire instead.
         if gva_ranges.len() > 16 || gva_ranges.iter().any(|range| if flags.use_extended_range_format() { range.as_extended().additional_pages() } else { range.as_simple().additional_pages() } > 16) {
-            self.do_flush_virtual_address_space(&processor_set, flags);
+            self.do_flush_virtual_address_space(processor_set, flags);
         } else {
             self.do_flush_virtual_address_list(flags, gva_ranges);
         }
@@ -2277,7 +2278,7 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpace
 {
     fn flush_virtual_address_space(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
     ) -> hvdef::HvResult<()> {
         hv1_hypercall::FlushVirtualAddressSpaceEx::flush_virtual_address_space_ex(
@@ -2293,12 +2294,12 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpaceEx
 {
     fn flush_virtual_address_space_ex(
         &mut self,
-        processor_set: Vec<u32>,
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
     ) -> hvdef::HvResult<()> {
-        self.hcvm_validate_flush_inputs(&processor_set, flags, false)?;
+        self.hcvm_validate_flush_inputs(processor_set, flags, false)?;
 
-        self.do_flush_virtual_address_space(&processor_set, flags);
+        self.do_flush_virtual_address_space(processor_set, flags);
 
         // Mark that this VP needs to wait for all TLB locks to be released before returning.
         self.vp.set_wait_for_tlb_locks(self.intercepted_vtl);
@@ -2356,8 +2357,12 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, SnpBacked> {
         self.vp.partition.hcl.tlbsync();
     }
 
-    fn do_flush_virtual_address_space(&mut self, processor_set: &[u32], flags: HvFlushFlags) {
-        let only_self = processor_set.len() == 1 && processor_set[0] == self.vp.vp_index().index();
+    fn do_flush_virtual_address_space(
+        &mut self,
+        processor_set: ProcessorSet<'_>,
+        flags: HvFlushFlags,
+    ) {
+        let only_self = [self.vp.vp_index().index()].into_iter().eq(processor_set);
         if only_self && flags.non_global_mappings_only() {
             self.vp.runner.vmsa_mut(self.intercepted_vtl).set_pcpu_id(0);
         } else {

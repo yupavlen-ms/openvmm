@@ -19,6 +19,7 @@ use crate::WakeReason;
 use guestmem::GuestMemory;
 use hv1_emulator::RequestInterrupt;
 use hv1_hypercall::HvRepResult;
+use hv1_structs::ProcessorSet;
 use hvdef::hypercall::HvFlushFlags;
 use hvdef::hypercall::TranslateGvaResultCode;
 use hvdef::HvCacheType;
@@ -722,7 +723,7 @@ impl<T: CpuIo, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
         data: u32,
         vector: u32,
         multicast: bool,
-        target_processors: &[u32],
+        target_processors: ProcessorSet<'_>,
     ) -> HvResult<()> {
         // Before dispatching retarget_device_interrupt, add the device vector
         // to partition global device vector table and issue `proxy_irr_blocked`
@@ -751,7 +752,7 @@ impl<T: CpuIo, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
 
     pub fn hcvm_validate_flush_inputs(
         &mut self,
-        processor_set: &[u32],
+        processor_set: ProcessorSet<'_>,
         flags: HvFlushFlags,
         allow_extended_ranges: bool,
     ) -> HvResult<()> {
@@ -811,13 +812,13 @@ impl<T: CpuIo, B: HardwareIsolatedBacking> hv1_hypercall::RetargetDeviceInterrup
         device_id: u64,
         address: u64,
         data: u32,
-        params: &hv1_hypercall::HvInterruptParameters<'_>,
+        params: hv1_hypercall::HvInterruptParameters<'_>,
     ) -> HvResult<()> {
         let hv1_hypercall::HvInterruptParameters {
             vector,
             multicast,
             target_processors,
-        } = *params;
+        } = params;
         // It is unknown whether the interrupt is physical or virtual, so try both. Note that the
         // actual response from the hypervisor can't really be trusted so:
         // 1. Always invoke the virtual interrupt retargeting.
