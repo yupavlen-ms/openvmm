@@ -18,12 +18,12 @@ win_import_lib.workspace = true
 getrandom.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+headervec.workspace = true
 pal_event.workspace = true
 
 ntapi = { workspace = true, features = ["impl-default"] }
 socket2 = { workspace = true, features = ["all"] }
 widestring.workspace = true
-windows = { workspace = true, features = ["Wdk_Foundation", "Win32_Foundation"] }
 
 [target.'cfg(windows)'.dependencies.winapi]
 workspace = true
@@ -50,6 +50,14 @@ features = [
     "winioctl",
     "winnt",
     "winsock2",
+]
+
+[target.'cfg(windows)'.dependencies.windows]
+workspace = true
+features = [
+    "Wdk_Foundation",
+    "Win32_Foundation",
+    "Win32_Security"
 ]
 
 [target.'cfg(unix)'.dependencies]

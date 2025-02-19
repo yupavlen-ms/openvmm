@@ -320,7 +320,7 @@ impl VmbusProxy {
             let input = proxyioctl::VMBUS_PROXY_RUN_CHANNEL_INPUT { ChannelId: id };
             let mut bytes = 0;
             DeviceIoControl(
-                HANDLE(self.file.get().as_raw_handle() as isize),
+                HANDLE(self.file.get().as_raw_handle()),
                 proxyioctl::IOCTL_VMBUS_PROXY_RUN_CHANNEL,
                 Some(std::ptr::from_ref(&input).cast()),
                 size_of_val(&input) as u32,

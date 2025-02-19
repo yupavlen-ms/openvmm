@@ -114,7 +114,7 @@ impl IoQueue {
         tracing::info!("YSP: IoQueue::save cpu={} msi={}", self.cpu, self.iv);
         Ok(IoQueueSavedState {
             cpu: self.cpu,
-            msix: self.iv as u32,
+            iv: self.iv as u32,
             queue_data: self.queue.save().await?,
         })
     }
@@ -129,7 +129,7 @@ impl IoQueue {
         tracing::info!("YSP: IoQueue::restore");
         let IoQueueSavedState {
             cpu,
-            msix,
+            iv,
             queue_data,
         } = saved_state;
         let queue =
@@ -137,7 +137,7 @@ impl IoQueue {
 
         Ok(Self {
             queue,
-            iv: *msix as u16,
+            iv: *iv as u16,
             cpu: *cpu,
         })
     }
@@ -670,7 +670,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .flat_map(|q| -> Result<IoQueue, anyhow::Error> {
                 let interrupt = worker
                     .device
-                    .map_interrupt(q.msix, q.cpu)
+                    .map_interrupt(q.iv, q.cpu)
                     .context("failed to map interrupt")?;
                 let mem_block =
                     dma_client.attach_dma_buffer(q.queue_data.mem_len, q.queue_data.base_pfn)?;
@@ -1080,7 +1080,7 @@ pub mod save_restore {
         pub cpu: u32,
         #[mesh(2)]
         /// Interrupt vector (MSI-X)
-        pub msix: u32,
+        pub iv: u32,
         #[mesh(3)]
         pub queue_data: QueuePairSavedState,
     }
