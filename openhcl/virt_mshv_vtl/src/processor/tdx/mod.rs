@@ -508,8 +508,8 @@ impl HardwareIsolatedBacking for TdxBacked {
         _source_vtl: GuestVtl,
         _target_vtl: GuestVtl,
     ) {
-        // TODO TDX GUEST VSM
-        todo!()
+        // The GPs, Fxsave, and CR2 are saved in the shared kernel state. No copying needed.
+        // Debug registers and XFEM are shared architecturally. No copying needed.
     }
 
     fn translation_registers(
