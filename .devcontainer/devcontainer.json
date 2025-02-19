@@ -29,6 +29,8 @@
     // Allow kvm by setting privileged to true.
     "privileged": true,
 
+    "postCreateCommand": "ssh-agent -s && ssh-add",
+
     // Restore packages so that users can build as soon as the container is
     // ready.
     "updateContentCommand": "cargo xflowey restore-packages",
