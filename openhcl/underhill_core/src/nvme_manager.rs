@@ -296,7 +296,7 @@ impl NvmeManagerWorker {
     ) -> Result<&mut nvme_driver::NvmeDriver<VfioDevice>, InnerError> {
         let driver = match self.devices.entry(pci_id.to_owned()) {
             hash_map::Entry::Occupied(entry) => {
-                tracing::info!("YSP: existing entry");
+                tracing::info!("YSP: existing entry {}", pci_id);
                 entry.into_mut()
             }
             hash_map::Entry::Vacant(entry) => {

@@ -173,20 +173,6 @@ impl CompletionQueue {
     /// Saves queue data for servicing.
     pub fn save(&self) -> CompletionQueueSavedState {
         tracing::info!("YSP: CompletionQueue::save qid={} head={}/{} tag={}", self.cqid, self.head, self.committed_head, self.phase);
-        // YSP: FIXME: Debug code
-        let mut checker: [u8; 8] = [0; 8];
-        self.mem.read_at(0, checker.as_mut_slice());
-        tracing::info!(
-            "YSP: read [{} {} {} {} {} {} {} {}]",
-            checker[0],
-            checker[1],
-            checker[2],
-            checker[3],
-            checker[4],
-            checker[5],
-            checker[6],
-            checker[7],
-        );
         CompletionQueueSavedState {
             cqid: self.cqid,
             head: self.head,
@@ -202,7 +188,6 @@ impl CompletionQueue {
         saved_state: &CompletionQueueSavedState,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: CompletionQueue::restore qid={} head={}/{} tag={}", saved_state.cqid, saved_state.head, saved_state.committed_head, saved_state.phase);
-        // YSP: FIXME: Restore memory block.
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem.read_at(0, checker.as_mut_slice());

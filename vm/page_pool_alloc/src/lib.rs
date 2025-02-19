@@ -186,6 +186,7 @@ pub mod save_restore {
                     anyhow::anyhow!("missing slots in saved state"),
                 ));
             }
+            tracing::info!("YSP: private pool restored");
 
             Ok(())
         }
@@ -571,6 +572,7 @@ impl PagePool {
     ///
     /// Unmatched allocations are always logged via a `tracing::warn!` log.
     pub fn validate_restore(&self, leak_unrestored: bool) -> Result<(), UnrestoredAllocations> {
+        tracing::info!("YSP: validate_restore");
         let mut inner = self.inner.state.lock();
         let mut unrestored_allocation = false;
 
