@@ -7670,6 +7670,7 @@ dependencies = [
  "guestmem",
  "hvdef",
  "thiserror 2.0.0",
+ "tracelimit",
  "tracing",
  "virt",
  "vm_topology",
