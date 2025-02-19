@@ -23,6 +23,7 @@ use pal_async::task::Spawn;
 use pal_async::task::Task;
 use std::collections::hash_map;
 use std::collections::HashMap;
+use std::sync::Arc;
 use thiserror::Error;
 use tracing::Instrument;
 use user_driver::vfio::VfioDevice;
