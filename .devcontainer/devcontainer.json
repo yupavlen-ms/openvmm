@@ -29,12 +29,7 @@
     // Allow kvm by setting privileged to true.
     "privileged": true,
 
-    "onCreateCommand": [
-        "echo 'First command'",
-        "eval `ssh-agent -s`",
-        "echo 'Second command'",
-        "ssh-add"
-    ],
+    "onCreateCommand": "\"eval `ssh-agent -s` && ssh-add\"",
 
     // Restore packages so that users can build as soon as the container is
     // ready.
