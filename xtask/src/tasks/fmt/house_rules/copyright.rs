@@ -9,6 +9,13 @@ use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 
+fn commit(source: File, target: &Path) -> std::io::Result<()> {
+    source.set_permissions(target.metadata()?.permissions())?;
+    let (file, path) = source.into_parts();
+    drop(file); // Windows requires the source be closed in some cases.
+    fs_err::rename(path, target)
+}
+
 pub fn check_copyright(path: &Path, fix: bool) -> anyhow::Result<()> {
     const HEADER_MIT_FIRST: &str = "Copyright (c) Microsoft Corporation.";
     const HEADER_MIT_SECOND: &str = "Licensed under the MIT License.";
@@ -135,13 +142,10 @@ pub fn check_copyright(path: &Path, fix: bool) -> anyhow::Result<()> {
             // copy over the rest of the file contents
             std::io::copy(&mut f, &mut f_fixed)?;
 
-            // windows gets touchy if you try and rename files while there are open
-            // file handles
+            // Windows gets touchy if you try and rename files while there are open
+            // file handles.
             drop(f);
-            drop(f_fixed);
-
-            // ...and then swap the file with the newly fixed file
-            fs_err::rename(path_fix, path)?;
+            commit(f_fixed, path)?;
         }
     }
 
