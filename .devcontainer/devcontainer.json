@@ -30,7 +30,9 @@
     "privileged": true,
 
     "onCreateCommand": [
-        "/bin/sh -c eval `ssh-agent -s`",
+        "echo 'First command'",
+        "eval `ssh-agent -s`",
+        "echo 'Second command'",
         "ssh-add"
     ],
 
