@@ -18,10 +18,8 @@ use hvdef::HvRegisterName;
 use hvdef::HvRegisterValue;
 use memory_range::MemoryRange;
 use sidecar_client::SidecarVp;
+use std::cell::UnsafeCell;
 use std::os::fd::AsRawFd;
-use std::ptr::addr_of;
-use std::ptr::addr_of_mut;
-use std::ptr::NonNull;
 use tdcall::tdcall_vp_invgla;
 use tdcall::tdcall_vp_rd;
 use tdcall::tdcall_vp_wr;
@@ -38,11 +36,12 @@ use x86defs::tdx::TdxGlaListInfo;
 use x86defs::tdx::TdxL2Ctls;
 use x86defs::tdx::TdxL2EnterGuestState;
 use x86defs::tdx::TdxVmFlags;
+use x86defs::vmx::ApicPage;
 use x86defs::vmx::VmcsField;
 
 /// Runner backing for TDX partitions.
-pub struct Tdx {
-    apic: NonNull<[u32; 1024]>,
+pub struct Tdx<'a> {
+    apic_page: &'a UnsafeCell<ApicPage>,
 }
 
 impl MshvVtl {
@@ -76,14 +75,14 @@ impl MshvVtl {
     }
 }
 
-impl ProcessorRunner<'_, Tdx> {
+impl<'a> ProcessorRunner<'a, Tdx<'a>> {
     /// Gets a reference to the TDX VP context that is unioned inside the run
     /// page.
     fn tdx_vp_context(&self) -> &tdx_vp_context {
         // SAFETY: the VP context will not be concurrently accessed by the
         // processor while this VP is in VTL2. This is a TDX partition so the
         // context union should be interpreted as a `tdx_vp_context`.
-        unsafe { &*addr_of!((*self.run.as_ptr()).context).cast() }
+        unsafe { &*(&raw mut (*self.run.get()).context).cast() }
     }
 
     /// Gets a mutable reference to the TDX VP context that is unioned inside
@@ -92,7 +91,7 @@ impl ProcessorRunner<'_, Tdx> {
         // SAFETY: the VP context will not be concurrently accessed by the
         // processor while this VP is in VTL2. This is a TDX partition so the
         // context union should be interpreted as a `tdx_vp_context`.
-        unsafe { &mut *addr_of_mut!((*self.run.as_ptr()).context).cast() }
+        unsafe { &mut *(&raw mut (*self.run.get()).context).cast() }
     }
 
     /// Gets a reference to the TDX enter guest state.
@@ -121,17 +120,17 @@ impl ProcessorRunner<'_, Tdx> {
     }
 
     /// Gets a reference to the tdx APIC page.
-    pub fn tdx_apic_page(&self) -> &[u32; 1024] {
+    pub fn tdx_apic_page(&self) -> &ApicPage {
         // SAFETY: the APIC page will not be concurrently accessed by the processor
         // while this VP is in VTL2.
-        unsafe { &*self.state.apic.as_ptr() }
+        unsafe { &*self.state.apic_page.get() }
     }
 
     /// Gets a mutable reference to the tdx APIC page.
-    pub fn tdx_apic_page_mut(&mut self) -> &mut [u32; 1024] {
+    pub fn tdx_apic_page_mut(&mut self) -> &mut ApicPage {
         // SAFETY: the APIC page will not be concurrently accessed by the processor
         // while this VP is in VTL2.
-        unsafe { &mut *self.state.apic.as_ptr() }
+        unsafe { &mut *self.state.apic_page.get() }
     }
 
     /// Gets a reference to TDX VP specific state.
@@ -398,7 +397,6 @@ impl ProcessorRunner<'_, Tdx> {
         gla_info: TdxGlaListInfo,
     ) -> Result<(), TdCallResult> {
         tdcall_vp_invgla(&mut MshvVtlTdcall(&self.hcl.mshv_vtl), gla_flags, gla_info)
-            .map(Into::into)
     }
 
     /// Gets the FPU state for the VP.
@@ -412,13 +410,15 @@ impl ProcessorRunner<'_, Tdx> {
     }
 }
 
-impl super::private::BackingPrivate for Tdx {
-    fn new(vp: &HclVp, sidecar: Option<&SidecarVp<'_>>) -> Result<Self, NoRunner> {
+impl<'a> super::private::BackingPrivate<'a> for Tdx<'a> {
+    fn new(vp: &'a HclVp, sidecar: Option<&SidecarVp<'_>>) -> Result<Self, NoRunner> {
         assert!(sidecar.is_none());
         let super::BackingState::Tdx { apic_page } = &vp.backing else {
             return Err(NoRunner::MismatchedIsolation);
         };
-        Ok(Self { apic: apic_page.0 })
+        Ok(Self {
+            apic_page: apic_page.as_ref(),
+        })
     }
 
     fn try_set_reg(
