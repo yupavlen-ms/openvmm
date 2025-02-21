@@ -7270,7 +7270,6 @@ dependencies = [
  "futures",
  "guestmem",
  "hcl",
- "hv1_emulator",
  "hv1_structs",
  "hvdef",
  "inspect",

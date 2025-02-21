@@ -51,7 +51,6 @@ use hcl::ioctl::Hcl;
 use hcl::ioctl::SetVsmPartitionConfigError;
 use hcl::GuestVtl;
 use hv1_emulator::hv::GlobalHv;
-use hv1_emulator::hv::VtlProtectHypercallOverlay;
 use hv1_emulator::message_queues::MessageQueues;
 use hv1_emulator::synic::GlobalSynic;
 use hv1_emulator::synic::SintProxied;
@@ -1327,13 +1326,6 @@ pub trait ProtectIsolatedMemory: Send + Sync {
         tlb_access: &mut dyn TlbFlushLockAccess,
     ) -> Result<(), (HvError, usize)>;
 
-    /// Retrieves a protector for the hypercall code page overlay for a target
-    /// VTL.
-    fn hypercall_overlay_protector(
-        self: Arc<Self>,
-        vtl: GuestVtl,
-    ) -> Box<dyn VtlProtectHypercallOverlay>;
-
     /// Changes the overlay for the hypercall code page for a target VTL.
     fn change_hypercall_overlay(
         &self,
@@ -1896,12 +1888,6 @@ impl UhProtoPartition<'_> {
             vendor: caps.vendor,
             tsc_frequency,
             ref_time,
-            hypercall_page_protectors: VtlArray::from_fn(|vtl| {
-                late_params.isolated_memory_protector.as_ref().map(|p| {
-                    p.clone()
-                        .hypercall_overlay_protector(vtl.try_into().expect("no vtl 2"))
-                })
-            }),
         });
 
         Ok(UhCvmPartitionState {

@@ -23,7 +23,6 @@ use hcl::ioctl::Mshv;
 use hcl::ioctl::MshvHvcall;
 use hcl::ioctl::MshvVtl;
 use hcl::GuestVtl;
-use hv1_emulator::hv::VtlProtectHypercallOverlay;
 use hv1_structs::VtlArray;
 use hvdef::hypercall::AcceptMemoryType;
 use hvdef::hypercall::HostVisibilityType;
@@ -365,35 +364,9 @@ pub struct HardwareIsolatedMemoryProtector {
     hypercall_overlay: VtlArray<Arc<Mutex<Option<HypercallOverlay>>>, 2>,
 }
 
-struct HypercallOverlayProtector {
-    vtl: GuestVtl,
-    protector: Arc<dyn ProtectIsolatedMemory>,
-}
-
 struct HypercallOverlay {
     gpn: u64,
     permissions: GpaVtlPermissions,
-}
-
-// TODO CVM GUEST VSM: This type needs to go away, and proper functionality needs
-// to be added here, but resolving the layering with hv1_emulator is complicated.
-struct NoOpTlbFlushLockAccess;
-impl TlbFlushLockAccess for NoOpTlbFlushLockAccess {
-    fn flush(&mut self, _vtl: GuestVtl) {}
-    fn flush_entire(&mut self) {}
-    fn set_wait_for_tlb_locks(&mut self, _vtl: GuestVtl) {}
-}
-
-impl VtlProtectHypercallOverlay for HypercallOverlayProtector {
-    fn change_overlay(&self, gpn: u64) {
-        self.protector
-            .change_hypercall_overlay(self.vtl, gpn, &mut NoOpTlbFlushLockAccess)
-    }
-
-    fn disable_overlay(&self) {
-        self.protector
-            .disable_hypercall_overlay(self.vtl, &mut NoOpTlbFlushLockAccess)
-    }
 }
 
 struct HardwareIsolatedMemoryProtectorInner {
@@ -773,16 +746,6 @@ impl ProtectIsolatedMemory for HardwareIsolatedMemoryProtector {
         tlb_access.set_wait_for_tlb_locks(vtl);
 
         Ok(())
-    }
-
-    fn hypercall_overlay_protector(
-        self: Arc<Self>,
-        vtl: GuestVtl,
-    ) -> Box<dyn VtlProtectHypercallOverlay> {
-        Box::new(HypercallOverlayProtector {
-            vtl,
-            protector: self.clone(),
-        })
     }
 
     fn change_hypercall_overlay(
