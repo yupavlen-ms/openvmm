@@ -8125,11 +8125,13 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "futures",
+ "getrandom",
  "guid",
  "inspect",
  "mesh",
  "pal_async",
  "pal_event",
+ "test_with_tracing",
  "thiserror 2.0.0",
  "tracing",
  "vmbus_async",
