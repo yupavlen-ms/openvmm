@@ -145,8 +145,9 @@ struct PetriVmResourcesOpenVmm {
     output_dir: PathBuf,
     log_source: PetriLogSource,
 
-    // Resources that are only kept so they can be dropped at the end.
-    _vsock_temp_paths: Vec<TempPath>,
+    // TempPaths that cannot be dropped until the end.
+    vtl2_vsock_path: Option<TempPath>,
+    _vmbus_vsock_path: TempPath,
 }
 
 impl PetriVmConfigOpenVmm {

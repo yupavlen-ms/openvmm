@@ -67,10 +67,10 @@ use serial_core::resources::DisconnectedSerialBackendHandle;
 use serial_socket::net::OpenSocketSerialConfig;
 use sparse_mmap::alloc_shared_memory;
 use std::fmt::Write as _;
-use std::path::PathBuf;
 use storvsp_resources::ScsiControllerHandle;
 use storvsp_resources::ScsiDeviceAndPath;
 use storvsp_resources::ScsiPath;
+use tempfile::TempPath;
 use uidevices_resources::SynthVideoHandle;
 use unix_socket::UnixListener;
 use unix_socket::UnixStream;
@@ -144,57 +144,58 @@ impl PetriVmConfigOpenVmm {
 
         let (firmware_event_send, firmware_event_recv) = mesh::mpsc_channel();
 
-        let mut vsock_temp_paths = Vec::new();
-        let mut make_vsock_listener = || -> anyhow::Result<(UnixListener, PathBuf)> {
-            let (listener, temppath) = tempfile::Builder::new()
+        let make_vsock_listener = || -> anyhow::Result<(UnixListener, TempPath)> {
+            Ok(tempfile::Builder::new()
                 .make(|path| UnixListener::bind(path))?
-                .into_parts();
-            let path = temppath.to_path_buf();
-            vsock_temp_paths.push(temppath);
-            Ok((listener, path))
+                .into_parts())
         };
 
-        let (with_vtl2, vtl2_vmbus, openhcl_diag_handler, ged, ged_send, mut vtl2_settings) =
-            if firmware.is_openhcl() {
-                let (ged, ged_send) = setup.config_openhcl_vmbus_devices(
-                    &mut emulated_serial_config,
-                    &mut devices,
-                    &firmware_event_send,
-                    framebuffer.is_some(),
-                )?;
-                let (vtl2_vsock_listener, vtl2_vsock_path) = make_vsock_listener()?;
-                (
-                    Some(Vtl2Config {
-                        vtl0_alias_map: false, // TODO: enable when OpenVMM supports it for DMA
-                        late_map_vtl0_memory: Some(LateMapVtl0MemoryPolicy::InjectException),
-                    }),
-                    Some(VmbusConfig {
-                        vsock_listener: Some(vtl2_vsock_listener),
-                        vsock_path: Some(vtl2_vsock_path.to_string_lossy().into_owned()),
-                        vmbus_max_version: None,
-                        vtl2_redirect: false,
-                        #[cfg(windows)]
-                        vmbusproxy_handle: None,
-                    }),
-                    Some(OpenHclDiagHandler::new(
-                        diag_client::DiagClient::from_hybrid_vsock(
-                            driver.clone(),
-                            &vtl2_vsock_path,
-                        ),
-                    )),
-                    Some(ged),
-                    Some(ged_send),
-                    // Basic sane default
-                    Some(Vtl2Settings {
-                        version: vtl2_settings_proto::vtl2_settings_base::Version::V1.into(),
-                        dynamic: Some(Default::default()),
-                        fixed: Some(Default::default()),
-                        namespace_settings: Default::default(),
-                    }),
-                )
-            } else {
-                (None, None, None, None, None, None)
-            };
+        let (
+            with_vtl2,
+            vtl2_vmbus,
+            openhcl_diag_handler,
+            ged,
+            ged_send,
+            mut vtl2_settings,
+            vtl2_vsock_path,
+        ) = if firmware.is_openhcl() {
+            let (ged, ged_send) = setup.config_openhcl_vmbus_devices(
+                &mut emulated_serial_config,
+                &mut devices,
+                &firmware_event_send,
+                framebuffer.is_some(),
+            )?;
+            let (vtl2_vsock_listener, vtl2_vsock_path) = make_vsock_listener()?;
+            (
+                Some(Vtl2Config {
+                    vtl0_alias_map: false, // TODO: enable when OpenVMM supports it for DMA
+                    late_map_vtl0_memory: Some(LateMapVtl0MemoryPolicy::InjectException),
+                }),
+                Some(VmbusConfig {
+                    vsock_listener: Some(vtl2_vsock_listener),
+                    vsock_path: Some(vtl2_vsock_path.to_string_lossy().into_owned()),
+                    vmbus_max_version: None,
+                    vtl2_redirect: false,
+                    #[cfg(windows)]
+                    vmbusproxy_handle: None,
+                }),
+                Some(OpenHclDiagHandler::new(
+                    diag_client::DiagClient::from_hybrid_vsock(driver.clone(), &vtl2_vsock_path),
+                )),
+                Some(ged),
+                Some(ged_send),
+                // Basic sane default
+                Some(Vtl2Settings {
+                    version: vtl2_settings_proto::vtl2_settings_base::Version::V1.into(),
+                    dynamic: Some(Default::default()),
+                    fixed: Some(Default::default()),
+                    namespace_settings: Default::default(),
+                }),
+                Some(vtl2_vsock_path),
+            )
+        } else {
+            (None, None, None, None, None, None, None)
+        };
 
         setup.load_boot_disk(&mut devices, vtl2_settings.as_mut())?;
         let expected_boot_event = setup.get_expected_boot_event();
@@ -372,7 +373,8 @@ impl PetriVmConfigOpenVmm {
                 openhcl_agent_image,
                 openvmm_path,
                 log_source: params.logger.clone(),
-                _vsock_temp_paths: vsock_temp_paths,
+                vtl2_vsock_path,
+                _vmbus_vsock_path: vmbus_vsock_path,
             },
 
             openvmm_log_file: params.logger.log_file("openvmm")?,
