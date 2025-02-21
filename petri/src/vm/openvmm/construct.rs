@@ -16,7 +16,6 @@ use crate::openhcl_diag::OpenHclDiagHandler;
 use crate::Firmware;
 use crate::IsolationType;
 use crate::PcatGuest;
-use crate::PetriLogFile;
 use crate::PetriLogSource;
 use crate::PetriTestParams;
 use crate::UefiGuest;
@@ -29,10 +28,6 @@ use framebuffer::Framebuffer;
 use framebuffer::FramebufferAccess;
 use framebuffer::FRAMEBUFFER_SIZE;
 use fs_err::File;
-use futures::io::BufReader;
-use futures::AsyncBufReadExt;
-use futures::AsyncRead;
-use futures::AsyncReadExt;
 use futures::StreamExt;
 use get_resources::crash::GuestCrashDeviceHandle;
 use get_resources::ged::FirmwareEvent;
@@ -181,13 +176,12 @@ impl PetriVmConfigOpenVmm {
                         #[cfg(windows)]
                         vmbusproxy_handle: None,
                     }),
-                    Some(OpenHclDiagHandler {
-                        client: diag_client::DiagClient::from_hybrid_vsock(
+                    Some(OpenHclDiagHandler::new(
+                        diag_client::DiagClient::from_hybrid_vsock(
                             driver.clone(),
                             &vtl2_vsock_path,
                         ),
-                        vtl2_vsock_path,
-                    }),
+                    )),
                     Some(ged),
                     Some(ged_send),
                     // Basic sane default
@@ -428,18 +422,20 @@ impl PetriVmConfigSetupCore<'_> {
             .create_serial_stream()
             .context("failed to create serial0 stream")?;
         let (serial0_read, serial0_write) = serial0_host.split();
-        let serial0_task = self
-            .spawn_serial_task("serial0-console", serial0_log_file, serial0_read)
-            .context("failed to spawn serial0 task")?;
+        let serial0_task = self.driver.spawn(
+            "serial0-console",
+            crate::serial_log_task(serial0_log_file, serial0_read),
+        );
         serial_tasks.push(serial0_task);
 
         let serial2 = if self.firmware.is_openhcl() {
             let (serial2_host, serial2) = self
                 .create_serial_stream()
                 .context("failed to create serial2 stream")?;
-            let serial2_task = self
-                .spawn_serial_task("serial2-openhcl", logger.log_file("openhcl")?, serial2_host)
-                .context("failed to spawn serial2 task")?;
+            let serial2_task = self.driver.spawn(
+                "serial2-openhcl",
+                crate::serial_log_task(logger.log_file("openhcl")?, serial2_host),
+            );
             serial_tasks.push(serial2_task);
             serial2
         } else {
@@ -475,30 +471,6 @@ impl PetriVmConfigSetupCore<'_> {
         let host_side = PolledSocket::new(self.driver, host_side)?;
         let serial = OpenSocketSerialConfig::from(guest_side).into_resource();
         Ok((host_side, Some(serial)))
-    }
-
-    fn spawn_serial_task(
-        &self,
-        task_name: &str,
-        log_file: PetriLogFile,
-        reader: impl AsyncRead + Unpin + Send + 'static,
-    ) -> anyhow::Result<Task<anyhow::Result<()>>> {
-        Ok(self.driver.spawn(task_name, async move {
-            let mut buf = Vec::new();
-            let mut reader = BufReader::new(reader);
-            loop {
-                buf.clear();
-                let n = (&mut reader).take(256).read_until(b'\n', &mut buf).await?;
-                if n == 0 {
-                    break;
-                }
-
-                let string_buf = String::from_utf8_lossy(&buf);
-                let string_buf_trimmed = string_buf.trim_end();
-                log_file.write_entry(string_buf_trimmed);
-            }
-            Ok(())
-        }))
     }
 
     fn load_firmware(&self) -> anyhow::Result<LoadMode> {
