@@ -1,7 +1,6 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-use super::ConnectionTarget;
 use super::OfferError;
 use super::OfferParamsInternal;
 use super::OfferedInfo;
@@ -34,20 +33,24 @@ impl super::Server {
     pub fn restore(&mut self, saved: SavedState) -> Result<(), RestoreError> {
         tracing::trace!(?saved, "restoring channel state");
 
-        let saved = if let Some(saved) = saved.state {
-            saved
-        } else {
-            return Ok(());
-        };
+        if let Some(saved) = saved.state {
+            self.state = saved.connection.restore()?;
 
-        self.state = saved.connection.restore()?;
+            for saved_channel in saved.channels {
+                self.restore_one_channel(saved_channel)?;
+            }
 
-        for saved_channel in saved.channels {
-            self.restore_one_channel(saved_channel)?;
+            for saved_gpadl in saved.gpadls {
+                self.restore_one_gpadl(saved_gpadl)?;
+            }
         }
 
-        for saved_gpadl in saved.gpadls {
-            self.restore_one_gpadl(saved_gpadl)?;
+        self.pending_messages
+            .0
+            .reserve(saved.pending_messages.len());
+
+        for message in saved.pending_messages {
+            self.pending_messages.0.push_back(message.restore()?);
         }
 
         Ok(())
@@ -129,13 +132,16 @@ impl super::Server {
         Ok(())
     }
 
-    /// Saves
+    /// Saves state.
     pub fn save(&self) -> SavedState {
-        let connection = match Connection::save(&self.state) {
-            Some(c) => c,
-            None => return SavedState { state: None },
-        };
+        SavedState {
+            state: self.save_connected_state(),
+            pending_messages: self.save_pending_messages(),
+        }
+    }
 
+    fn save_connected_state(&self) -> Option<ConnectedState> {
+        let connection = Connection::save(&self.state)?;
         let channels = self
             .channels
             .iter()
@@ -150,13 +156,19 @@ impl super::Server {
             })
             .collect();
 
-        SavedState {
-            state: Some(ConnectedState {
-                connection,
-                channels,
-                gpadls,
-            }),
-        }
+        Some(ConnectedState {
+            connection,
+            channels,
+            gpadls,
+        })
+    }
+
+    fn save_pending_messages(&self) -> Vec<OutgoingMessage> {
+        self.pending_messages
+            .0
+            .iter()
+            .map(OutgoingMessage::save)
+            .collect()
     }
 }
 
@@ -206,6 +218,13 @@ pub enum RestoreError {
 
     #[error(transparent)]
     ServerError(#[from] anyhow::Error),
+
+    #[error(
+        "reserved channel with ID {0} has a pending message but is missing from the saved state"
+    )]
+    MissingReservedChannel(u32),
+    #[error("a saved pending message is larger than the maximum message size")]
+    MessageTooLarge,
 }
 
 #[derive(Debug, Protobuf, Clone)]
@@ -213,6 +232,8 @@ pub enum RestoreError {
 pub struct SavedState {
     #[mesh(1)]
     state: Option<ConnectedState>,
+    #[mesh(2)]
+    pending_messages: Vec<OutgoingMessage>,
 }
 
 #[derive(Debug, Clone, Protobuf)]
@@ -749,7 +770,7 @@ impl ReservedState {
 
         Ok(super::ReservedState {
             version,
-            target: ConnectionTarget {
+            target: super::ConnectionTarget {
                 vp: self.vp,
                 sint: self.sint,
             },
@@ -971,4 +992,19 @@ enum GpadlState {
     Accepted,
     #[mesh(4)]
     TearingDown,
+}
+
+#[derive(Debug, Clone, Protobuf, PartialEq, Eq)]
+#[mesh(package = "vmbus.server.channels")]
+struct OutgoingMessage(Vec<u8>);
+
+impl OutgoingMessage {
+    fn save(value: &vmbus_core::OutgoingMessage) -> Self {
+        Self(value.data().to_vec())
+    }
+
+    fn restore(self) -> Result<vmbus_core::OutgoingMessage, RestoreError> {
+        vmbus_core::OutgoingMessage::from_message(&self.0)
+            .map_err(|_| RestoreError::MessageTooLarge)
+    }
 }
