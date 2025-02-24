@@ -128,7 +128,7 @@ impl PetriVmConfigOpenVmm {
 
         let SerialData {
             mut emulated_serial_config,
-            serial_tasks,
+            serial_tasks: log_stream_tasks,
             linux_direct_serial_agent,
         } = setup.configure_serial(params.logger)?;
 
@@ -358,7 +358,7 @@ impl PetriVmConfigOpenVmm {
             config,
 
             resources: PetriVmResourcesOpenVmm {
-                serial_tasks,
+                log_stream_tasks,
                 firmware_event_recv,
                 shutdown_ic_send,
                 expected_boot_event,
@@ -426,7 +426,7 @@ impl PetriVmConfigSetupCore<'_> {
         let (serial0_read, serial0_write) = serial0_host.split();
         let serial0_task = self.driver.spawn(
             "serial0-console",
-            crate::serial_log_task(serial0_log_file, serial0_read),
+            crate::log_stream(serial0_log_file, serial0_read),
         );
         serial_tasks.push(serial0_task);
 
@@ -436,7 +436,7 @@ impl PetriVmConfigSetupCore<'_> {
                 .context("failed to create serial2 stream")?;
             let serial2_task = self.driver.spawn(
                 "serial2-openhcl",
-                crate::serial_log_task(logger.log_file("openhcl")?, serial2_host),
+                crate::log_stream(logger.log_file("openhcl")?, serial2_host),
             );
             serial_tasks.push(serial2_task);
             serial2

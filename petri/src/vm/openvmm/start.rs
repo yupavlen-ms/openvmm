@@ -5,6 +5,7 @@
 
 use super::PetriVmConfigOpenVmm;
 use super::PetriVmOpenVmm;
+use super::PetriVmResourcesOpenVmm;
 use crate::worker::Worker;
 use crate::Firmware;
 use crate::PetriLogFile;
@@ -19,6 +20,7 @@ use image::ColorType;
 use mesh_process::Mesh;
 use mesh_process::ProcessConfig;
 use mesh_worker::WorkerHost;
+use pal_async::pipe::PolledPipe;
 use pal_async::task::Spawn;
 use pal_async::task::Task;
 use pal_async::timer::PolledTimer;
@@ -27,9 +29,7 @@ use petri_artifacts_common::tags::MachineArch;
 use petri_artifacts_common::tags::OsFlavor;
 use pipette_client::PipetteClient;
 use scsidisk_resources::SimpleScsiDiskHandle;
-use std::io::BufRead;
 use std::io::Write;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,7 +45,7 @@ impl PetriVmConfigOpenVmm {
             arch,
             mut config,
 
-            resources,
+            mut resources,
 
             openvmm_log_file,
 
@@ -71,7 +71,7 @@ impl PetriVmConfigOpenVmm {
 
         let mesh = Mesh::new("petri_mesh".to_string())?;
 
-        let host = Self::openvmm_host(&mesh, openvmm_log_file, resources.openvmm_path.as_ref())
+        let host = Self::openvmm_host(&mut resources, &mesh, openvmm_log_file)
             .await
             .context("failed to create host process")?;
         let (worker, halt_notif) = Worker::launch(&host, config)
@@ -362,34 +362,27 @@ impl PetriVmConfigOpenVmm {
     }
 
     async fn openvmm_host(
+        resources: &mut PetriVmResourcesOpenVmm,
         mesh: &Mesh,
         log_file: PetriLogFile,
-        path: &Path,
     ) -> anyhow::Result<WorkerHost> {
         // Copy the child's stderr to this process's, since internally this is
         // wrapped by the test harness.
         let (stderr_read, stderr_write) = pal::pipe_pair()?;
-        std::thread::spawn(move || {
-            let read = std::io::BufReader::new(stderr_read);
-            for line in read.lines() {
-                match line {
-                    Ok(line) => {
-                        log_file.write_entry(line);
-                    }
-                    Err(err) => {
-                        tracing::warn!(
-                            error = &err as &dyn std::error::Error,
-                            "error reading hvlite stderr"
-                        );
-                    }
-                }
-            }
-        });
+        let task = resources.driver.spawn(
+            "serial log",
+            crate::log_stream(
+                log_file,
+                PolledPipe::new(&resources.driver, stderr_read)
+                    .context("failed to create polled pipe")?,
+            ),
+        );
+        resources.log_stream_tasks.push(task);
 
         let (host, runner) = mesh_worker::worker_host();
         mesh.launch_host(
             ProcessConfig::new("vmm")
-                .process_name(path)
+                .process_name(&resources.openvmm_path)
                 .stderr(Some(stderr_write)),
             hvlite_defs::entrypoint::MeshHostParams { runner },
         )
