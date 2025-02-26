@@ -29,6 +29,7 @@
     // Allow kvm by setting privileged to true.
     "privileged": true,
 
+    // Test.
     "onCreateCommand": "ssh-agent && ssh-add",
 
     // Restore packages so that users can build as soon as the container is
