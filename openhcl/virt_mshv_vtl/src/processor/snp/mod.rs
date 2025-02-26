@@ -44,7 +44,6 @@ use hvdef::HV_PAGE_SIZE;
 use inspect::Inspect;
 use inspect::InspectMut;
 use inspect_counters::Counter;
-use std::num::NonZeroU64;
 use virt::io::CpuIo;
 use virt::state::StateElement;
 use virt::vp;
@@ -86,8 +85,8 @@ pub struct SnpBacked {
     #[inspect(iter_by_index)]
     direct_overlays_pfns: [u64; UhDirectOverlay::Count as usize],
     #[inspect(skip)]
-    #[allow(dead_code)] // Allocation handle for direct overlays held until drop
-    direct_overlay_pfns_handle: page_pool_alloc::PagePoolHandle,
+    #[expect(dead_code)] // Allocation handle for direct overlays held until drop
+    direct_overlay_pfns_handle: user_driver::memory::MemoryBlock,
     #[inspect(hex)]
     hv_sint_notifications: u16,
     general_stats: VtlArray<GeneralStats, 2>,
@@ -276,17 +275,13 @@ impl BackingPrivate for SnpBacked {
     fn new(params: BackingParams<'_, '_, Self>, shared: &SnpBackedShared) -> Result<Self, Error> {
         let pfns_handle = params
             .partition
-            .shared_vis_pages_pool
+            .shared_dma_client
             .as_ref()
             .ok_or(Error::MissingSharedMemory)?
-            .alloc(
-                NonZeroU64::new(shared_pages_required_per_cpu()).expect("is nonzero"),
-                format!("direct overlay vp {}", params.vp_info.base.vp_index.index()),
-            )
+            .allocate_dma_buffer((shared_pages_required_per_cpu() * HV_PAGE_SIZE) as usize)
             .map_err(Error::AllocateSharedVisOverlay)?;
-        let pfns = pfns_handle.base_pfn()..pfns_handle.base_pfn() + pfns_handle.size_pages();
 
-        let overlays: Vec<_> = pfns.collect();
+        let overlays: Vec<_> = pfns_handle.pfns().to_vec();
 
         Ok(Self {
             direct_overlays_pfns: overlays.try_into().unwrap(),
