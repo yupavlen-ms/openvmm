@@ -124,7 +124,7 @@ impl From<Firmware> for FirmwareType {
     }
 }
 
-#[allow(clippy::option_option)]
+#[expect(clippy::option_option)]
 pub mod transposed {
     use super::*;
     use openhcl_dma_manager::save_restore::OpenhclDmaManagerState;
