@@ -466,19 +466,9 @@ impl PartitionInfo {
                 crate::cmdline::parse_boot_command_line(storage.cmdline.as_str())
                     .enable_vtl2_gpa_pool;
 
-            let isolation_requirements = match params.isolation_type {
-                #[cfg(target_arch = "x86_64")]
-                // Supporting TLB flush hypercalls on TDX requires 1 page per VP
-                IsolationType::Tdx => parsed.cpus.len() as u64,
-                _ => 0,
-            };
             log!("YSP: dt_page_count: {:X}", dt_page_count.unwrap_or(0));
             log!("YSP: cmdline_page_count: {:X}", cmdline_page_count.unwrap_or(0));
-
-            max(
-                dt_page_count.unwrap_or(0) + isolation_requirements,
-                cmdline_page_count.unwrap_or(0),
-            )
+            max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0))
         };
         log!("YSP: vtl2_gpa_pool_size: {:X}", vtl2_gpa_pool_size);
         if vtl2_gpa_pool_size != 0 {

@@ -338,6 +338,17 @@ struct PagePoolInner {
     mapping: SparseMapping,
 }
 
+impl Debug for PagePoolInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PagePoolInner")
+            .field("state", &self.state)
+            .field("pfn_bias", &self.pfn_bias)
+            .field("mapping", &self.mapping)
+            .finish()
+    }
+}
+
+#[derive(Debug)]
 struct PagePoolState {
     /// The internal slots for the pool, representing page state.
     slots: Vec<Slot>,
@@ -358,6 +369,7 @@ impl Inspect for PagePoolState {
 
 /// A handle for a page pool allocation. When dropped, the allocation is
 /// freed.
+#[derive(Debug)]
 pub struct PagePoolHandle {
     inner: Arc<PagePoolInner>,
     base_pfn: u64,
@@ -496,10 +508,6 @@ impl PagePool {
     }
 
     fn new_internal(memory: &[MemoryRange], source: Box<dyn PoolSource>) -> anyhow::Result<Self> {
-        // TODO: Allow callers to specify the vnode, but today we discard this
-        // information. In the future we may keep ranges with vnode in order to
-        // allow per-node allocations.
-
         let mut mapping_offset = 0;
         let pages = memory
             .iter()
@@ -638,8 +646,11 @@ impl PagePoolAllocatorSpawner {
 /// are left as-is in the pool. A new allocator can then be created with the
 /// same name. Exisitng allocations with that same device_name will be
 /// linked to the new allocator.
+#[derive(Inspect)]
 pub struct PagePoolAllocator {
+    #[inspect(skip)]
     inner: Arc<PagePoolInner>,
+    #[inspect(skip)]
     device_id: usize,
 }
 

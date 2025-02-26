@@ -16,7 +16,6 @@ use crate::openhcl_diag::OpenHclDiagHandler;
 use crate::Firmware;
 use crate::IsolationType;
 use crate::PcatGuest;
-use crate::PetriLogFile;
 use crate::PetriLogSource;
 use crate::PetriTestParams;
 use crate::UefiGuest;
@@ -29,10 +28,6 @@ use framebuffer::Framebuffer;
 use framebuffer::FramebufferAccess;
 use framebuffer::FRAMEBUFFER_SIZE;
 use fs_err::File;
-use futures::io::BufReader;
-use futures::AsyncBufReadExt;
-use futures::AsyncRead;
-use futures::AsyncReadExt;
 use futures::StreamExt;
 use get_resources::crash::GuestCrashDeviceHandle;
 use get_resources::ged::FirmwareEvent;
@@ -72,10 +67,10 @@ use serial_core::resources::DisconnectedSerialBackendHandle;
 use serial_socket::net::OpenSocketSerialConfig;
 use sparse_mmap::alloc_shared_memory;
 use std::fmt::Write as _;
-use std::path::PathBuf;
 use storvsp_resources::ScsiControllerHandle;
 use storvsp_resources::ScsiDeviceAndPath;
 use storvsp_resources::ScsiPath;
+use tempfile::TempPath;
 use uidevices_resources::SynthVideoHandle;
 use unix_socket::UnixListener;
 use unix_socket::UnixStream;
@@ -133,7 +128,7 @@ impl PetriVmConfigOpenVmm {
 
         let SerialData {
             mut emulated_serial_config,
-            serial_tasks,
+            serial_tasks: log_stream_tasks,
             linux_direct_serial_agent,
         } = setup.configure_serial(params.logger)?;
 
@@ -149,58 +144,58 @@ impl PetriVmConfigOpenVmm {
 
         let (firmware_event_send, firmware_event_recv) = mesh::mpsc_channel();
 
-        let mut vsock_temp_paths = Vec::new();
-        let mut make_vsock_listener = || -> anyhow::Result<(UnixListener, PathBuf)> {
-            let (listener, temppath) = tempfile::Builder::new()
+        let make_vsock_listener = || -> anyhow::Result<(UnixListener, TempPath)> {
+            Ok(tempfile::Builder::new()
                 .make(|path| UnixListener::bind(path))?
-                .into_parts();
-            let path = temppath.to_path_buf();
-            vsock_temp_paths.push(temppath);
-            Ok((listener, path))
+                .into_parts())
         };
 
-        let (with_vtl2, vtl2_vmbus, openhcl_diag_handler, ged, ged_send, mut vtl2_settings) =
-            if firmware.is_openhcl() {
-                let (ged, ged_send) = setup.config_openhcl_vmbus_devices(
-                    &mut emulated_serial_config,
-                    &mut devices,
-                    &firmware_event_send,
-                    framebuffer.is_some(),
-                )?;
-                let (vtl2_vsock_listener, vtl2_vsock_path) = make_vsock_listener()?;
-                (
-                    Some(Vtl2Config {
-                        vtl0_alias_map: false, // TODO: enable when OpenVMM supports it for DMA
-                        late_map_vtl0_memory: Some(LateMapVtl0MemoryPolicy::InjectException),
-                    }),
-                    Some(VmbusConfig {
-                        vsock_listener: Some(vtl2_vsock_listener),
-                        vsock_path: Some(vtl2_vsock_path.to_string_lossy().into_owned()),
-                        vmbus_max_version: None,
-                        vtl2_redirect: false,
-                        #[cfg(windows)]
-                        vmbusproxy_handle: None,
-                    }),
-                    Some(OpenHclDiagHandler {
-                        client: diag_client::DiagClient::from_hybrid_vsock(
-                            driver.clone(),
-                            &vtl2_vsock_path,
-                        ),
-                        vtl2_vsock_path,
-                    }),
-                    Some(ged),
-                    Some(ged_send),
-                    // Basic sane default
-                    Some(Vtl2Settings {
-                        version: vtl2_settings_proto::vtl2_settings_base::Version::V1.into(),
-                        dynamic: Some(Default::default()),
-                        fixed: Some(Default::default()),
-                        namespace_settings: Default::default(),
-                    }),
-                )
-            } else {
-                (None, None, None, None, None, None)
-            };
+        let (
+            with_vtl2,
+            vtl2_vmbus,
+            openhcl_diag_handler,
+            ged,
+            ged_send,
+            mut vtl2_settings,
+            vtl2_vsock_path,
+        ) = if firmware.is_openhcl() {
+            let (ged, ged_send) = setup.config_openhcl_vmbus_devices(
+                &mut emulated_serial_config,
+                &mut devices,
+                &firmware_event_send,
+                framebuffer.is_some(),
+            )?;
+            let (vtl2_vsock_listener, vtl2_vsock_path) = make_vsock_listener()?;
+            (
+                Some(Vtl2Config {
+                    vtl0_alias_map: false, // TODO: enable when OpenVMM supports it for DMA
+                    late_map_vtl0_memory: Some(LateMapVtl0MemoryPolicy::InjectException),
+                }),
+                Some(VmbusConfig {
+                    vsock_listener: Some(vtl2_vsock_listener),
+                    vsock_path: Some(vtl2_vsock_path.to_string_lossy().into_owned()),
+                    vmbus_max_version: None,
+                    vtl2_redirect: false,
+                    #[cfg(windows)]
+                    vmbusproxy_handle: None,
+                }),
+                Some(OpenHclDiagHandler::new(
+                    diag_client::DiagClient::from_hybrid_vsock(driver.clone(), &vtl2_vsock_path),
+                )),
+                Some(ged),
+                Some(ged_send),
+                // Basic sane default
+                Some(Vtl2Settings {
+                    version: vtl2_settings_proto::vtl2_settings_base::Version::V1.into(),
+                    dynamic: Some(Default::default()),
+                    fixed: Some(Default::default()),
+                    namespace_settings: Default::default(),
+                }),
+                Some(vtl2_vsock_path),
+            )
+        } else {
+            (None, None, None, None, None, None, None)
+        };
 
         setup.load_boot_disk(&mut devices, vtl2_settings.as_mut())?;
         let expected_boot_event = setup.get_expected_boot_event();
@@ -363,7 +358,7 @@ impl PetriVmConfigOpenVmm {
             config,
 
             resources: PetriVmResourcesOpenVmm {
-                serial_tasks,
+                log_stream_tasks,
                 firmware_event_recv,
                 shutdown_ic_send,
                 expected_boot_event,
@@ -378,7 +373,8 @@ impl PetriVmConfigOpenVmm {
                 openhcl_agent_image,
                 openvmm_path,
                 log_source: params.logger.clone(),
-                _vsock_temp_paths: vsock_temp_paths,
+                vtl2_vsock_path,
+                _vmbus_vsock_path: vmbus_vsock_path,
             },
 
             openvmm_log_file: params.logger.log_file("openvmm")?,
@@ -428,18 +424,20 @@ impl PetriVmConfigSetupCore<'_> {
             .create_serial_stream()
             .context("failed to create serial0 stream")?;
         let (serial0_read, serial0_write) = serial0_host.split();
-        let serial0_task = self
-            .spawn_serial_task("serial0-console", serial0_log_file, serial0_read)
-            .context("failed to spawn serial0 task")?;
+        let serial0_task = self.driver.spawn(
+            "serial0-console",
+            crate::log_stream(serial0_log_file, serial0_read),
+        );
         serial_tasks.push(serial0_task);
 
         let serial2 = if self.firmware.is_openhcl() {
             let (serial2_host, serial2) = self
                 .create_serial_stream()
                 .context("failed to create serial2 stream")?;
-            let serial2_task = self
-                .spawn_serial_task("serial2-openhcl", logger.log_file("openhcl")?, serial2_host)
-                .context("failed to spawn serial2 task")?;
+            let serial2_task = self.driver.spawn(
+                "serial2-openhcl",
+                crate::log_stream(logger.log_file("openhcl")?, serial2_host),
+            );
             serial_tasks.push(serial2_task);
             serial2
         } else {
@@ -475,30 +473,6 @@ impl PetriVmConfigSetupCore<'_> {
         let host_side = PolledSocket::new(self.driver, host_side)?;
         let serial = OpenSocketSerialConfig::from(guest_side).into_resource();
         Ok((host_side, Some(serial)))
-    }
-
-    fn spawn_serial_task(
-        &self,
-        task_name: &str,
-        log_file: PetriLogFile,
-        reader: impl AsyncRead + Unpin + Send + 'static,
-    ) -> anyhow::Result<Task<anyhow::Result<()>>> {
-        Ok(self.driver.spawn(task_name, async move {
-            let mut buf = Vec::new();
-            let mut reader = BufReader::new(reader);
-            loop {
-                buf.clear();
-                let n = (&mut reader).take(256).read_until(b'\n', &mut buf).await?;
-                if n == 0 {
-                    break;
-                }
-
-                let string_buf = String::from_utf8_lossy(&buf);
-                let string_buf_trimmed = string_buf.trim_end();
-                log_file.write_entry(string_buf_trimmed);
-            }
-            Ok(())
-        }))
     }
 
     fn load_firmware(&self) -> anyhow::Result<LoadMode> {
