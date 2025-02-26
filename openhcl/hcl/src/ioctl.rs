@@ -74,8 +74,11 @@ use std::os::unix::prelude::*;
 use std::sync::atomic::AtomicU32;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::sync::Once;
 use thiserror::Error;
+use user_driver::memory::MemoryBlock;
+use user_driver::DmaClient;
 use x86defs::snp::SevVmsa;
 use x86defs::tdx::TdCallResultCode;
 use x86defs::vmx::ApicPage;
@@ -155,6 +158,10 @@ pub enum Error {
         supported: IsolationType,
         requested: IsolationType,
     },
+    #[error("private page pool allocator missing, required for requested isolation type")]
+    MissingPrivateMemory,
+    #[error("failed to allocate pages for vp")]
+    AllocVp(#[source] anyhow::Error),
 }
 
 /// Error for IOCTL errors specifically.
@@ -1538,9 +1545,9 @@ enum BackingState {
     Snp {
         vmsa: VtlArray<MappedPage<SevVmsa>, 2>,
     },
-    // TODO GUEST_VSM: vtl 1 vp state
     Tdx {
-        apic_page: MappedPage<ApicPage>,
+        vtl0_apic_page: MappedPage<ApicPage>,
+        vtl1_apic_page: MemoryBlock,
     },
 }
 
@@ -1556,6 +1563,7 @@ impl HclVp {
         vp: u32,
         map_reg_page: bool,
         isolation_type: IsolationType,
+        private_dma_client: Option<&Arc<dyn DmaClient>>,
     ) -> Result<Self, Error> {
         let fd = &hcl.mshv_vtl.file;
         let run: MappedPage<hcl_run> =
@@ -1587,8 +1595,12 @@ impl HclVp {
                 }
             }
             IsolationType::Tdx => BackingState::Tdx {
-                apic_page: MappedPage::new(fd, MSHV_APIC_PAGE_OFFSET | vp as i64)
+                vtl0_apic_page: MappedPage::new(fd, MSHV_APIC_PAGE_OFFSET | vp as i64)
                     .map_err(|e| Error::MmapVp(e, Some(Vtl::Vtl0)))?,
+                vtl1_apic_page: private_dma_client
+                    .ok_or(Error::MissingPrivateMemory)?
+                    .allocate_dma_buffer(HV_PAGE_SIZE as usize)
+                    .map_err(Error::AllocVp)?,
             },
         };
 
@@ -1813,8 +1825,8 @@ impl<'a, T: Backing<'a>> ProcessorRunner<'a, T> {
         }
     }
 
-    /// Gets the proxied interrupt request bitmap from the hypervisor.
-    pub fn proxy_irr(&mut self) -> Option<[u32; 8]> {
+    /// Gets the proxied interrupt request bitmap for VTL 0 from the hypervisor.
+    pub fn proxy_irr_vtl0(&mut self) -> Option<[u32; 8]> {
         // SAFETY: the `scan_proxy_irr` and `proxy_irr` fields of the run page
         // are concurrently updated by the kernel on multiple processors. They
         // are accessed atomically everywhere.
@@ -1836,8 +1848,8 @@ impl<'a, T: Backing<'a>> ProcessorRunner<'a, T> {
         }
     }
 
-    /// Update the `proxy_irr_blocked` in run page
-    pub fn update_proxy_irr_filter(&mut self, irr_filter: &[u32; 8]) {
+    /// Update the `proxy_irr_blocked` for VTL 0 in the run page
+    pub fn update_proxy_irr_filter_vtl0(&mut self, irr_filter: &[u32; 8]) {
         // SAFETY: `proxy_irr_blocked` is accessed by current VP only, but could
         // be concurrently accessed by kernel too, hence accessing as Atomic
         let proxy_irr_blocked = unsafe {
@@ -1853,11 +1865,11 @@ impl<'a, T: Backing<'a>> ProcessorRunner<'a, T> {
         }
     }
 
-    /// Gets the proxy_irr_exit bitmask. This mask ensures that
+    /// Gets the proxy_irr_exit bitmask for VTL 0. This mask ensures that
     /// the masked interrupts always exit to user-space, and cannot
     /// be injected in the kernel. Interrupts matching this condition
     /// will be left on the proxy_irr field.
-    pub fn proxy_irr_exit_mut(&mut self) -> &mut [u32; 8] {
+    pub fn proxy_irr_exit_mut_vtl0(&mut self) -> &mut [u32; 8] {
         // SAFETY: The `proxy_irr_exit` field of the run page will not be concurrently updated.
         unsafe { &mut (*self.run.get()).proxy_irr_exit }
     }
@@ -2212,9 +2224,21 @@ impl Hcl {
     }
 
     /// Adds `vp_count` VPs.
-    pub fn add_vps(&mut self, vp_count: u32) -> Result<(), Error> {
+    pub fn add_vps(
+        &mut self,
+        vp_count: u32,
+        private_pool: Option<&Arc<dyn DmaClient>>,
+    ) -> Result<(), Error> {
         self.vps = (0..vp_count)
-            .map(|vp| HclVp::new(self, vp, self.supports_register_page, self.isolation))
+            .map(|vp| {
+                HclVp::new(
+                    self,
+                    vp,
+                    self.supports_register_page,
+                    self.isolation,
+                    private_pool,
+                )
+            })
             .collect::<Result<_, _>>()?;
 
         Ok(())

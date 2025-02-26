@@ -46,7 +46,6 @@ use inspect::Inspect;
 use inspect::InspectMut;
 use inspect_counters::Counter;
 use parking_lot::RwLock;
-use std::num::NonZeroU64;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use thiserror::Error;
@@ -398,20 +397,13 @@ pub struct TdxBacked {
     #[inspect(mut)]
     vtls: VtlArray<TdxVtl, 2>,
 
-    /// PFNs used for overlays.
-    #[inspect(iter_by_index)]
-    direct_overlays_pfns: [u64; UhDirectOverlay::Count as usize],
-    #[inspect(skip)]
-    #[allow(dead_code)] // Allocation handle for direct overlays held until drop
-    direct_overlay_pfns_handle: page_pool_alloc::PagePoolHandle,
-
     untrusted_synic: Option<ProcessorSynic>,
     #[inspect(with = "|x| inspect::iter_by_index(x).map_value(inspect::AsHex)")]
     eoi_exit_bitmap: [u64; 4],
 
     /// A mapped page used for issuing INVGLA hypercalls.
     #[inspect(skip)]
-    flush_page: page_pool_alloc::PagePoolHandle,
+    flush_page: user_driver::memory::MemoryBlock,
 
     cvm: UhCvmVpState,
 }
@@ -483,11 +475,6 @@ pub struct ExitStats {
     pub exception: Counter,
 }
 
-/// The number of shared pages required per cpu.
-pub const fn shared_pages_required_per_cpu() -> u64 {
-    UhDirectOverlay::Count as u64
-}
-
 enum UhDirectOverlay {
     Sipp,
     Sifp,
@@ -495,6 +482,10 @@ enum UhDirectOverlay {
 }
 
 impl HardwareIsolatedBacking for TdxBacked {
+    fn shared_pages_required_per_cpu() -> u64 {
+        UhDirectOverlay::Count as u64
+    }
+
     fn cvm_state_mut(&mut self) -> &mut UhCvmVpState {
         &mut self.cvm
     }
@@ -678,27 +669,13 @@ impl BackingPrivate for TdxBacked {
             }
         }
 
-        // Allocate PFNs for direct overlays
-        let pfns_handle = params
-            .partition
-            .shared_vis_pages_pool
-            .as_ref()
-            .expect("must have shared vis pool when using SNP")
-            .alloc(
-                NonZeroU64::new(shared_pages_required_per_cpu()).expect("is nonzero"),
-                format!("direct overlay vp {}", params.vp_info.base.vp_index.index()),
-            )
-            .map_err(super::Error::AllocateSharedVisOverlay)?;
-        let pfns = pfns_handle.base_pfn()..pfns_handle.base_pfn() + pfns_handle.size_pages();
-        let overlays: Vec<_> = pfns.collect();
-
         let flush_page = params
             .partition
-            .private_vis_pages_pool
+            .private_dma_client
             .as_ref()
-            .expect("private pool exists for cvm")
-            .alloc(1.try_into().unwrap(), "tdx_tlb_flush".into())
-            .expect("not out of memory");
+            .ok_or(crate::Error::MissingPrivateMemory)?
+            .allocate_dma_buffer(HV_PAGE_SIZE as usize)
+            .map_err(crate::Error::AllocateTlbFlushPage)?;
 
         let untrusted_synic = params
             .partition
@@ -757,12 +734,15 @@ impl BackingPrivate for TdxBacked {
                     exit_stats: Default::default(),
                 }
             }),
-            direct_overlays_pfns: overlays.try_into().unwrap(),
-            direct_overlay_pfns_handle: pfns_handle,
             untrusted_synic,
             eoi_exit_bitmap: [0; 4],
             flush_page,
-            cvm: UhCvmVpState::new(&shared.cvm, params.partition, params.vp_info),
+            cvm: UhCvmVpState::new(
+                &shared.cvm,
+                params.partition,
+                params.vp_info,
+                UhDirectOverlay::Count as usize,
+            )?,
         })
     }
 
@@ -784,7 +764,7 @@ impl BackingPrivate for TdxBacked {
         // when VTL 1 is enabled.
 
         // Configure the synic overlays.
-        let pfns = &this.backing.direct_overlays_pfns;
+        let pfns = &this.backing.cvm.direct_overlay_handle.pfns();
         let reg = |gpn| {
             u64::from(
                 HvSynicSimpSiefp::new()
@@ -849,7 +829,7 @@ impl BackingPrivate for TdxBacked {
             // We only offload VTL 0 today.
             assert_eq!(vtl, GuestVtl::Vtl0);
             tracing::info!("disabling APIC offload due to auto EOI");
-            let page = zerocopy::transmute_mut!(this.runner.tdx_apic_page_mut());
+            let page = this.runner.tdx_apic_page_mut(GuestVtl::Vtl0);
             let (irr, isr) = pull_apic_offload(page);
 
             this.backing.cvm.lapics[vtl]
@@ -963,8 +943,7 @@ impl UhProcessor<'_, TdxBacked> {
             let r: Result<(), OffloadNotSupported> = self.backing.cvm.lapics[vtl]
                 .lapic
                 .push_to_offload(|irr, isr, tmr| {
-                    let apic_page: &mut ApicPage =
-                        zerocopy::transmute_mut!(self.runner.tdx_apic_page_mut());
+                    let apic_page = self.runner.tdx_apic_page_mut(GuestVtl::Vtl0);
 
                     for (((irr, page_irr), isr), page_isr) in irr
                         .iter()
@@ -1002,8 +981,8 @@ impl UhProcessor<'_, TdxBacked> {
                             // must know if that interrupt was previously level-triggered. Otherwise,
                             // the EOI will be incorrectly treated as level-triggered. We keep a copy
                             // of the tmr in the kernel so it knows when this scenario occurs.
-                            self.runner.proxy_irr_exit_mut()[i * 2] = tmr as u32;
-                            self.runner.proxy_irr_exit_mut()[i * 2 + 1] = (tmr >> 32) as u32;
+                            self.runner.proxy_irr_exit_mut_vtl0()[i * 2] = tmr as u32;
+                            self.runner.proxy_irr_exit_mut_vtl0()[i * 2 + 1] = (tmr >> 32) as u32;
                         }
                     }
                 });
@@ -1015,7 +994,7 @@ impl UhProcessor<'_, TdxBacked> {
             }
 
             if update_rvi {
-                let page: &mut ApicPage = zerocopy::transmute_mut!(self.runner.tdx_apic_page_mut());
+                let page = self.runner.tdx_apic_page_mut(GuestVtl::Vtl0);
                 let rvi = top_vector(&page.irr);
                 self.backing.vtls[vtl].private_regs.rvi = rvi;
             }
@@ -1051,8 +1030,8 @@ impl UhProcessor<'_, TdxBacked> {
     ) -> R {
         let offloaded = self.backing.cvm.lapics[vtl].lapic.is_offloaded();
         if offloaded {
-            let (irr, isr) =
-                pull_apic_offload(zerocopy::transmute_mut!(self.runner.tdx_apic_page_mut()));
+            assert_eq!(vtl, GuestVtl::Vtl0);
+            let (irr, isr) = pull_apic_offload(self.runner.tdx_apic_page_mut(GuestVtl::Vtl0));
             self.backing.cvm.lapics[vtl]
                 .lapic
                 .disable_offload(&irr, &isr);
@@ -1156,7 +1135,7 @@ impl<'b> hardware_cvm::apic::ApicBacking<'b, TdxBacked> for TdxApicScanner<'_, '
         }
 
         let priority = vector >> 4;
-        let apic: &ApicPage = zerocopy::transmute_ref!(self.vp.runner.tdx_apic_page());
+        let apic = self.vp.runner.tdx_apic_page(vtl);
         if (apic.tpr.value as u8 >> 4) >= priority {
             self.tpr_threshold = priority;
             return Ok(());
@@ -1548,7 +1527,7 @@ impl UhProcessor<'_, TdxBacked> {
                     .access(&mut TdxApicClient {
                         partition: self.partition,
                         vmtime: &self.vmtime,
-                        apic_page: zerocopy::transmute_mut!(self.runner.tdx_apic_page_mut()),
+                        apic_page: self.runner.tdx_apic_page_mut(intercepted_vtl),
                         dev,
                         vtl: intercepted_vtl,
                     })
@@ -1601,7 +1580,7 @@ impl UhProcessor<'_, TdxBacked> {
                     .access(&mut TdxApicClient {
                         partition: self.partition,
                         vmtime: &self.vmtime,
-                        apic_page: zerocopy::transmute_mut!(self.runner.tdx_apic_page_mut()),
+                        apic_page: self.runner.tdx_apic_page_mut(intercepted_vtl),
                         dev,
                         vtl: intercepted_vtl,
                     })
@@ -2013,8 +1992,8 @@ impl UhProcessor<'_, TdxBacked> {
         intercepted_vtl: GuestVtl,
     ) -> Result<(), MsrError> {
         match msr {
-            msr @ hvdef::HV_X64_MSR_GUEST_OS_ID => {
-                self.backing.cvm.hv[intercepted_vtl].msr_write(msr, value)?
+            hvdef::HV_X64_MSR_GUEST_OS_ID => {
+                self.backing.cvm.hv[intercepted_vtl].msr_write_guest_os_id(value)
             }
             _ => {
                 // If we get here we must have an untrusted synic, as otherwise
@@ -2211,8 +2190,6 @@ impl UhProcessor<'_, TdxBacked> {
 
         self.runner
             .write_vmcs32(vtl, seg.attributes(), !0, attributes.into());
-
-        // TODO TDX: cache CS into last exit because last exit contains CS optionally?
 
         Ok(())
     }
@@ -2415,7 +2392,7 @@ impl<T: CpuIo> X86EmulatorSupport for UhEmulationState<'_, '_, T, TdxBacked> {
                 partition: self.vp.partition,
                 dev: self.devices,
                 vmtime: &self.vp.vmtime,
-                apic_page: zerocopy::transmute_mut!(self.vp.runner.tdx_apic_page_mut()),
+                apic_page: self.vp.runner.tdx_apic_page_mut(self.vtl),
                 vtl: self.vtl,
             })
             .mmio_read(address, data);
@@ -2428,7 +2405,7 @@ impl<T: CpuIo> X86EmulatorSupport for UhEmulationState<'_, '_, T, TdxBacked> {
                 partition: self.vp.partition,
                 dev: self.devices,
                 vmtime: &self.vp.vmtime,
-                apic_page: zerocopy::transmute_mut!(self.vp.runner.tdx_apic_page_mut()),
+                apic_page: self.vp.runner.tdx_apic_page_mut(self.vtl),
                 vtl: self.vtl,
             })
             .mmio_write(address, data);
@@ -2664,6 +2641,7 @@ impl<T: CpuIo> ApicClient for TdxApicClient<'_, T> {
     }
 
     fn pull_offload(&mut self) -> ([u32; 8], [u32; 8]) {
+        assert_eq!(self.vtl, GuestVtl::Vtl0);
         pull_apic_offload(self.apic_page)
     }
 }

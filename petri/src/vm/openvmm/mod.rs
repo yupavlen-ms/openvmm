@@ -127,7 +127,7 @@ impl PetriVmConfig for PetriVmConfigOpenVmm {
 
 /// Various channels and resources used to interact with the VM while it is running.
 struct PetriVmResourcesOpenVmm {
-    serial_tasks: Vec<Task<anyhow::Result<()>>>,
+    log_stream_tasks: Vec<Task<anyhow::Result<()>>>,
     firmware_event_recv: Receiver<FirmwareEvent>,
     shutdown_ic_send: Sender<ShutdownRpc>,
     expected_boot_event: Option<FirmwareEvent>,
@@ -145,8 +145,9 @@ struct PetriVmResourcesOpenVmm {
     output_dir: PathBuf,
     log_source: PetriLogSource,
 
-    // Resources that are only kept so they can be dropped at the end.
-    _vsock_temp_paths: Vec<TempPath>,
+    // TempPaths that cannot be dropped until the end.
+    vtl2_vsock_path: Option<TempPath>,
+    _vmbus_vsock_path: TempPath,
 }
 
 impl PetriVmConfigOpenVmm {

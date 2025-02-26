@@ -14,6 +14,7 @@ use crate::protocol::tdx_vp_context;
 use crate::protocol::tdx_vp_state;
 use crate::protocol::tdx_vp_state_flags;
 use crate::GuestVtl;
+use hv1_structs::VtlArray;
 use hvdef::HvRegisterName;
 use hvdef::HvRegisterValue;
 use memory_range::MemoryRange;
@@ -41,7 +42,7 @@ use x86defs::vmx::VmcsField;
 
 /// Runner backing for TDX partitions.
 pub struct Tdx<'a> {
-    apic_page: &'a UnsafeCell<ApicPage>,
+    apic_pages: VtlArray<&'a UnsafeCell<ApicPage>, 2>,
 }
 
 impl MshvVtl {
@@ -119,18 +120,18 @@ impl<'a> ProcessorRunner<'a, Tdx<'a>> {
         &self.tdx_vp_context().exit_info
     }
 
-    /// Gets a reference to the tdx APIC page.
-    pub fn tdx_apic_page(&self) -> &ApicPage {
-        // SAFETY: the APIC page will not be concurrently accessed by the processor
+    /// Gets a reference to the tdx APIC page for the given VTL.
+    pub fn tdx_apic_page(&self, vtl: GuestVtl) -> &ApicPage {
+        // SAFETY: the APIC pages will not be concurrently accessed by the processor
         // while this VP is in VTL2.
-        unsafe { &*self.state.apic_page.get() }
+        unsafe { &*self.state.apic_pages[vtl].get() }
     }
 
-    /// Gets a mutable reference to the tdx APIC page.
-    pub fn tdx_apic_page_mut(&mut self) -> &mut ApicPage {
-        // SAFETY: the APIC page will not be concurrently accessed by the processor
+    /// Gets a mutable reference to the tdx APIC page for the given VTL.
+    pub fn tdx_apic_page_mut(&mut self, vtl: GuestVtl) -> &mut ApicPage {
+        // SAFETY: the APIC pages will not be concurrently accessed by the processor
         // while this VP is in VTL2.
-        unsafe { &mut *self.state.apic_page.get() }
+        unsafe { &mut *self.state.apic_pages[vtl].get() }
     }
 
     /// Gets a reference to TDX VP specific state.
@@ -413,11 +414,20 @@ impl<'a> ProcessorRunner<'a, Tdx<'a>> {
 impl<'a> super::private::BackingPrivate<'a> for Tdx<'a> {
     fn new(vp: &'a HclVp, sidecar: Option<&SidecarVp<'_>>) -> Result<Self, NoRunner> {
         assert!(sidecar.is_none());
-        let super::BackingState::Tdx { apic_page } = &vp.backing else {
+        let super::BackingState::Tdx {
+            vtl0_apic_page,
+            vtl1_apic_page,
+        } = &vp.backing
+        else {
             return Err(NoRunner::MismatchedIsolation);
         };
+
+        // SAFETY: The mapping is held for the appropriate lifetime, and the
+        // APIC page is never accessed as any other type, or by any other location.
+        let vtl1_apic_page = unsafe { &*vtl1_apic_page.base().cast() };
+
         Ok(Self {
-            apic_page: apic_page.as_ref(),
+            apic_pages: [vtl0_apic_page.as_ref(), vtl1_apic_page].into(),
         })
     }
 

@@ -5,6 +5,7 @@
 
 use crate::memory::MappedDmaTarget;
 use anyhow::Context;
+use inspect::Inspect;
 use std::ffi::c_void;
 use std::fs::File;
 use std::io::Read;
@@ -123,7 +124,7 @@ unsafe impl MappedDmaTarget for LockedMemory {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Inspect)]
 pub struct LockedMemorySpawner;
 
 impl crate::DmaClient for LockedMemorySpawner {
