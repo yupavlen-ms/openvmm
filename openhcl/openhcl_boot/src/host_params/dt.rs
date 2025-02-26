@@ -337,9 +337,9 @@ impl PartitionInfo {
         let command_line = params.command_line();
 
         if parsed.device_dma_page_count.is_some() {
-            log!("YSP: Hooray2 {}", parsed.device_dma_page_count.unwrap());
+            log!("YSP: Hooray {}", parsed.device_dma_page_count.unwrap());
         } else {
-            log!("YSP: Oopsie2");
+            log!("YSP: Oopsie");
         }
         // Always write the measured command line.
         write!(
