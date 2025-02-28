@@ -165,7 +165,7 @@ mod tests {
             BootCommandLineOptions {
                 logger: None,
                 confidential_debug: false,
-                enable_vtl2_gpa_pool: Some(1024),
+                enable_vtl2_gpa_pool: Some(512),
             }
         );
     }
