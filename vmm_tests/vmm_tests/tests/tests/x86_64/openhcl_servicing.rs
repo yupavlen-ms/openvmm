@@ -58,7 +58,7 @@ async fn openhcl_servicing_keepalive(
 ) -> Result<(), anyhow::Error> {
     openhcl_servicing_core(
         config,
-        "OPENHCL_ENABLE_VTL2_GPA_POOL=1024",
+        "OPENHCL_ENABLE_VTL2_GPA_POOL=512",
         igvm_file,
         OpenHclServicingFlags {
             enable_nvme_keepalive: true,
