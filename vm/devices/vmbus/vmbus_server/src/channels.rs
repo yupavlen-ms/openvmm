@@ -1193,6 +1193,14 @@ static SUPPORTED_VERSIONS: &[Version] = &[
     Version::Copper,
 ];
 
+// Feature flags that are always supported.
+// N.B. Confidential channels are conditionally supported if running in the paravisor.
+const SUPPORTED_FEATURE_FLAGS: FeatureFlags = FeatureFlags::new()
+    .with_guest_specified_signal_parameters(true)
+    .with_channel_interrupt_redirection(true)
+    .with_modify_connection(true)
+    .with_client_id(true);
+
 /// Trait for sending requests to devices and the guest.
 pub trait Notifier: Send {
     /// Requests a channel action.
@@ -2233,16 +2241,17 @@ impl<'a, N: 'a + Notifier> ServerWithNotifier<'a, N> {
             // The max version and features may be limited in order to test older protocol versions.
             //
             // N.B. Confidential channels should only be enabled if the connection is trusted.
+            let max_supported_flags =
+                SUPPORTED_FEATURE_FLAGS.with_confidential_channels(request.trusted);
+
             if let Some(max_version) = self.inner.max_version {
                 if version as u32 > max_version.version {
                     return None;
                 }
 
-                max_version.feature_flags.with_confidential_channels(
-                    max_version.feature_flags.confidential_channels() && request.trusted,
-                )
+                max_supported_flags & max_version.feature_flags
             } else {
-                FeatureFlags::all().with_confidential_channels(request.trusted)
+                max_supported_flags
             }
         } else {
             FeatureFlags::new()
@@ -3917,7 +3926,7 @@ mod tests {
             server.with_notifier(notifier).complete_initiate_contact(
                 ModifyConnectionResponse::Supported(
                     protocol::ConnectionState::SUCCESSFUL,
-                    FeatureFlags::all(),
+                    SUPPORTED_FEATURE_FLAGS,
                 ),
             );
 
@@ -4182,7 +4191,7 @@ mod tests {
             .with_notifier(&mut notifier)
             .complete_initiate_contact(ModifyConnectionResponse::Supported(
                 protocol::ConnectionState::SUCCESSFUL,
-                FeatureFlags::all(),
+                SUPPORTED_FEATURE_FLAGS,
             ));
 
         let version_response = protocol::VersionResponse {
@@ -4380,7 +4389,7 @@ mod tests {
             .with_notifier(&mut notifier)
             .complete_initiate_contact(ModifyConnectionResponse::Supported(
                 protocol::ConnectionState::SUCCESSFUL,
-                FeatureFlags::all(),
+                SUPPORTED_FEATURE_FLAGS,
             ));
 
         // Discard the version response message.
@@ -4466,7 +4475,7 @@ mod tests {
             self.c()
                 .complete_modify_connection(ModifyConnectionResponse::Supported(
                     protocol::ConnectionState::SUCCESSFUL,
-                    FeatureFlags::all(),
+                    SUPPORTED_FEATURE_FLAGS,
                 ));
         }
 
@@ -4663,7 +4672,7 @@ mod tests {
             self.c()
                 .complete_initiate_contact(ModifyConnectionResponse::Supported(
                     protocol::ConnectionState::SUCCESSFUL,
-                    FeatureFlags::all(),
+                    SUPPORTED_FEATURE_FLAGS,
                 ));
 
             let version = self.version.unwrap();
@@ -4714,7 +4723,7 @@ mod tests {
         env.c()
             .complete_initiate_contact(ModifyConnectionResponse::Supported(
                 protocol::ConnectionState::SUCCESSFUL,
-                FeatureFlags::all(),
+                SUPPORTED_FEATURE_FLAGS,
             ));
         let offer_id3 = env.offer(3);
         env.c().handle_request_offers().unwrap();
@@ -4995,7 +5004,7 @@ mod tests {
         env.c()
             .complete_modify_connection(ModifyConnectionResponse::Supported(
                 protocol::ConnectionState::SUCCESSFUL,
-                FeatureFlags::all(),
+                SUPPORTED_FEATURE_FLAGS,
             ));
 
         env.notifier
@@ -5153,7 +5162,7 @@ mod tests {
         env.c()
             .complete_modify_connection(ModifyConnectionResponse::Supported(
                 protocol::ConnectionState::FAILED_UNKNOWN_FAILURE,
-                FeatureFlags::all(),
+                SUPPORTED_FEATURE_FLAGS,
             ));
 
         env.notifier
