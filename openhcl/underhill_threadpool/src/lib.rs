@@ -1,13 +1,13 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#![cfg_attr(not(target_os = "linux"), expect(missing_docs))]
 #![cfg(target_os = "linux")]
 
 //! The Underhill per-CPU thread pool used to run async tasks and IO.
 //!
 //! This is built on top of [`pal_uring`] and [`pal_async`].
 
-#![warn(missing_docs)]
 #![forbid(unsafe_code)]
 
 use inspect::Inspect;

@@ -1,12 +1,10 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
-#![cfg(target_os = "linux")]
-
 //! Implements a VtlMemoryProtection guard that can be used to temporarily allow
 //! access to pages that were previously protected.
 
-#![warn(missing_docs)]
+#![cfg(target_os = "linux")]
 
 mod device_dma;
 

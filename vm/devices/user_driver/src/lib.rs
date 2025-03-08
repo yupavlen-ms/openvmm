@@ -5,6 +5,7 @@
 
 // UNSAFETY: Manual memory management around buffers and mmap.
 #![expect(unsafe_code)]
+#![expect(missing_docs)]
 
 use inspect::Inspect;
 use interrupt::DeviceInterrupt;

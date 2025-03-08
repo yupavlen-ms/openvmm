@@ -5,6 +5,7 @@
 
 // UNSAFETY: Manual pointer manipulation, dealing with mmap, and a signal handler.
 #![expect(unsafe_code)]
+#![expect(missing_docs)]
 #![expect(clippy::undocumented_unsafe_blocks)]
 
 pub mod alloc;
