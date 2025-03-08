@@ -11,6 +11,7 @@ mod deque;
 mod error;
 mod mpsc;
 mod oneshot;
+mod sync_unsafe_cell;
 
 pub use error::*;
 pub use mpsc::*;
