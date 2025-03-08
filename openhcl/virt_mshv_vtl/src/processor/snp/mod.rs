@@ -140,6 +140,10 @@ impl HardwareIsolatedBacking for SnpBacked {
         UhDirectOverlay::Count as u64
     }
 
+    fn cvm_state(&self) -> &UhCvmVpState {
+        &self.cvm
+    }
+
     fn cvm_state_mut(&mut self) -> &mut UhCvmVpState {
         &mut self.cvm
     }
@@ -440,7 +444,7 @@ impl BackingPrivate for SnpBacked {
 
     fn inspect_extra(this: &mut UhProcessor<'_, Self>, resp: &mut inspect::Response<'_>) {
         let vtl0_vmsa = this.runner.vmsa(GuestVtl::Vtl0);
-        let vtl1_vmsa = if *this.cvm_vp_inner().vtl1_enabled.lock() {
+        let vtl1_vmsa = if this.backing.cvm_state().vtl1_enabled {
             Some(this.runner.vmsa(GuestVtl::Vtl1))
         } else {
             None

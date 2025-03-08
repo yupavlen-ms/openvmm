@@ -767,8 +767,8 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::VtlCall for UhHypercallHandle
                 self.intercepted_vtl
             );
             false
-        } else if !*self.vp.cvm_vp_inner().vtl1_enabled.lock() {
-            // VTL 1 must be enabled on the vp
+        } else if !self.vp.backing.cvm_state().vtl1_enabled {
+            // VTL 1 must be active on the vp
             tracelimit::warn_ratelimited!("vtl call not allowed because vtl 1 is not enabled");
             false
         } else {
@@ -867,7 +867,7 @@ impl<T, B: HardwareIsolatedBacking>
         let target_vp_inner = self.vp.cvm_partition().vp_inner(target_vp);
 
         // The target VTL must have been enabled.
-        if target_vtl == GuestVtl::Vtl1 && !*target_vp_inner.vtl1_enabled.lock() {
+        if target_vtl == GuestVtl::Vtl1 && !*target_vp_inner.vtl1_enable_called.lock() {
             return Err(HvError::InvalidVpState);
         }
 
@@ -1123,7 +1123,7 @@ impl<T, B: HardwareIsolatedBacking>
             .vp
             .cvm_partition()
             .vp_inner(vp_index)
-            .vtl1_enabled
+            .vtl1_enable_called
             .lock();
 
         if *vtl1_enabled {
@@ -1499,6 +1499,13 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
         vtl: GuestVtl,
     ) -> Result<(), UhRunVpError> {
         if let Some(start_enable_vtl_state) = self.inner.hv_start_enable_vtl_vp[vtl].lock().take() {
+            if vtl == GuestVtl::Vtl1 {
+                assert!(*self.cvm_vp_inner().vtl1_enable_called.lock());
+                if let InitialVpContextOperation::EnableVpVtl = start_enable_vtl_state.operation {
+                    self.backing.cvm_state_mut().vtl1_enabled = true;
+                }
+            }
+
             tracing::debug!(
                 vp_index = self.inner.cpu_index,
                 ?vtl,
@@ -1515,7 +1522,7 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
             if let InitialVpContextOperation::StartVp = start_enable_vtl_state.operation {
                 match vtl {
                     GuestVtl::Vtl0 => {
-                        if *self.cvm_vp_inner().vtl1_enabled.lock() {
+                        if self.backing.cvm_state().vtl1_enabled {
                             // When starting a VP targeting VTL on a
                             // hardware confidential VM, if VTL 1 has been
                             // enabled, switch to it (the highest enabled
@@ -1546,7 +1553,7 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
     }
 
     pub(crate) fn hcvm_vtl1_inspectable(&self) -> bool {
-        *self.cvm_vp_inner().vtl1_enabled.lock()
+        self.backing.cvm_state().vtl1_enabled
     }
 
     fn get_vsm_vp_secure_config_vtl(
