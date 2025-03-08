@@ -4,7 +4,7 @@
 //! Common processor support for hardware-isolated partitions.
 
 pub mod apic;
-mod tlb_lock;
+pub mod tlb_lock;
 
 use super::UhEmulationState;
 use super::UhProcessor;
@@ -37,7 +37,6 @@ use hvdef::HvVtlEntryReason;
 use hvdef::HvX64RegisterName;
 use hvdef::Vtl;
 use std::iter::zip;
-use std::sync::Arc;
 use virt::io::CpuIo;
 use virt::vp::AccessVpState;
 use virt::x86::MsrError;
@@ -370,12 +369,7 @@ impl<T, B: HardwareIsolatedBacking> UhHypercallHandler<'_, '_, T, B> {
             }
         }
     }
-}
 
-impl<'b, T, B: HardwareIsolatedBacking> UhHypercallHandler<'_, 'b, T, B>
-where
-    UhProcessor<'b, B>: TlbFlushLockAccess,
-{
     fn set_vp_register(
         &mut self,
         vtl: GuestVtl,
@@ -555,10 +549,8 @@ where
     }
 }
 
-impl<'b, T: CpuIo, B: HardwareIsolatedBacking> hv1_hypercall::ModifySparseGpaPageHostVisibility
-    for UhHypercallHandler<'_, 'b, T, B>
-where
-    UhProcessor<'b, B>: TlbFlushLockAccess,
+impl<T: CpuIo, B: HardwareIsolatedBacking> hv1_hypercall::ModifySparseGpaPageHostVisibility
+    for UhHypercallHandler<'_, '_, T, B>
 {
     fn modify_gpa_visibility(
         &mut self,
@@ -591,7 +583,7 @@ where
             .isolated_memory_protector
             .as_ref()
             .ok_or((HvError::AccessDenied, 0))?
-            .change_host_visibility(shared, gpa_pages, self.vp)
+            .change_host_visibility(shared, gpa_pages, &mut self.vp.tlb_flush_lock_access())
     }
 }
 
@@ -724,10 +716,8 @@ impl<T: CpuIo, B: HardwareIsolatedBacking> hv1_hypercall::RetargetDeviceInterrup
     }
 }
 
-impl<'b, T, B: HardwareIsolatedBacking> hv1_hypercall::SetVpRegisters
-    for UhHypercallHandler<'_, 'b, T, B>
-where
-    UhProcessor<'b, B>: TlbFlushLockAccess,
+impl<T, B: HardwareIsolatedBacking> hv1_hypercall::SetVpRegisters
+    for UhHypercallHandler<'_, '_, T, B>
 {
     fn set_vp_registers(
         &mut self,
@@ -922,10 +912,8 @@ impl<T, B: HardwareIsolatedBacking>
     }
 }
 
-impl<'b, T, B: HardwareIsolatedBacking> hv1_hypercall::ModifyVtlProtectionMask
-    for UhHypercallHandler<'_, 'b, T, B>
-where
-    UhProcessor<'b, B>: TlbFlushLockAccess,
+impl<T, B: HardwareIsolatedBacking> hv1_hypercall::ModifyVtlProtectionMask
+    for UhHypercallHandler<'_, '_, T, B>
 {
     fn modify_vtl_protection_mask(
         &mut self,
@@ -978,14 +966,17 @@ where
         // protections on the VTL itself. Therefore, for a hardware CVM,
         // given that only VTL 1 can set the protections, the default
         // permissions should be changed for VTL 0.
-        protector.change_vtl_protections(GuestVtl::Vtl0, gpa_pages, map_flags, self.vp)
+        protector.change_vtl_protections(
+            GuestVtl::Vtl0,
+            gpa_pages,
+            map_flags,
+            &mut self.vp.tlb_flush_lock_access(),
+        )
     }
 }
 
-impl<'b, T, B: HardwareIsolatedBacking> hv1_hypercall::EnablePartitionVtl
-    for UhHypercallHandler<'_, 'b, T, B>
-where
-    UhProcessor<'b, B>: TlbFlushLockAccess,
+impl<T, B: HardwareIsolatedBacking> hv1_hypercall::EnablePartitionVtl
+    for UhHypercallHandler<'_, '_, T, B>
 {
     fn enable_partition_vtl(
         &mut self,
@@ -1045,7 +1036,7 @@ where
         protector.change_default_vtl_protections(
             GuestVtl::Vtl1,
             hvdef::HV_MAP_GPA_PERMISSIONS_ALL,
-            self.vp,
+            &mut self.vp.tlb_flush_lock_access(),
         )?;
 
         tracing::debug!("Successfully granted vtl 1 access to lower vtl memory");
@@ -1266,57 +1257,32 @@ impl<T, B: HardwareIsolatedBacking> hv1_hypercall::TranslateVirtualAddressX64
     }
 }
 
-/// A small struct for delaying requested TLB flushes.
-/// This is only used in the context of the `write_msr_cvm` function,
-/// in which the only MSR of relevance is the hypercall overlay MSR, which
-/// only performs a basic TLB flush.
-struct DelayedTlbFlushAccess {
-    vtl: Option<GuestVtl>,
-}
-
-impl TlbFlushLockAccess for DelayedTlbFlushAccess {
-    fn flush(&mut self, vtl: GuestVtl) {
-        assert!(self.vtl.is_none());
-        self.vtl = Some(vtl);
-    }
-
-    fn flush_entire(&mut self) {
-        unimplemented!()
-    }
-
-    fn set_wait_for_tlb_locks(&mut self, _vtl: GuestVtl) {
-        unimplemented!()
-    }
-}
-
-struct HypercallOverlayAccess {
+struct HypercallOverlayAccess<'a> {
     vtl: GuestVtl,
-    protector: Arc<dyn crate::ProtectIsolatedMemory>,
-    tlb_access: DelayedTlbFlushAccess,
+    protector: &'a dyn crate::ProtectIsolatedMemory,
+    tlb_access: &'a mut dyn TlbFlushLockAccess,
 }
 
-impl hv1_emulator::hv::VtlProtectHypercallOverlay for HypercallOverlayAccess {
+impl hv1_emulator::hv::VtlProtectHypercallOverlay for HypercallOverlayAccess<'_> {
     fn change_overlay(&mut self, gpn: u64) {
         self.protector
-            .change_hypercall_overlay(self.vtl, gpn, &mut self.tlb_access)
+            .change_hypercall_overlay(self.vtl, gpn, self.tlb_access)
     }
 
     fn disable_overlay(&mut self) {
         self.protector
-            .disable_hypercall_overlay(self.vtl, &mut self.tlb_access)
+            .disable_hypercall_overlay(self.vtl, self.tlb_access)
     }
 }
 
-impl<B: HardwareIsolatedBacking> UhProcessor<'_, B>
-where
-    Self: TlbFlushLockAccess,
-{
+impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
     pub(crate) fn write_msr_cvm(
         &mut self,
         msr: u32,
         value: u64,
         vtl: GuestVtl,
     ) -> Result<(), MsrError> {
+        let self_index = self.vp_index();
         let hv = &mut self.backing.cvm_state_mut().hv[vtl];
         // If updated is Synic MSR, then check if its proxy or previous was proxy
         // in either case, we need to update the `proxy_irr_blocked`
@@ -1339,13 +1305,12 @@ where
                 .isolated_memory_protector
                 .as_ref()
                 .unwrap()
-                .clone(),
-            tlb_access: DelayedTlbFlushAccess { vtl: None },
+                .as_ref(),
+            // Don't call the helper method, break out into partial borrows so we
+            // can interact with the hv at the same time.
+            tlb_access: &mut B::tlb_flush_lock_access(self_index, self.partition, self.shared),
         };
         let r = hv.msr_write(msr, value, &mut access);
-        if let Some(vtl) = access.tlb_access.vtl {
-            self.flush(vtl);
-        }
 
         if !matches!(r, Err(MsrError::Unknown)) {
             // Check if proxy filter update was required (in case of SINT writes)
@@ -1421,7 +1386,11 @@ where
             }
         }
 
-        protector.change_default_vtl_protections(targeted_vtl, protections, self)?;
+        protector.change_default_vtl_protections(
+            targeted_vtl,
+            protections,
+            &mut self.tlb_flush_lock_access(),
+        )?;
 
         // TODO GUEST VSM: actually use the enable_vtl_protection value when
         // deciding whether to check vtl access();
@@ -1447,6 +1416,11 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
     pub fn cvm_vp_inner(&self) -> &'_ crate::UhCvmVpInner {
         self.cvm_partition()
             .vp_inner(self.inner.vp_info.base.vp_index.index())
+    }
+
+    /// Returns the appropriately backed TLB flush and lock access
+    pub fn tlb_flush_lock_access(&self) -> impl TlbFlushLockAccess + use<'_, B> {
+        B::tlb_flush_lock_access(self.vp_index(), self.partition, self.shared)
     }
 
     /// Handle checking for cross-VTL interrupts, preempting VTL 0, and setting

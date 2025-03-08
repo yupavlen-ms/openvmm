@@ -190,9 +190,10 @@ pub struct UhPartition {
     interrupt_targets: VtlArray<Arc<UhInterruptTarget>, 2>,
 }
 
+/// Underhill partition.
 #[derive(Inspect)]
 #[inspect(extra = "UhPartitionInner::inspect_extra")]
-struct UhPartitionInner {
+pub struct UhPartitionInner {
     #[inspect(skip)]
     hcl: Hcl,
     #[inspect(skip)] // inspected separately
@@ -336,8 +337,6 @@ pub struct UhCvmVpState {
     // Allocation handle for direct overlays
     #[inspect(debug)]
     direct_overlay_handle: user_driver::memory::MemoryBlock,
-    /// The VTLs on this VP waiting for TLB locks on other VPs.
-    vtls_tlb_waiting: VtlArray<bool, 2>,
     /// Used in VTL 2 exit code to determine which VTL to exit to.
     exit_vtl: GuestVtl,
     /// Hypervisor enlightenment emulator state.
@@ -387,7 +386,6 @@ impl UhCvmVpState {
 
         Ok(Self {
             direct_overlay_handle,
-            vtls_tlb_waiting: VtlArray::new(false),
             exit_vtl: GuestVtl::Vtl0,
             hv,
             lapics,
