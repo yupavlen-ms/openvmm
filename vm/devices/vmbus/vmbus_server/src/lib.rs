@@ -6,6 +6,7 @@
 
 mod channel_bitmap;
 mod channels;
+pub mod event;
 pub mod hvsock;
 mod monitor;
 mod proxyintegration;
@@ -1667,9 +1668,13 @@ impl ServerTaskInner {
             anyhow::bail!("interrupt page {:#x} is not page aligned", interrupt_page);
         }
 
+        // Use a subrange to access the interrupt page to give GuestMemory's without a full mapping
+        // a chance to create one.
         let interrupt_page = self
             .gm
-            .lock_gpns(false, &[interrupt_page / PAGE_SIZE as u64])?;
+            .lockable_subrange(interrupt_page, PAGE_SIZE as u64)?
+            .lock_gpns(false, &[0])?;
+
         let channel_bitmap = Arc::new(ChannelBitmap::new(interrupt_page));
         self.channel_bitmap = Some(channel_bitmap.clone());
 

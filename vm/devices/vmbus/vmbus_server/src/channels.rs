@@ -1804,12 +1804,22 @@ impl<'a, N: 'a + Notifier> ServerWithNotifier<'a, N> {
                 reserved_state,
             } => {
                 let channel_id = channel.info.expect("assigned").channel_id;
-                tracing::info!(
-                    offer_id = offer_id.0,
-                    channel_id = channel_id.0,
-                    result,
-                    "opened channel"
-                );
+                if result >= 0 {
+                    tracelimit::info_ratelimited!(
+                        offer_id = offer_id.0,
+                        channel_id = channel_id.0,
+                        result,
+                        "opened channel"
+                    );
+                } else {
+                    // Log channel open failures at error level for visibility.
+                    tracelimit::error_ratelimited!(
+                        offer_id = offer_id.0,
+                        channel_id = channel_id.0,
+                        result,
+                        "failed to open channel"
+                    );
+                }
 
                 self.inner
                     .pending_messages
@@ -2260,18 +2270,20 @@ impl<'a, N: 'a + Notifier> ServerWithNotifier<'a, N> {
             .find(|v| request.version_requested == **v as u32)
             .copied()?;
 
+        // The max version may be limited in order to test older protocol versions.
+        if let Some(max_version) = self.inner.max_version {
+            if version as u32 > max_version.version {
+                return None;
+            }
+        }
+
         let supported_flags = if version >= Version::Copper {
-            // The max version and features may be limited in order to test older protocol versions.
-            //
-            // N.B. Confidential channels should only be enabled if the connection is trusted.
+            // Confidential channels should only be enabled if the connection is trusted.
             let max_supported_flags =
                 SUPPORTED_FEATURE_FLAGS.with_confidential_channels(request.trusted);
 
+            // The max features may be limited in order to test older protocol versions.
             if let Some(max_version) = self.inner.max_version {
-                if version as u32 > max_version.version {
-                    return None;
-                }
-
                 max_supported_flags & max_version.feature_flags
             } else {
                 max_supported_flags
