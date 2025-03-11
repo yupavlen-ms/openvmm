@@ -619,7 +619,6 @@ fn convert_vtl2_config(
     };
 
     let config = virt::Vtl2Config {
-        vtl0_alias_map: vtl2_cfg.vtl0_alias_map,
         late_map_vtl0_memory,
     };
 
@@ -796,24 +795,30 @@ impl InitializedVm {
         };
 
         // Choose the memory layout of the VM.
-        let mem_layout = MemoryLayout::new(
-            physical_address_size,
-            cfg.memory.mem_size,
-            &cfg.memory.mmio_gaps,
-            vtl2_range,
-        )
-        .context("invalid memory configuration")?;
+        let mem_layout = MemoryLayout::new(cfg.memory.mem_size, &cfg.memory.mmio_gaps, vtl2_range)
+            .context("invalid memory configuration")?;
+
+        if mem_layout.end_of_ram_or_mmio() > 1 << physical_address_size {
+            anyhow::bail!(
+                "memory layout ends at {:#x}, which exceeds the address with of {} bits",
+                mem_layout.end_of_ram_or_mmio(),
+                physical_address_size
+            );
+        }
+
+        // Place the alias map at the end of the address space. Newer versions
+        // of OpenHCL support receiving this offset via devicetree (especially
+        // important on ARM64 where the physical address width used here is not
+        // reported to the guest), but older ones depend on it being hardcoded.
+        let vtl0_alias_map = cfg.hypervisor.with_vtl2.as_ref().and_then(|cfg| {
+            cfg.vtl0_alias_map
+                .then_some(1 << (physical_address_size - 1))
+        });
 
         let mut memory_builder = GuestMemoryBuilder::new();
         memory_builder = memory_builder
             .existing_backing(shared_memory)
-            .vtl0_alias_map(
-                cfg.hypervisor
-                    .with_vtl2
-                    .as_ref()
-                    .map(|cfg| cfg.vtl0_alias_map)
-                    .unwrap_or_default(),
-            )
+            .vtl0_alias_map(vtl0_alias_map)
             .prefetch_ram(cfg.memory.prefetch_memory)
             .x86_legacy_support(
                 matches!(cfg.load_mode, LoadMode::Pcat { .. }) || cfg.chipset.with_hyperv_vga,
@@ -872,6 +877,7 @@ impl InitializedVm {
                 mem_layout: &mem_layout,
                 guest_memory: &gm,
                 cpuid: &cpuid,
+                vtl0_alias_map,
             })
             .context("failed to create the partition")?;
 
@@ -2414,7 +2420,10 @@ impl LoadedVmInner {
         // VTL2 will setup MTRRs for VTL0 if needed.
         #[cfg(guest_arch = "x86_64")]
         if self.hypervisor_cfg.with_vtl2.is_none() {
-            regs.extend(loader::common::compute_variable_mtrrs(&self.mem_layout));
+            regs.extend(loader::common::compute_variable_mtrrs(
+                &self.mem_layout,
+                self.partition.caps().physical_address_width,
+            ));
         }
 
         // Only set initial page visibility on isolated partitions.
