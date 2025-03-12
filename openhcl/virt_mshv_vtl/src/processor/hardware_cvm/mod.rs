@@ -1121,7 +1121,6 @@ impl<T, B: HardwareIsolatedBacking>
             return Err(HvError::VtlAlreadyEnabled);
         }
 
-        // Register the VMSA with the hypervisor
         let hv_vp_context = match self.vp.partition.isolation {
             virt::IsolationType::None | virt::IsolationType::Vbs => unreachable!(),
             virt::IsolationType::Snp => {
@@ -1137,12 +1136,10 @@ impl<T, B: HardwareIsolatedBacking>
 
                 hv_vp_context
             }
-            virt::IsolationType::Tdx => {
-                // TODO TDX GUEST VSM
-                hvdef::hypercall::InitialVpContextX64::new_zeroed()
-            }
+            virt::IsolationType::Tdx => hvdef::hypercall::InitialVpContextX64::new_zeroed(),
         };
 
+        // Tell the hypervisor to enable VTL 1, and register any needed state
         self.vp
             .partition
             .hcl
