@@ -1826,15 +1826,16 @@ impl UhProcessor<'_, TdxBacked> {
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.nmi_window
             }
             VmxExit::HW_INTERRUPT => {
-                // Check if the interrupt was triggered by a hardware breakpoint.
-                let debug_regs = self
-                    .access_state(intercepted_vtl.into())
-                    .debug_regs()
-                    .expect("register query should not fail");
-
-                // The lowest four bits of DR6 indicate which of the
-                // four breakpoints triggered.
-                breakpoint_debug_exception = debug_regs.dr6.trailing_zeros() < 4;
+                if cfg!(feature = "gdb") {
+                    // Check if the interrupt was triggered by a hardware breakpoint.
+                    let debug_regs = self
+                        .access_state(intercepted_vtl.into())
+                        .debug_regs()
+                        .expect("register query should not fail");
+                    // The lowest four bits of DR6 indicate which of the
+                    // four breakpoints triggered.
+                    breakpoint_debug_exception = debug_regs.dr6.trailing_zeros() < 4;
+                }
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.hw_interrupt
             }
             VmxExit::SMI_INTR => &mut self.backing.vtls[intercepted_vtl].exit_stats.smi_intr,
@@ -1860,7 +1861,9 @@ impl UhProcessor<'_, TdxBacked> {
                     "Caught Exception: {:?}",
                     exit_info._exit_interruption_info()
                 );
-                breakpoint_debug_exception = true;
+                if cfg!(feature = "gdb") {
+                    breakpoint_debug_exception = true;
+                }
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.exception
             }
             VmxExit::TRIPLE_FAULT => {
