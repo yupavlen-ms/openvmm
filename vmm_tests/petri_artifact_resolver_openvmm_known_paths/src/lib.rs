@@ -4,7 +4,6 @@
 //! See [`OpenvmmKnownPathsTestArtifactResolver`].
 
 #![forbid(unsafe_code)]
-#![warn(missing_docs)]
 
 use petri_artifacts_common::tags::MachineArch;
 use petri_artifacts_core::ErasedArtifactHandle;
@@ -488,7 +487,8 @@ impl MissingCommand<'_> {
         match self {
             MissingCommand::Build { package, target } => anyhow::bail!(
                 "Failed to find {package} binary. Run `cargo build {target_args}-p {package}` to build it.",
-                target_args = target.map_or(String::new(), |target| format!("--target {} ", target)),
+                target_args =
+                    target.map_or(String::new(), |target| format!("--target {} ", target)),
             ),
             MissingCommand::Xtask {
                 description,
@@ -500,13 +500,19 @@ impl MissingCommand<'_> {
                     args.join(" ")
                 )
             }
-            MissingCommand::XFlowey { description, xflowey_args: args } => anyhow::bail!(
-                    "Failed to find {}. Run `cargo xflowey {}` to create it.",
-                    description,
-                    args.join(" ")
-                ),
+            MissingCommand::XFlowey {
+                description,
+                xflowey_args: args,
+            } => anyhow::bail!(
+                "Failed to find {}. Run `cargo xflowey {}` to create it.",
+                description,
+                args.join(" ")
+            ),
             MissingCommand::Restore { description } => {
-                anyhow::bail!("Failed to find {}. Run `cargo xflowey restore-packages`.", description)
+                anyhow::bail!(
+                    "Failed to find {}. Run `cargo xflowey restore-packages`.",
+                    description
+                )
             }
             MissingCommand::Custom { description, cmd } => {
                 anyhow::bail!(

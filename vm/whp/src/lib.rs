@@ -1,6 +1,7 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#![expect(missing_docs)]
 #![cfg(windows)]
 // UNSAFETY: Calling WHP APIs.
 #![expect(unsafe_code)]
@@ -25,9 +26,9 @@ use std::marker::PhantomData;
 use std::num::NonZeroI32;
 use std::num::NonZeroU16;
 use std::os::windows::prelude::*;
+use std::ptr::NonNull;
 use std::ptr::null;
 use std::ptr::null_mut;
-use std::ptr::NonNull;
 use winapi::shared::guiddef::GUID;
 use winapi::shared::ntdef::LUID;
 use winapi::shared::winerror;
@@ -1737,7 +1738,7 @@ impl<'a> ExitReason<'a> {
         match ctx.ExitReason {
             abi::WHvRunVpExitReasonNone => Self::None,
             abi::WHvRunVpExitReasonCanceled => Self::Canceled,
-            reason => Self::Hypervisor(reason.0, &ctx.u.message),
+            reason => Self::Hypervisor(reason.0, &ctx.u),
         }
     }
 }
@@ -1784,7 +1785,7 @@ pub enum ExitReason<'a> {
 #[derive(Copy, Clone, Debug)]
 pub enum ExitReason<'a> {
     None,
-    Hypervisor(u32, &'a [u8; 256]),
+    Hypervisor(u32, &'a abi::WHV_RUN_VP_EXIT_CONTEXT_u),
     Canceled,
 }
 

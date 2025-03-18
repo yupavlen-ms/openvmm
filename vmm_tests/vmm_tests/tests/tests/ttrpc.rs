@@ -8,10 +8,10 @@
 use anyhow::Context;
 use guid::Guid;
 use hvlite_ttrpc_vmservice as vmservice;
+use pal_async::DefaultPool;
 use pal_async::pipe::PolledPipe;
 use pal_async::socket::PolledSocket;
 use pal_async::task::Spawn;
-use pal_async::DefaultPool;
 use petri::ResolvedArtifact;
 use petri_artifacts_vmm_test::artifacts;
 use std::io::Read;
@@ -50,7 +50,7 @@ fn test_ttrpc_interface(
     let mut b = [0];
     assert_eq!(stdout.read(&mut b)?, 0);
 
-    DefaultPool::run_with(|driver| async {
+    DefaultPool::run_with(async |driver| {
         let driver = driver;
         let _stderr_task = driver.spawn(
             "stderr",

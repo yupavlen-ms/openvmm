@@ -3,22 +3,23 @@
 
 //! Backing for SNP partitions.
 
+use super::Hcl;
+use super::HclVp;
+use super::MshvVtl;
+use super::NoRunner;
+use super::ProcessorRunner;
 use super::hcl_pvalidate_pages;
 use super::hcl_rmpadjust_pages;
 use super::hcl_rmpquery_pages;
 use super::mshv_pvalidate;
 use super::mshv_rmpadjust;
 use super::mshv_rmpquery;
-use super::HclVp;
-use super::MshvVtl;
-use super::NoRunner;
-use super::ProcessorRunner;
-use crate::vmsa::VmsaWrapper;
 use crate::GuestVtl;
+use crate::vmsa::VmsaWrapper;
 use hv1_structs::VtlArray;
+use hvdef::HV_PAGE_SIZE;
 use hvdef::HvRegisterName;
 use hvdef::HvRegisterValue;
-use hvdef::HV_PAGE_SIZE;
 use memory_range::MemoryRange;
 use sidecar_client::SidecarVp;
 use std::cell::UnsafeCell;
@@ -173,7 +174,7 @@ impl MshvVtl {
 }
 
 impl<'a> super::private::BackingPrivate<'a> for Snp<'a> {
-    fn new(vp: &'a HclVp, sidecar: Option<&SidecarVp<'_>>) -> Result<Self, NoRunner> {
+    fn new(vp: &'a HclVp, sidecar: Option<&SidecarVp<'_>>, _hcl: &Hcl) -> Result<Self, NoRunner> {
         assert!(sidecar.is_none());
         let super::BackingState::Snp { vmsa } = &vp.backing else {
             return Err(NoRunner::MismatchedIsolation);
@@ -229,7 +230,7 @@ impl ProcessorRunner<'_, Snp<'_>> {
     pub fn vmsas_mut(&mut self) -> [VmsaWrapper<'_, &mut SevVmsa>; 2] {
         self.state
             .vmsa
-            .each_ref()
+            .each_mut()
             .map(|vmsa| {
                 // SAFETY: the VMSA will not be concurrently accessed by the processor
                 // while this VP is in VTL2.

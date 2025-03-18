@@ -49,7 +49,7 @@ exclude = [
 ]
 
 [workspace.package]
-rust-version = "1.84"
+rust-version = "1.85"
 edition = "2021"
 
 [workspace.dependencies]
@@ -143,7 +143,6 @@ uevent = { path = "support/uevent" }
 unix_socket = { path = "support/unix_socket" }
 vmsocket = { path = "support/vmsocket" }
 win_import_lib = { path = "support/win_import_lib" }
-win_prng_support = { path = "support/win_prng_support" }
 
 azure_profiler_proto = { path = "openhcl/azure_profiler_proto" }
 bootloader_fdt_parser = { path = "openhcl/bootloader_fdt_parser" }
@@ -388,7 +387,7 @@ bitfield-struct = "0.7"
 bitvec = { version = "1.1", default-features = false }
 blocking = "1.2"
 caps = "0.5"
-cargo_toml = "0.18"
+cargo_toml = "0.22"
 cc = "1.0"
 cfg-if = "1"
 clap = "4.2"
@@ -415,7 +414,7 @@ futures-channel = "0.3"
 futures-io = "0.3"
 gdbstub = "0.6"
 gdbstub_arch = "0.2"
-getrandom = "0.2"
+getrandom = "0.3"
 glob = "0.3"
 gptman = "1.0"
 grep-regex = "0.1"
@@ -441,7 +440,7 @@ igvm = {git = "https://github.com/microsoft/igvm", rev = "365065d7e31da0a0116e79
 igvm_defs = {git = "https://github.com/microsoft/igvm", rev = "365065d7e31da0a0116e7934de3ecd85f00bab70", default-features = false, features = [ "unstable" ]}
 image = { version = "0.24", default-features = false }
 io-uring = "0.6"
-jiff = "0.1"
+jiff = "0.2"
 kvm-bindings = "0.7"
 # Use of these specific REPO will go away when changes are taken upstream.
 landlock = "0.3.1"
@@ -500,7 +499,7 @@ target-lexicon = "0.12.13"
 tempfile = "3.2"
 thiserror = { version = "2", default-features = false }
 time = "0.3"
-toml_edit = "0.21"
+toml_edit = "0.22"
 tracing = "0.1"
 tracing-core = "=0.1.30" # Pin to avoid binary size increase https://github.com/tokio-rs/tracing/issues/3182
 tracing-subscriber = "0.3.16"
@@ -586,8 +585,7 @@ pbjson-build = { git = "https://github.com/jstarks/pbjson", branch = "aliases" }
 [workspace.lints.rust]
 # Lint groups need a priority lower than individual lints so they get applied first.
 future_incompatible = { level = "deny", priority = -2 }
-nonstandard_style = { level = "deny", priority = -2 }
-rust_2018_idioms = { level = "deny", priority = -2 }
+rust_2018_idioms = { level = "warn", priority = -2 }
 
 rust-2024-compatibility = { level = "warn", priority = -1 }
 edition_2024_expr_fragment_specifier = "allow"
@@ -596,6 +594,7 @@ tail-expr-drop-order = "allow"
 if-let-rescope = "allow"
 
 unused_qualifications = "warn"
+missing_docs = "warn"
 
 # Code that needs unsafe should opt-in via a module-scoped allow.
 unsafe_code = "deny"

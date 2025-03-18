@@ -2,23 +2,24 @@
 // Licensed under the MIT License.
 
 #![cfg_attr(all(target_os = "linux", target_env = "gnu"), no_main)]
+#![expect(missing_docs)]
 
 use arbitrary::Arbitrary;
 use arbitrary::Unstructured;
-use futures::select;
 use futures::FutureExt;
-use guestmem::ranges::PagedRange;
+use futures::select;
 use guestmem::GuestMemory;
+use guestmem::ranges::PagedRange;
 use pal_async::DefaultPool;
 use scsi_defs::Cdb10;
 use scsi_defs::ScsiOp;
 use std::pin::pin;
 use std::sync::Arc;
+use storvsp::ScsiController;
+use storvsp::ScsiControllerDisk;
 use storvsp::protocol;
 use storvsp::test_helpers::TestGuest;
 use storvsp::test_helpers::TestWorker;
-use storvsp::ScsiController;
-use storvsp::ScsiControllerDisk;
 use storvsp_resources::ScsiPath;
 use vmbus_async::queue::OutgoingPacket;
 use vmbus_async::queue::Queue;
@@ -201,7 +202,7 @@ async fn do_fuzz_loop(
 }
 
 fn do_fuzz(u: &mut Unstructured<'_>) -> Result<(), anyhow::Error> {
-    DefaultPool::run_with(|driver| async move {
+    DefaultPool::run_with(async |driver| {
         let (host, guest_channel) = connected_async_channels(16 * 1024); // TODO: [use-arbitrary-input]
         let guest_queue = Queue::new(guest_channel).unwrap();
 

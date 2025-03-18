@@ -28,36 +28,34 @@
 //! This model allows for asynchronous, highly concurrent state changes, and it
 //! works across process boundaries thanks to `mesh`.
 
-#![warn(missing_docs)]
-
-use futures::future::join_all;
 use futures::FutureExt;
 use futures::StreamExt;
+use futures::future::join_all;
 use futures_concurrency::stream::Merge;
 use inspect::Inspect;
 use inspect::InspectMut;
+use mesh::MeshPayload;
+use mesh::Receiver;
+use mesh::Sender;
 use mesh::payload::Protobuf;
 use mesh::rpc::FailableRpc;
 use mesh::rpc::Rpc;
 use mesh::rpc::RpcError;
 use mesh::rpc::RpcSend;
-use mesh::MeshPayload;
-use mesh::Receiver;
-use mesh::Sender;
 use pal_async::task::Spawn;
 use pal_async::task::Task;
 use parking_lot::Mutex;
-use std::collections::hash_map;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::collections::hash_map;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::future::Future;
 use std::pin::pin;
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Weak;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 use std::time::Instant;
 use thiserror::Error;
 use tracing::Instrument;
@@ -97,7 +95,7 @@ pub enum StateRequest {
 /// Implementing this is optional, to be used with [`UnitBuilder::spawn`] or
 /// [`StateRequest::apply`]; state units can also directly process incoming
 /// [`StateRequest`]s.
-#[allow(async_fn_in_trait)] // Don't need Send bounds
+#[expect(async_fn_in_trait)] // Don't need Send bounds
 pub trait StateUnit: InspectMut {
     /// Start asynchronous processing.
     async fn start(&mut self);
@@ -202,12 +200,18 @@ impl StateRequest {
     /// Runs this state request against `unit`.
     pub async fn apply(self, unit: &mut impl StateUnit) {
         match self {
-            StateRequest::Start(rpc) => rpc.handle(|()| async { unit.start().await }).await,
-            StateRequest::Stop(rpc) => rpc.handle(|()| async { unit.stop().await }).await,
-            StateRequest::Reset(rpc) => rpc.handle_failable(|()| unit.reset()).await,
-            StateRequest::Save(rpc) => rpc.handle_failable(|()| unit.save()).await,
-            StateRequest::Restore(rpc) => rpc.handle_failable(|buffer| unit.restore(buffer)).await,
-            StateRequest::PostRestore(rpc) => rpc.handle_failable(|()| unit.post_restore()).await,
+            StateRequest::Start(rpc) => rpc.handle(async |()| unit.start().await).await,
+            StateRequest::Stop(rpc) => rpc.handle(async |()| unit.stop().await).await,
+            StateRequest::Reset(rpc) => rpc.handle_failable(async |()| unit.reset().await).await,
+            StateRequest::Save(rpc) => rpc.handle_failable(async |()| unit.save().await).await,
+            StateRequest::Restore(rpc) => {
+                rpc.handle_failable(async |buffer| unit.restore(buffer).await)
+                    .await
+            }
+            StateRequest::PostRestore(rpc) => {
+                rpc.handle_failable(async |()| unit.post_restore().await)
+                    .await
+            }
             StateRequest::Inspect(req) => req.inspect(unit),
         }
     }
@@ -357,10 +361,12 @@ impl Inspect for Inner {
 #[derive(Protobuf)]
 #[mesh(package = "state_unit")]
 pub struct SavedStateUnit {
+    /// The name of the state unit.
     #[mesh(1)]
-    name: String,
+    pub name: String,
+    /// The opaque saved state blob.
     #[mesh(2)]
-    state: SavedStateBlob,
+    pub state: SavedStateBlob,
 }
 
 /// An error from a state transition.
@@ -1092,11 +1098,11 @@ mod tests {
     use crate::run_unit;
     use inspect::InspectMut;
     use mesh::payload::Protobuf;
-    use pal_async::async_test;
     use pal_async::DefaultDriver;
+    use pal_async::async_test;
+    use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
     use std::sync::atomic::Ordering;
-    use std::sync::Arc;
     use std::time::Duration;
     use test_with_tracing::test;
     use vmcore::save_restore::RestoreError;

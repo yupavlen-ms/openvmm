@@ -140,7 +140,9 @@ impl FlowNode for Node {
                     // way to detect this...
                     if stderr.contains("does not support components") {
                         log::warn!("Detected a non-standard `rustup default` toolchain!");
-                        log::warn!("Will not be able to double-check that all required target-triples are available.");
+                        log::warn!(
+                            "Will not be able to double-check that all required target-triples are available."
+                        );
                     } else {
                         let mut installed_target_triples = BTreeSet::new();
 
@@ -151,7 +153,9 @@ impl FlowNode for Node {
 
                         for expected_target in additional_target_triples {
                             if !installed_target_triples.contains(expected_target.as_str()) {
-                                anyhow::bail!("missing required target-triple: {expected_target}; to intsall: `rustup target add {expected_target}`")
+                                anyhow::bail!(
+                                    "missing required target-triple: {expected_target}; to intsall: `rustup target add {expected_target}`"
+                                )
                             }
                         }
                     }
@@ -295,10 +299,25 @@ impl FlowNode for Node {
                         None => {
                             let sh = xshell::Shell::new()?;
                             if let Ok(rustup) = which::which("rustup") {
+                                // Unfortunately, `rustup` still doesn't have any stable way to emit
+                                // machine-readable output. See https://github.com/rust-lang/rustup/issues/450
+                                //
+                                // As a result, this logic is written to work with multiple rustup
+                                // versions, both prior-to, and after 1.28.0.
+                                //
+                                // Prior to 1.28.0:
+                                //   $ rustup show active-toolchain
+                                //   stable-x86_64-unknown-linux-gnu (default)
+                                //
+                                // Starting from 1.28.0:
+                                //   $ rustup show active-toolchain
+                                //   stable-x86_64-unknown-linux-gnu
+                                //   active because: it's the default toolchain
                                 let output =
                                     xshell::cmd!(sh, "{rustup} show active-toolchain").output()?;
                                 let stdout = String::from_utf8(output.stdout)?;
-                                Some(stdout.split(' ').next().unwrap().into())
+                                let line = stdout.lines().next().unwrap();
+                                Some(line.split(' ').next().unwrap().into())
                             } else {
                                 None
                             }

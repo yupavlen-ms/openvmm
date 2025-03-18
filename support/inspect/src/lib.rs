@@ -13,7 +13,6 @@
 //! For most cases, users should use the derive version of [`Inspect`](derive@Inspect)
 //! as this will automatically update the implementation as new fields are added.
 
-#![warn(missing_docs)]
 #![no_std]
 
 extern crate alloc;
@@ -1414,6 +1413,18 @@ impl<T: Into<ValueKind> + Clone> From<&'_ T> for ValueKind {
     }
 }
 
+impl Inspect for () {
+    fn inspect(&self, req: Request<'_>) {
+        req.respond();
+    }
+}
+
+impl InspectMut for () {
+    fn inspect_mut(&mut self, req: Request<'_>) {
+        req.respond();
+    }
+}
+
 macro_rules! inspect_value_immut {
     ($($(#[$attr:meta])* $ty:ty),* $(,)?) => {
         $(
@@ -1615,7 +1626,7 @@ where
     for<'a> AsHex<&'a T>: Inspect,
 {
     fn inspect(&self, req: Request<'_>) {
-        Inspect::inspect(&AsHex(&self.0 .0), req)
+        Inspect::inspect(&AsHex(&self.0.0), req)
     }
 }
 
@@ -2146,10 +2157,6 @@ where
 
 #[cfg(all(test, feature = "derive", feature = "initiate"))]
 mod tests {
-    use crate::adhoc;
-    use crate::adhoc_mut;
-    use crate::inspect;
-    use crate::update;
     use crate::AsBytes;
     use crate::AtomicMut;
     use crate::Error;
@@ -2160,19 +2167,23 @@ mod tests {
     use crate::Request;
     use crate::SensitivityLevel;
     use crate::ValueKind;
+    use crate::adhoc;
+    use crate::adhoc_mut;
+    use crate::inspect;
+    use crate::update;
     use alloc::boxed::Box;
     use alloc::string::String;
     use alloc::string::ToString;
     use alloc::vec;
     use alloc::vec::Vec;
     use core::time::Duration;
-    use expect_test::expect;
     use expect_test::Expect;
+    use expect_test::expect;
     use futures::FutureExt;
+    use pal_async::DefaultDriver;
     use pal_async::async_test;
     use pal_async::timer::Instant;
     use pal_async::timer::PolledTimer;
-    use pal_async::DefaultDriver;
 
     fn expected_node(node: Node, expect: Expect) -> Node {
         expect.assert_eq(&node.to_string());

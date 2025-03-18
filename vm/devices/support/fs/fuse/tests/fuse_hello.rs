@@ -1,13 +1,11 @@
 // Copyright (c) Microsoft Corporation.
 // Licensed under the MIT License.
 
+#![expect(missing_docs)]
 #![cfg(target_os = "linux")]
-#![allow(
-    clippy::field_reassign_with_default, // protocol code benefits from imperative field assignment
-)]
 
-use fuse::protocol::*;
 use fuse::Connection;
+use fuse::protocol::*;
 use fuse::*;
 use std::fs;
 use std::os::linux::fs::MetadataExt;

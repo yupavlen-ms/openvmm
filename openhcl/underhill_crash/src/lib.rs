@@ -4,6 +4,7 @@
 //! This module implements sending crash dump files to the host.
 
 #![cfg(target_os = "linux")]
+#![expect(missing_docs)]
 // UNSAFETY: Calling libc functions to gather system information, and manipulating
 // stdout & stderr.
 #![expect(unsafe_code)]
@@ -22,12 +23,12 @@ use crate::elf::Elf64_Phdr;
 use crate::elf::PT_NOTE;
 use crate::proto::check_header;
 use crate::proto::make_header;
-use fs_err::os::unix::fs::OpenOptionsExt;
 use fs_err::File;
-use futures::io::AllowStdIo;
+use fs_err::os::unix::fs::OpenOptionsExt;
 use futures::AsyncRead;
 use futures::AsyncReadExt;
 use futures::FutureExt;
+use futures::io::AllowStdIo;
 use get_protocol::crash;
 use get_protocol::crash::Header;
 use libc::O_NONBLOCK;
@@ -298,7 +299,7 @@ pub fn main() -> ! {
 
     // Send the dump file
 
-    if let Err(e) = block_with_io(|driver| async move {
+    if let Err(e) = block_with_io(async |driver| {
         let mut dump_stream = AllowStdIo::new(std::io::stdin());
         let pipe = vmbus_user_channel::message_pipe(
             &driver,

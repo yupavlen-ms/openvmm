@@ -8,6 +8,7 @@
 //! better integration testing within the OpenVMM CI, and is not at
 //! feature-parity with the implementation in Hyper-V.
 
+#![expect(missing_docs)]
 #![forbid(unsafe_code)]
 
 pub mod resolver;
@@ -20,21 +21,21 @@ use core::mem::size_of;
 use disk_backend::Disk;
 use futures::FutureExt;
 use futures::StreamExt;
-use get_protocol::dps_json::HclSecureBootTemplateId;
-use get_protocol::dps_json::PcatBootDevice;
 use get_protocol::BatteryStatusFlags;
 use get_protocol::BatteryStatusNotification;
 use get_protocol::HeaderGeneric;
 use get_protocol::HostNotifications;
 use get_protocol::HostRequests;
 use get_protocol::IgvmAttestRequest;
+use get_protocol::MAX_PAYLOAD_SIZE;
 use get_protocol::RegisterState;
 use get_protocol::SaveGuestVtl2StateFlags;
 use get_protocol::SecureBootTemplateType;
 use get_protocol::StartVtl0Status;
 use get_protocol::UefiConsoleMode;
 use get_protocol::VmgsIoStatus;
-use get_protocol::MAX_PAYLOAD_SIZE;
+use get_protocol::dps_json::HclSecureBootTemplateId;
+use get_protocol::dps_json::PcatBootDevice;
 use get_resources::ged::FirmwareEvent;
 use get_resources::ged::GuestEmulationRequest;
 use get_resources::ged::GuestServicingFlags;
@@ -45,12 +46,16 @@ use guestmem::GuestMemory;
 use guid::Guid;
 use inspect::Inspect;
 use inspect::InspectMut;
+use jiff::Zoned;
+use jiff::civil::DateTime;
+use jiff::civil::date;
+use jiff::tz::TimeZone;
 use mesh::error::RemoteError;
 use mesh::rpc::Rpc;
+use openhcl_attestation_protocol::igvm_attest::get::AK_CERT_RESPONSE_HEADER_VERSION;
 use openhcl_attestation_protocol::igvm_attest::get::IgvmAttestAkCertResponseHeader;
 use openhcl_attestation_protocol::igvm_attest::get::IgvmAttestRequestHeader;
 use openhcl_attestation_protocol::igvm_attest::get::IgvmAttestRequestType;
-use openhcl_attestation_protocol::igvm_attest::get::AK_CERT_RESPONSE_HEADER_VERSION;
 use power_resources::PowerRequest;
 use power_resources::PowerRequestClient;
 use scsi_buffers::OwnedRequestBuffers;
@@ -60,12 +65,12 @@ use thiserror::Error;
 use video_core::FramebufferControl;
 use vmbus_async::async_dgram::AsyncRecvExt;
 use vmbus_async::pipe::MessagePipe;
+use vmbus_channel::RawAsyncChannel;
 use vmbus_channel::bus::ChannelType;
 use vmbus_channel::bus::OfferParams;
 use vmbus_channel::channel::ChannelOpenError;
 use vmbus_channel::gpadl_ring::GpadlRingMem;
 use vmbus_channel::simple::SimpleVmbusDevice;
-use vmbus_channel::RawAsyncChannel;
 use vmbus_ring::RingMem;
 use vmcore::save_restore::SavedStateNotSupported;
 use zerocopy::FromBytes;
@@ -617,20 +622,23 @@ impl<T: RingMem + Unpin> GedChannel<T> {
     }
 
     fn handle_time(&mut self) -> Result<(), Error> {
-        const WINDOWS_EPOCH: time::OffsetDateTime = time::macros::datetime!(1601-01-01 0:00 UTC);
+        const WINDOWS_EPOCH: DateTime = date(1601, 1, 1).at(0, 0, 0, 0);
+
+        let now = Zoned::now();
 
         // utc in TimeResponse is in units of 100ns since the windows epoch
-        let now_utc = time::OffsetDateTime::now_utc();
-        let since_win_epoch = now_utc - WINDOWS_EPOCH;
-        let since_win_epoch: i64 = (since_win_epoch.whole_nanoseconds() / 100)
-            .try_into()
-            .unwrap();
+        let since_win_epoch = (WINDOWS_EPOCH
+            .to_zoned(TimeZone::UTC)
+            .expect("windows epoch value to be valid")
+            .timestamp()
+            .duration_until(now.timestamp())
+            .as_nanos()
+            / 100) as i64;
 
-        // time_zone is in minutes between UTC and local time (as stored
+        // tz_offset is in minutes between UTC and local time (as stored
         // in a windows TIME_ZONE_INFORMATION struct)
-        let local_offset = time::UtcOffset::current_local_offset().unwrap_or(time::UtcOffset::UTC);
-        let time_zone = local_offset.whole_minutes();
-        let response = get_protocol::TimeResponse::new(0, since_win_epoch, time_zone, false);
+        let tz_offset = (now.offset().seconds() / 60) as i16;
+        let response = get_protocol::TimeResponse::new(0, since_win_epoch, tz_offset, false);
 
         self.channel
             .try_send(response.as_bytes())
@@ -933,7 +941,9 @@ impl<T: RingMem + Unpin> GedChannel<T> {
                 framebuffer_control.map(gpa).await;
                 get_protocol::MapFramebufferStatus::SUCCESS
             } else {
-                tracing::warn!("Guest requested framebuffer mapping but no framebuffer control was provided to the GET");
+                tracing::warn!(
+                    "Guest requested framebuffer mapping but no framebuffer control was provided to the GET"
+                );
                 get_protocol::MapFramebufferStatus::FAILURE
             },
         );
@@ -953,7 +963,9 @@ impl<T: RingMem + Unpin> GedChannel<T> {
                 framebuffer_control.unmap().await;
                 get_protocol::UnmapFramebufferStatus::SUCCESS
             } else {
-                tracing::warn!("Guest requested framebuffer mapping but no framebuffer control was provided to the GET");
+                tracing::warn!(
+                    "Guest requested framebuffer mapping but no framebuffer control was provided to the GET"
+                );
                 get_protocol::UnmapFramebufferStatus::FAILURE
             },
         );

@@ -11,29 +11,29 @@ use anyhow::Context;
 use async_trait::async_trait;
 use disk_backend::resolve::ResolveDiskParameters;
 use disk_backend::resolve::ResolvedDisk;
-use futures::future::join_all;
 use futures::StreamExt;
 use futures::TryFutureExt;
+use futures::future::join_all;
 use inspect::Inspect;
+use mesh::MeshPayload;
 use mesh::rpc::Rpc;
 use mesh::rpc::RpcSend;
-use mesh::MeshPayload;
 use openhcl_dma_manager::AllocationVisibility;
 use openhcl_dma_manager::DmaClientParameters;
 use openhcl_dma_manager::DmaClientSpawner;
 use openhcl_dma_manager::LowerVtlPermissionPolicy;
 use pal_async::task::Spawn;
 use pal_async::task::Task;
-use std::collections::hash_map;
 use std::collections::HashMap;
+use std::collections::hash_map;
 use std::sync::Arc;
 use thiserror::Error;
 use tracing::Instrument;
 use user_driver::vfio::VfioDevice;
-use vm_resource::kind::DiskHandleKind;
 use vm_resource::AsyncResolveResource;
 use vm_resource::ResourceId;
 use vm_resource::ResourceResolver;
+use vm_resource::kind::DiskHandleKind;
 use vmcore::vm_task::VmTaskDriverSource;
 
 #[derive(Debug, Error)]
@@ -247,15 +247,16 @@ impl NvmeManagerWorker {
                     }
                 }
                 Request::GetNamespace(rpc) => {
-                    rpc.handle(|(pci_id, nsid)| {
+                    rpc.handle(async |(pci_id, nsid)| {
                         self.get_namespace(pci_id.clone(), nsid)
                             .map_err(|source| NamespaceError { pci_id, source })
+                            .await
                     })
                     .await
                 }
                 // Request to save worker data for servicing.
                 Request::Save(rpc) => {
-                    rpc.handle(|_| self.save())
+                    rpc.handle(async |_| self.save().await)
                         .instrument(tracing::info_span!("nvme_save_state"))
                         .await
                 }

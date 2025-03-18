@@ -16,7 +16,6 @@
 use super::ioring::IoCompletionRing;
 use super::ioring::IoMemory;
 use super::ioring::IoRing;
-use futures::task::noop_waker;
 use futures::FutureExt;
 use inspect::Inspect;
 use io_uring::opcode;
@@ -32,12 +31,12 @@ use std::borrow::Borrow;
 use std::cell::Cell;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::future::poll_fn;
 use std::future::Future;
+use std::future::poll_fn;
 use std::io;
 use std::os::unix::prelude::*;
-use std::pin::pin;
 use std::pin::Pin;
+use std::pin::pin;
 use std::process::abort;
 use std::sync::Arc;
 use std::task::Context;
@@ -96,10 +95,9 @@ impl PoolClient {
     /// then by polling on the IO ring while the task blocks.
     //
     // TODO: move this functionality into underhill_threadpool.
-    pub fn set_idle_task<F, Fut>(&self, f: F)
+    pub fn set_idle_task<F>(&self, f: F)
     where
-        F: 'static + Send + FnOnce(IdleControl) -> Fut,
-        Fut: Future<Output = ()>,
+        F: 'static + Send + AsyncFnOnce(IdleControl),
     {
         let f =
             Box::new(|fd| Box::pin(async move { f(fd).await }) as Pin<Box<dyn Future<Output = _>>>)
@@ -540,7 +538,7 @@ impl<T: 'static + Send + Sync + Unpin, Init: Borrow<IoInitiator> + Unpin> Io<T, 
         let idx = unsafe {
             self.initiator
                 .borrow()
-                .submit_io(sqe, IoMemory::new(()), noop_waker())
+                .submit_io(sqe, IoMemory::new(()), Waker::noop().clone())
         };
         self.initiator.borrow().drop_io(idx);
     }

@@ -8,7 +8,6 @@ cfg_if::cfg_if! {
         pub use hvdef::HvX64RegisterName as HvArchRegisterName;
         use chipset_device_resources::BSP_LINT_LINE_SET;
         use virt::irqcon::MsiRequest;
-        use virt_mshv_vtl::HardwareIsolatedBacking;
         use vmm_core::acpi_builder::AcpiTablesBuilder;
     } else if #[cfg(guest_arch = "aarch64")] {
         pub use hvdef::HvArm64RegisterName as HvArchRegisterName;
@@ -16,11 +15,13 @@ cfg_if::cfg_if! {
     }
 }
 
-use crate::dispatch::vtl2_settings_worker::disk_from_disk_type;
-use crate::dispatch::vtl2_settings_worker::wait_for_mana;
-use crate::dispatch::vtl2_settings_worker::InitialControllers;
+use crate::ControlRequest;
 use crate::dispatch::LoadedVm;
 use crate::dispatch::LoadedVmNetworkSettings;
+use crate::dispatch::vtl2_settings_worker::InitialControllers;
+use crate::dispatch::vtl2_settings_worker::disk_from_disk_type;
+use crate::dispatch::vtl2_settings_worker::wait_for_mana;
+use crate::emuplat::EmuplatServicing;
 use crate::emuplat::firmware::UnderhillLogger;
 use crate::emuplat::firmware::UnderhillVsmConfig;
 use crate::emuplat::framebuffer::FramebufferRemoteControl;
@@ -35,22 +36,20 @@ use crate::emuplat::netvsp::RuntimeSavedState;
 use crate::emuplat::non_volatile_store::VmbsBrokerNonVolatileStore;
 use crate::emuplat::tpm::resources::GetTpmRequestAkCertHelperHandle;
 use crate::emuplat::vga_proxy::UhRegisterHostIoFastPath;
-use crate::emuplat::EmuplatServicing;
+use crate::loader::LoadKind;
 use crate::loader::vtl0_config::MeasuredVtl0Info;
 use crate::loader::vtl2_config::RuntimeParameters;
-use crate::loader::LoadKind;
 use crate::nvme_manager::NvmeDiskConfig;
 use crate::nvme_manager::NvmeDiskResolver;
 use crate::nvme_manager::NvmeManager;
 use crate::options::TestScenarioConfig;
 use crate::reference_time::ReferenceTime;
 use crate::servicing;
-use crate::servicing::transposed::OptionServicingInitState;
 use crate::servicing::ServicingState;
+use crate::servicing::transposed::OptionServicingInitState;
 use crate::threadpool_vm_task_backend::ThreadpoolBackend;
 use crate::vmbus_relay_unit::VmbusRelayHandle;
 use crate::wrapped_partition::WrappedPartition;
-use crate::ControlRequest;
 use anyhow::Context;
 use async_trait::async_trait;
 use chipset_device::ChipsetDevice;
@@ -66,15 +65,15 @@ use futures_concurrency::future::Race;
 use get_protocol::EventLogId;
 use get_protocol::RegisterState;
 use get_protocol::TripleFaultType;
+use guest_emulation_transport::GuestEmulationTransportClient;
 use guest_emulation_transport::api::platform_settings::DevicePlatformSettings;
 use guest_emulation_transport::api::platform_settings::General;
-use guest_emulation_transport::GuestEmulationTransportClient;
 use guestmem::GuestMemory;
 use guid::Guid;
 use hcl_compat_uefi_nvram_storage::HclCompatNvramQuirks;
-use hvdef::hypercall::HvGuestOsId;
 use hvdef::HvRegisterValue;
 use hvdef::Vtl;
+use hvdef::hypercall::HvGuestOsId;
 use hyperv_ic_guest::ShutdownGuestIc;
 use ide_resources::GuestMedia;
 use ide_resources::IdePath;
@@ -84,9 +83,9 @@ use input_core::MultiplexedInputHandle;
 use inspect::Inspect;
 use loader_defs::shim::MemoryVtlType;
 use memory_range::MemoryRange;
-use mesh::rpc::RpcSend;
 use mesh::CancelContext;
 use mesh::MeshPayload;
+use mesh::rpc::RpcSend;
 use mesh_worker::Worker;
 use mesh_worker::WorkerId;
 use mesh_worker::WorkerRpc;
@@ -97,10 +96,10 @@ use openhcl_dma_manager::DmaClientParameters;
 use openhcl_dma_manager::DmaClientSpawner;
 use openhcl_dma_manager::LowerVtlPermissionPolicy;
 use openhcl_dma_manager::OpenhclDmaManager;
-use pal_async::local::LocalDriver;
-use pal_async::task::Spawn;
 use pal_async::DefaultDriver;
 use pal_async::DefaultPool;
+use pal_async::local::LocalDriver;
+use pal_async::task::Spawn;
 use parking_lot::Mutex;
 use scsi_core::ResolveScsiDeviceHandleParams;
 use scsidisk::atapi_scsi::AtapiScsiDisk;
@@ -118,37 +117,37 @@ use thiserror::Error;
 use tpm_resources::TpmAkCertTypeResource;
 use tpm_resources::TpmDeviceHandle;
 use tpm_resources::TpmRegisterLayout;
-use tracing::instrument;
 use tracing::Instrument;
+use tracing::instrument;
 use uevent::UeventListener;
 use underhill_attestation::AttestationType;
 use underhill_threadpool::AffinitizedThreadpool;
 use underhill_threadpool::ThreadpoolBuilder;
 use user_driver::DmaClient;
-use virt::state::HvRegisterState;
 use virt::Partition;
 use virt::VpIndex;
 use virt::X86Partition;
+use virt::state::HvRegisterState;
 use virt_mshv_vtl::UhPartition;
 use virt_mshv_vtl::UhPartitionNewParams;
 use virt_mshv_vtl::UhProtoPartition;
 use vm_loader::initial_regs::initial_regs;
-use vm_resource::kind::DiskHandleKind;
-use vm_resource::kind::KeyboardInputHandleKind;
-use vm_resource::kind::MouseInputHandleKind;
 use vm_resource::IntoResource;
 use vm_resource::Resource;
 use vm_resource::ResourceResolver;
+use vm_resource::kind::DiskHandleKind;
+use vm_resource::kind::KeyboardInputHandleKind;
+use vm_resource::kind::MouseInputHandleKind;
 use vm_topology::memory::MemoryLayout;
 use vm_topology::memory::MemoryRangeWithNode;
-use vm_topology::processor::aarch64::GicInfo;
 use vm_topology::processor::ProcessorTopology;
 use vm_topology::processor::TopologyBuilder;
 use vm_topology::processor::VpInfo;
+use vm_topology::processor::aarch64::GicInfo;
 use vmbus_relay_intercept_device::SimpleVmbusClientDeviceWrapper;
 use vmbus_server::VmbusServer;
-use vmcore::non_volatile_store::resources::EphemeralNonVolatileStoreHandle;
 use vmcore::non_volatile_store::EphemeralNonVolatileStore;
+use vmcore::non_volatile_store::resources::EphemeralNonVolatileStoreHandle;
 use vmcore::vm_task::VmTaskDriverSource;
 use vmcore::vmtime::VmTime;
 use vmcore::vmtime::VmTimeKeeper;
@@ -161,17 +160,17 @@ use vmm_core::partition_unit::Halt;
 use vmm_core::partition_unit::PartitionUnit;
 use vmm_core::partition_unit::PartitionUnitParams;
 use vmm_core::synic::SynicPorts;
-use vmm_core::vmbus_unit::offer_channel_unit;
-use vmm_core::vmbus_unit::offer_vmbus_device_handle_unit;
 use vmm_core::vmbus_unit::ChannelUnit;
 use vmm_core::vmbus_unit::VmbusServerHandle;
+use vmm_core::vmbus_unit::offer_channel_unit;
+use vmm_core::vmbus_unit::offer_vmbus_device_handle_unit;
 use vmm_core::vmtime_unit::run_vmtime;
 use vmm_core_defs::HaltReason;
-use vmotherboard::options::BaseChipsetDevices;
-use vmotherboard::options::BaseChipsetFoundation;
 use vmotherboard::BaseChipsetBuilder;
 use vmotherboard::BaseChipsetBuilderOutput;
 use vmotherboard::ChipsetDeviceHandle;
+use vmotherboard::options::BaseChipsetDevices;
+use vmotherboard::options::BaseChipsetFoundation;
 use zerocopy::FromZeros;
 
 pub(crate) const PM_BASE: u16 = 0x400;
@@ -188,8 +187,8 @@ struct GuestEmulationTransportInfra {
     get_client: GuestEmulationTransportClient,
 }
 
-async fn construct_get(
-) -> Result<(GuestEmulationTransportInfra, pal_async::task::Task<()>), anyhow::Error> {
+async fn construct_get()
+-> Result<(GuestEmulationTransportInfra, pal_async::task::Task<()>), anyhow::Error> {
     // Create a thread to run GET and VMGS clients on.
     //
     // This must be a separate thread from the thread pool because sometimes
@@ -217,18 +216,6 @@ async fn construct_get(
         },
         get_watchdog_task,
     ))
-}
-
-async fn attach_simple_intercept_channel<
-    T: vmbus_relay_intercept_device::SimpleVmbusClientDeviceAsync,
->(
-    driver_source: &VmTaskDriverSource,
-    relay: &VmbusRelayHandle,
-    device: SimpleVmbusClientDeviceWrapper<T>,
-) -> anyhow::Result<mesh::OneshotSender<()>> {
-    let (send, recv) = mesh::channel();
-    relay.intercept_channel(device.instance_id(), send).await?;
-    device.detach(driver_source.simple(), recv)
 }
 
 // Used for locating VM information in a debugger
@@ -346,7 +333,7 @@ impl Worker for UnderhillVmWorker {
     const ID: WorkerId<Self::Parameters> = UNDERHILL_WORKER;
 
     fn new(params: Self::Parameters) -> anyhow::Result<Self> {
-        pal_async::local::block_with_io(|driver| async {
+        pal_async::local::block_with_io(async |driver| {
             let (get_infra, get_watchdog_task) = construct_get().await?;
             let get_client = get_infra.get_client.clone();
 
@@ -381,7 +368,7 @@ impl Worker for UnderhillVmWorker {
     }
 
     fn restart(state: Self::State) -> anyhow::Result<Self> {
-        pal_async::local::block_with_io(|driver| async {
+        pal_async::local::block_with_io(async |driver| {
             let (get_infra, get_watchdog_task) = construct_get().await?;
             let result = Self::new_or_restart(
                 get_infra,
@@ -513,6 +500,12 @@ impl UnderhillVmWorker {
                 saved_state_len = saved_state_buf.len(),
                 "received servicing state from host"
             );
+        }
+
+        if let Some(state) = &mut servicing_state {
+            state
+                .fix_post_restore()
+                .context("failed to fix up servicing state on restore")?;
         }
 
         let is_post_servicing = servicing_state.is_some();
@@ -691,20 +684,19 @@ impl UhVmNetworkSettings {
         }
 
         // Close vmbus channels and drop all of the NICs.
-        let mut endpoints: Vec<_> = join_all(nic_channels.drain(..).map(
-            |(instance_id, channel)| async move {
+        let mut endpoints: Vec<_> =
+            join_all(nic_channels.drain(..).map(async |(instance_id, channel)| {
                 async {
                     let nic = channel.remove().await.revoke().await;
                     nic.shutdown()
                 }
                 .instrument(tracing::info_span!("nic_shutdown", %instance_id))
                 .await
-            },
-        ))
-        .await;
+            }))
+            .await;
 
         let shutdown_vfs = join_all(vf_managers.drain(..).map(
-            |(instance_id, mut manager)| async move {
+            async |(instance_id, mut manager)| {
                 manager
                     .complete(keep_vf_alive)
                     .instrument(tracing::info_span!("vf_manager_shutdown", %instance_id))
@@ -992,7 +984,6 @@ fn build_vtl0_memory_layout(
     vtl0_memory_map: Vec<(MemoryRangeWithNode, MemoryMapEntryType)>,
     mmio: &[MemoryRange],
     mut shared_pool_size: u64,
-    physical_address_size: u8,
 ) -> anyhow::Result<BuiltVtl0MemoryLayout> {
     // Allocate shared_pool memory starting from the last (top of memory)
     // continuing downward until the size is covered.
@@ -1048,18 +1039,15 @@ fn build_vtl0_memory_layout(
         .map(|(entry, _typ)| entry.clone())
         .collect::<Vec<_>>();
 
-    tracing::info!(physical_address_size, "physical address size");
-
-    let vtl0_memory_layout = MemoryLayout::new_from_ranges(physical_address_size, &memory, mmio)
-        .context("invalid memory layout")?;
+    let vtl0_memory_layout =
+        MemoryLayout::new_from_ranges(&memory, mmio).context("invalid memory layout")?;
 
     let complete_memory = vtl0_memory_map
         .iter()
         .map(|(entry, _typ)| entry.clone())
         .collect::<Vec<_>>();
-    let complete_memory_layout =
-        MemoryLayout::new_from_ranges(physical_address_size, &complete_memory, mmio)
-            .context("invalid complete memory layout")?;
+    let complete_memory_layout = MemoryLayout::new_from_ranges(&complete_memory, mmio)
+        .context("invalid complete memory layout")?;
 
     tracing::info!(
         vtl0_ram = vtl0_memory_layout
@@ -1280,29 +1268,12 @@ async fn new_underhill_vm(
         })
         .collect::<Vec<_>>();
 
-    #[cfg(guest_arch = "aarch64")]
-    let physical_address_size = boot_info
-        .physical_address_bits
-        .context("bootloader did not provide physical address size")?;
-
-    #[cfg(guest_arch = "x86_64")]
-    let physical_address_size =
-        virt::x86::max_physical_address_size_from_cpuid(&|leaf, sub_leaf| {
-            let result = safe_intrinsics::cpuid(leaf, sub_leaf);
-            [result.eax, result.ebx, result.ecx, result.edx]
-        });
-
     let BuiltVtl0MemoryLayout {
         vtl0_memory_map,
         vtl0_memory_layout: mem_layout,
         shared_pool,
         complete_memory_layout,
-    } = build_vtl0_memory_layout(
-        vtl0_memory_map,
-        &boot_info.vtl0_mmio,
-        shared_pool_size,
-        physical_address_size,
-    )?;
+    } = build_vtl0_memory_layout(vtl0_memory_map, &boot_info.vtl0_mmio, shared_pool_size)?;
 
     let hide_isolation = isolation.is_isolated() && env_cfg.hide_isolation;
 
@@ -1880,7 +1851,7 @@ async fn new_underhill_vm(
         Some(0) | None => {
             let mut gen_id = [0; 16];
             tracing::trace!("Generation ID uninitialized by host.");
-            getrandom::getrandom(&mut gen_id).expect("rng failure");
+            getrandom::fill(&mut gen_id).expect("rng failure");
             gen_id
         }
         Some(n) => n.to_ne_bytes(),
@@ -2142,7 +2113,7 @@ async fn new_underhill_vm(
 
     let input_distributor = state_units
         .add("input")
-        .spawn(&tp, |mut recv| async move {
+        .spawn(&tp, async |mut recv| {
             input_distributor.run(&mut recv).await;
             input_distributor
         })
@@ -2602,9 +2573,18 @@ async fn new_underhill_vm(
         )),
     );
 
+    // TODO: Enable for isolated VMs.
+    // Intercept shutdown device from VTL0 when the vmbus relay is active.
+    // N.B. Skip enabling if restoring from a previous version that did not use
+    //      a shutdown relay, otherwise would have to rescind the host shutdown
+    //      channel from the lower-VTL guest before taking control.
+    let intercept_shutdown_ic = !hardware_isolated
+        && (!is_restoring || servicing_state.overlay_shutdown_device.unwrap_or(false));
+    let mut intercepted_shutdown_ic = None;
+
     let mut vmbus_server = None;
+    let mut vmbus_client = None;
     let mut host_vmbus_relay = None;
-    let mut vmbus_synic_client = None;
 
     // VMBus
     if with_vmbus {
@@ -2662,6 +2642,8 @@ async fn new_underhill_vm(
             .delay_max_version(delay_max_version)
             .enable_mnf(enable_mnf)
             .force_confidential_external_memory(env_cfg.vmbus_force_confidential_external_memory)
+            // For saved-state compat with release/2411.
+            .send_messages_while_stopped(true)
             .build()
             .context("failed to create vmbus server")?;
 
@@ -2671,18 +2653,44 @@ async fn new_underhill_vm(
             let builder = vmbus_client_hcl::vmbus_client_builder(relay_driver)
                 .context("failed to create synic client and message source")?;
 
-            let synic = builder.event_client().clone();
+            let mut client = builder.build(tp);
+            let connection = if let Some(state) = servicing_state.vmbus_client.flatten() {
+                client.restore(state).await?
+            } else {
+                None
+            };
+            client.start();
+            let connection = if let Some(c) = connection {
+                c
+            } else {
+                // Unique ID used so that the host knows which client this is,
+                // for diagnosing failures.
+                const OPENHCL_CLIENT_ID: Guid = guid::guid!("ceb1cd55-6a3b-41c5-9473-4dd30624c3d8");
+                client
+                    .connect(0, None, OPENHCL_CLIENT_ID)
+                    .await
+                    .context("failed to connect to vmbus")?
+            };
+
+            let mut intercept_list = Vec::new();
+            if intercept_shutdown_ic {
+                let (send, recv) = mesh::channel();
+                intercept_list.push((hyperv_ic_guest::shutdown::INSTANCE_ID, send));
+                intercepted_shutdown_ic = Some(recv);
+            }
 
             let vmbus_relay = vmbus_relay::HostVmbusTransport::new(
                 relay_driver.clone(),
                 Arc::clone(vmbus.control()),
                 relay_channel,
                 hvsock_relay,
-                builder,
+                client.access().clone(),
+                connection,
+                intercept_list,
             )
+            .await
             .context("failed to create host vmbus transport")?;
 
-            vmbus_synic_client = Some(synic);
             host_vmbus_relay = Some(VmbusRelayHandle::new(
                 &tp,
                 state_units
@@ -2690,6 +2698,8 @@ async fn new_underhill_vm(
                     .depends_on(vmbus.unit_handle()),
                 vmbus_relay,
             )?);
+
+            vmbus_client = Some(client);
         };
 
         vmbus_server = Some(vmbus);
@@ -2834,16 +2844,7 @@ async fn new_underhill_vm(
 
     let mut vmbus_intercept_devices = Vec::new();
 
-    // TODO: Enable for isolated VMs.
-    // Intercept shutdown device from VTL0 when the vmbus relay is active.
-    // N.B. Skip enabling if restoring from a previous version that did not use
-    //      a shutdown relay, otherwise would have to rescind the host shutdown
-    //      channel from the lower-VTL guest before taking control.
-    let shutdown_relay = if host_vmbus_relay.is_some()
-        && !hardware_isolated
-        && (!is_restoring || servicing_state.overlay_shutdown_device.unwrap_or(false))
-    {
-        let relay = host_vmbus_relay.as_ref().unwrap();
+    let shutdown_relay = if let Some(recv) = intercepted_shutdown_ic {
         let mut shutdown_guest = ShutdownGuestIc::new();
         let recv_host_shutdown = shutdown_guest.get_shutdown_notifier();
         let (send_guest_shutdown, recv_guest_shutdown) = mesh::channel();
@@ -2866,11 +2867,9 @@ async fn new_underhill_vm(
                     persistent_allocations: false,
                 })
                 .context("shutdown relay dma client")?,
-            vmbus_synic_client.clone().unwrap(),
             shutdown_guest,
         )?;
-        vmbus_intercept_devices
-            .push(attach_simple_intercept_channel(&driver_source, relay, shutdown_guest).await?);
+        vmbus_intercept_devices.push(shutdown_guest.detach(driver_source.simple(), recv)?);
 
         Some((recv_host_shutdown, send_guest_shutdown))
     } else {
@@ -2982,6 +2981,7 @@ async fn new_underhill_vm(
             netvsp_state,
         },
         device_interfaces: Some(controllers.device_interfaces),
+        vmbus_client,
         vtl0_memory_map,
 
         vmbus_server,
@@ -3139,7 +3139,7 @@ async fn halt_task(
     get_client: GuestEmulationTransportClient,
     halt_on_guest_halt: bool,
 ) {
-    let prepare_for_shutdown = || async {
+    let prepare_for_shutdown = async || {
         // Flush logs. Wait up to 5 seconds.
         let ctx = CancelContext::new().with_timeout(Duration::from_secs(5));
         let call = control_send
@@ -3270,7 +3270,13 @@ async fn load_firmware(
     #[cfg(guest_arch = "x86_64")]
     let registers = {
         let crate::loader::VpContext::Vbs(mut registers) = vtl0_vp_context;
-        registers.extend(loader::common::compute_variable_mtrrs(mem_layout));
+        registers.extend(
+            loader::common::compute_variable_mtrrs(
+                mem_layout,
+                partition.caps().physical_address_width,
+            )
+            .context("Failed to compute variable mtrrs")?,
+        );
         registers
     };
     #[cfg(guest_arch = "aarch64")]
