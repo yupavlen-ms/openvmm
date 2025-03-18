@@ -628,7 +628,7 @@ impl UhVpInner {
     }
 }
 
-#[cfg_attr(not(guest_arch = "x86_64"), allow(dead_code))]
+#[cfg_attr(not(guest_arch = "x86_64"), expect(dead_code))]
 #[derive(Debug, Inspect)]
 /// Which operation is setting the initial vp context
 enum InitialVpContextOperation {
@@ -638,7 +638,7 @@ enum InitialVpContextOperation {
     EnableVpVtl,
 }
 
-#[cfg_attr(not(guest_arch = "x86_64"), allow(dead_code))]
+#[cfg_attr(not(guest_arch = "x86_64"), expect(dead_code))]
 #[derive(Debug, Inspect)]
 /// State for handling StartVp/EnableVpVtl hypercalls.
 struct VpStartEnableVtl {
@@ -666,7 +666,7 @@ struct TlbLockInfo {
     sleeping: AtomicBool,
 }
 
-#[cfg_attr(not(guest_arch = "x86_64"), allow(dead_code))]
+#[cfg_attr(not(guest_arch = "x86_64"), expect(dead_code))]
 impl TlbLockInfo {
     fn new(vp_count: usize) -> Self {
         Self {
