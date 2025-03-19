@@ -1409,8 +1409,9 @@ mod tests {
     use pci_core::msi::MsiInterruptSet;
     use std::future::poll_fn;
     use test_with_tracing::test;
-    use user_driver::emulated::DeviceSharedMemory;
-    use user_driver::emulated::EmulatedDevice;
+    use user_driver_emulated_mock::DeviceSharedMemory;
+    use user_driver_emulated_mock::EmulatedDevice;
+    use user_driver_emulated_mock::EmulatedDmaAllocator;
     use vmcore::vm_task::SingleDriverBackend;
     use vmcore::vm_task::VmTaskDriverSource;
 
@@ -1470,7 +1471,8 @@ mod tests {
             }],
             &mut ExternallyManagedMmioIntercepts,
         );
-        let device = EmulatedDevice::new(device, msi_set, mem);
+        let allocator = EmulatedDmaAllocator::new(mem.clone());
+        let device = EmulatedDevice::new(device, msi_set, allocator.into());
         let dev_config = ManaQueryDeviceCfgResp {
             pf_cap_flags1: 0.into(),
             pf_cap_flags2: 0,
@@ -1572,7 +1574,8 @@ mod tests {
             }],
             &mut ExternallyManagedMmioIntercepts,
         );
-        let device = EmulatedDevice::new(device, msi_set, mem);
+        let allocator = EmulatedDmaAllocator::new(mem.clone());
+        let device = EmulatedDevice::new(device, msi_set, allocator.into());
         let cap_flags1 = gdma_defs::bnic::BasicNicDriverFlags::new().with_query_filter_state(1);
         let dev_config = ManaQueryDeviceCfgResp {
             pf_cap_flags1: cap_flags1,
