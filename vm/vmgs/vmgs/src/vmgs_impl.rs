@@ -66,7 +66,6 @@ struct ResolvedFileControlBlock {
 
 /// Implementation of the VMGS file format, backed by a generic [`Disk`]
 /// device.
-#[cfg_attr(not(with_encryption), allow(dead_code))]
 #[cfg_attr(feature = "inspect", derive(Inspect))]
 pub struct Vmgs {
     storage: VmgsStorage,
@@ -80,6 +79,7 @@ pub struct Vmgs {
     #[cfg_attr(feature = "inspect", inspect(with = "vmgs_inspect::fcbs"))]
     fcbs: HashMap<FileId, ResolvedFileControlBlock>,
     encryption_algorithm: EncryptionAlgorithm,
+    #[allow(dead_code)]
     datastore_key_count: u8,
     active_datastore_key_index: Option<usize>,
     #[cfg_attr(feature = "inspect", inspect(iter_by_index))]
@@ -1597,7 +1597,7 @@ fn encrypt_metadata_key(
 }
 
 /// Decrypts metadata_key. Returns decrypted_metadata_key.
-#[cfg_attr(not(with_encryption), allow(unused_variables), allow(dead_code))]
+#[cfg_attr(not(with_encryption), allow(unused_variables), expect(dead_code))]
 fn decrypt_metadata_key(
     datastore_key: &[u8],
     nonce: &[u8],

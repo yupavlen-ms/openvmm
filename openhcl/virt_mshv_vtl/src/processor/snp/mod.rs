@@ -3,8 +3,8 @@
 
 //! Processor support for SNP partitions.
 
-use super::Backing;
 use super::BackingParams;
+use super::BackingPrivate;
 use super::BackingSharedParams;
 use super::HardwareIsolatedBacking;
 use super::UhEmulationState;
@@ -268,7 +268,7 @@ impl SnpBackedShared {
 }
 
 #[expect(private_interfaces)]
-impl Backing for SnpBacked {
+impl BackingPrivate for SnpBacked {
     type HclBacking<'snp> = hcl::ioctl::snp::Snp<'snp>;
     type Shared = SnpBackedShared;
     type EmulationCache = ();
@@ -998,7 +998,7 @@ impl UhProcessor<'_, SnpBacked> {
                     &guest_state,
                 );
 
-                let [eax, ebx, ecx, edx] = self.partition.cpuid.lock().result(
+                let [eax, ebx, ecx, edx] = self.partition.cpuid_result(
                     vmsa.rax() as u32,
                     vmsa.rcx() as u32,
                     &[result.eax, result.ebx, result.ecx, result.edx],

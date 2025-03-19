@@ -447,6 +447,7 @@ pub trait PoolSource: Inspect + Send + Sync {
 pub struct TestMapper {
     #[inspect(skip)]
     mem: Mappable,
+    len: usize,
 }
 
 impl TestMapper {
@@ -455,7 +456,15 @@ impl TestMapper {
         let len = (size_pages * PAGE_SIZE) as usize;
         let fd = alloc_shared_memory(len).context("creating shared mem")?;
 
-        Ok(Self { mem: fd })
+        Ok(Self { mem: fd, len })
+    }
+
+    /// Returns [`SparseMapping`] that maps starting at page 0.
+    pub fn sparse_mapping(&self) -> SparseMapping {
+        let mappable = self.mappable();
+        let mapping = SparseMapping::new(self.len).unwrap();
+        mapping.map_file(0, self.len, mappable, 0, true).unwrap();
+        mapping
     }
 
     fn inspect_extra(&self, resp: &mut Response<'_>) {
