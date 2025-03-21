@@ -2518,7 +2518,6 @@ async fn new_underhill_vm(
         })) as Arc<CloseableMutex<dyn ChipsetDevice>>
     });
 
-    #[cfg_attr(not(feature = "vpci"), allow(unused_mut))]
     let BaseChipsetBuilderOutput {
         mut chipset_builder,
         device_interfaces: _,
