@@ -1440,36 +1440,38 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
         &mut self,
         is_interrupt_pending: impl Fn(&mut Self, GuestVtl, bool) -> bool,
     ) -> Result<bool, UhRunVpError> {
-        let mut reprocessing_required = false;
+        let cvm_state = self.backing.cvm_state();
 
-        if self.backing.cvm_state_mut().exit_vtl == GuestVtl::Vtl0 {
-            // Check for VTL preemption - which ignores RFLAGS.IF
-            if is_interrupt_pending(self, GuestVtl::Vtl1, false) {
-                B::switch_vtl(self, GuestVtl::Vtl0, GuestVtl::Vtl1);
-                self.backing.cvm_state_mut().hv[GuestVtl::Vtl1]
-                    .set_return_reason(HvVtlEntryReason::INTERRUPT)
-                    .map_err(UhRunVpError::VpAssistPage)?;
-            }
+        // If VTL1 is not yet enabled, there is nothing to do.
+        if !cvm_state.vtl1_enabled {
+            return Ok(false);
         }
 
-        if self.backing.cvm_state_mut().exit_vtl == GuestVtl::Vtl1 {
-            // Check for VINA
-            if is_interrupt_pending(self, GuestVtl::Vtl0, true) {
-                let vp_index = self.vp_index();
-                let hv = &mut self.backing.cvm_state_mut().hv[GuestVtl::Vtl1];
-                if hv.synic.vina().enabled()
-                    && !hv.vina_asserted().map_err(UhRunVpError::VpAssistPage)?
-                {
-                    hv.set_vina_asserted(true)
-                        .map_err(UhRunVpError::VpAssistPage)?;
-                    self.partition
-                        .synic_interrupt(vp_index, GuestVtl::Vtl1)
-                        .request_interrupt(
-                            hv.synic.vina().vector().into(),
-                            hv.synic.vina().auto_eoi(),
-                        );
-                    reprocessing_required = true;
-                }
+        // Check for VTL preemption - which ignores RFLAGS.IF
+        if cvm_state.exit_vtl == GuestVtl::Vtl0 && is_interrupt_pending(self, GuestVtl::Vtl1, false)
+        {
+            B::switch_vtl(self, GuestVtl::Vtl0, GuestVtl::Vtl1);
+            self.backing.cvm_state_mut().hv[GuestVtl::Vtl1]
+                .set_return_reason(HvVtlEntryReason::INTERRUPT)
+                .map_err(UhRunVpError::VpAssistPage)?;
+        }
+
+        let mut reprocessing_required = false;
+
+        // Check for VINA
+        if self.backing.cvm_state().exit_vtl == GuestVtl::Vtl1
+            && is_interrupt_pending(self, GuestVtl::Vtl0, true)
+        {
+            let hv = &self.backing.cvm_state().hv[GuestVtl::Vtl1];
+            let vina = hv.synic.vina();
+
+            if vina.enabled() && !hv.vina_asserted().map_err(UhRunVpError::VpAssistPage)? {
+                hv.set_vina_asserted(true)
+                    .map_err(UhRunVpError::VpAssistPage)?;
+                self.partition
+                    .synic_interrupt(self.vp_index(), GuestVtl::Vtl1)
+                    .request_interrupt(vina.vector().into(), vina.auto_eoi());
+                reprocessing_required = true;
             }
         }
 
