@@ -150,12 +150,7 @@ async fn test_nvme_driver(driver: DefaultDriver, allow_dma: bool) {
         .await
         .unwrap();
     let device = NvmeTestEmulatedDevice::new(nvme, msi_set, dma_client.clone());
-<<<<<<< HEAD
-
     let mut driver = NvmeDriver::new(&driver_source, CPU_COUNT, device)
-=======
-    let driver = NvmeDriver::new(&driver_source, CPU_COUNT, device)
->>>>>>> main
         .await
         .unwrap();
     let namespace = driver.namespace(1).await.unwrap();
