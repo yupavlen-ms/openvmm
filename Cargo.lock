@@ -2196,6 +2196,7 @@ dependencies = [
  "nvme",
  "nvme_driver",
  "nvme_spec",
+ "page_pool_alloc",
  "pal_async",
  "parking_lot",
  "pci_core",
@@ -4604,11 +4605,9 @@ dependencies = [
  "guid",
  "inspect",
  "inspect_counters",
- "memory_range",
  "mesh",
  "nvme",
  "nvme_spec",
- "page_pool_alloc",
  "pal_async",
  "parking_lot",
  "pci_core",
@@ -6401,6 +6400,7 @@ checksum = "d66dc143e6b11c1eddc06d5c423cfc97062865baf299914ab64caa38182078fe"
 name = "simple_tmk"
 version = "0.0.0"
 dependencies = [
+ "arrayvec",
  "minimal_rt",
  "minimal_rt_build",
  "tmk_protocol",
@@ -6794,6 +6794,9 @@ dependencies = [
 [[package]]
 name = "tmk_protocol"
 version = "0.0.0"
+dependencies = [
+ "zerocopy 0.8.23",
+]
 
 [[package]]
 name = "tmk_vmm"
@@ -6826,6 +6829,7 @@ dependencies = [
  "vm_topology",
  "vmcore",
  "x86defs",
+ "zerocopy 0.8.23",
 ]
 
 [[package]]
@@ -7410,6 +7414,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracing",
  "tracing-subscriber",
+ "underhill_confidentiality",
  "vergen",
  "vmbus_async",
  "vmbus_user_channel",
@@ -7425,6 +7430,7 @@ dependencies = [
  "libc",
  "tracing",
  "tracing-subscriber",
+ "underhill_confidentiality",
 ]
 
 [[package]]
@@ -7589,9 +7595,10 @@ dependencies = [
  "chipset_device",
  "guestmem",
  "inspect",
+ "memory_range",
+ "page_pool_alloc",
  "parking_lot",
  "pci_core",
- "safeatomic",
  "tracing",
  "user_driver",
 ]
@@ -8728,6 +8735,7 @@ dependencies = [
  "petri_artifacts_vmm_test",
  "scsidisk_resources",
  "storvsp_resources",
+ "tempfile",
  "tracing",
  "unix_socket",
  "vm_resource",
