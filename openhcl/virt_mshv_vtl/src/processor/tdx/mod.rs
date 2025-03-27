@@ -843,6 +843,11 @@ impl BackingPrivate for TdxBacked {
 
             state.commit().expect("committing state should succeed");
         }
+
+        // FX regs and XMM registers are zero-initialized by the kernel. Set
+        // them to the arch default.
+        *this.runner.fx_state_mut() =
+            vp::Xsave::at_reset(&this.partition.caps, &this.inner.vp_info).fxsave();
     }
 
     async fn run_vp(
