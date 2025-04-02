@@ -71,18 +71,14 @@ impl SimpleFlowNode for Node {
             output: v,
         });
 
-        let built_vmgs_lib = ctx.emit_rust_stepv("check built vmgs_lib", |ctx| {
+        let built_vmgs_lib = ctx.emit_minor_rust_stepv("check built vmgs_lib", |ctx| {
             let output = output.claim(ctx);
-            move |rt| {
-                Ok(match rt.read(output) {
-                    CargoBuildOutput::LinuxDynamicLib { so } => {
-                        VmgsLibOutput::LinuxDynamicLib { so }
-                    }
-                    CargoBuildOutput::WindowsDynamicLib { dll, dll_lib, pdb } => {
-                        VmgsLibOutput::WindowsDynamicLib { dll, dll_lib, pdb }
-                    }
-                    _ => unreachable!(),
-                })
+            move |rt| match rt.read(output) {
+                CargoBuildOutput::LinuxDynamicLib { so } => VmgsLibOutput::LinuxDynamicLib { so },
+                CargoBuildOutput::WindowsDynamicLib { dll, dll_lib, pdb } => {
+                    VmgsLibOutput::WindowsDynamicLib { dll, dll_lib, pdb }
+                }
+                _ => unreachable!(),
             }
         });
 
@@ -205,15 +201,13 @@ impl SimpleFlowNode for Node {
             ReadVar::from_static(()).into_side_effect()
         };
 
-        ctx.emit_rust_step("report built vmgs_lib", |ctx| {
+        ctx.emit_minor_rust_step("report built vmgs_lib", |ctx| {
             did_test.claim(ctx);
             let built_vmgs_lib = built_vmgs_lib.claim(ctx);
             let vmgs_lib = vmgs_lib.claim(ctx);
             move |rt| {
                 let built_vmgs_lib = rt.read(built_vmgs_lib);
                 rt.write(vmgs_lib, &built_vmgs_lib);
-
-                Ok(())
             }
         });
 

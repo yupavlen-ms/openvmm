@@ -313,7 +313,7 @@ impl VirtualRegister {
         Ok(())
     }
 
-    fn read(&self, runner: &ProcessorRunner<'_, Tdx<'_>>) -> u64 {
+    fn read<'a>(&self, runner: &ProcessorRunner<'a, Tdx<'a>>) -> u64 {
         let physical_reg = runner.read_vmcs64(self.vtl, self.register.physical_vmcs_field());
 
         // Get the bits owned by the host from the shadow and the bits owned by the
@@ -605,22 +605,6 @@ impl BackingPrivate for TdxBacked {
         params: super::BackingParams<'_, '_, Self>,
         shared: &TdxBackedShared,
     ) -> Result<Self, crate::Error> {
-        // TODO TDX: TDX shares the vp context page for xmm registers only. It
-        // should probably move to its own page.
-        //
-        // FX regs and XMM registers are zero-initialized by the kernel. Set
-        // them to the arch default.
-        *params.runner.fx_state_mut() =
-            vp::Xsave::at_reset(&params.partition.caps, params.vp_info).fxsave();
-
-        let regs = Registers::at_reset(&params.partition.caps, params.vp_info);
-
-        let gps = params.runner.tdx_enter_guest_gps_mut();
-        *gps = [
-            regs.rax, regs.rcx, regs.rdx, regs.rbx, regs.rsp, regs.rbp, regs.rsi, regs.rdi,
-            regs.r8, regs.r9, regs.r10, regs.r11, regs.r12, regs.r13, regs.r14, regs.r15,
-        ];
-
         // TODO TDX: ssp is for shadow stack
         // TODO TDX: direct overlay like snp?
         // TODO TDX: lapic / APIC setup?
@@ -733,12 +717,23 @@ impl BackingPrivate for TdxBacked {
             vtls: VtlArray::from_fn(|vtl| {
                 let vtl: GuestVtl = vtl.try_into().unwrap();
                 TdxVtl {
-                    efer: regs.efer,
-                    cr0: VirtualRegister::new(ShadowedRegister::Cr0, vtl, regs.cr0, None),
+                    efer: params
+                        .runner
+                        .read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_EFER),
+                    cr0: VirtualRegister::new(
+                        ShadowedRegister::Cr0,
+                        vtl,
+                        params
+                            .runner
+                            .read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR0),
+                        None,
+                    ),
                     cr4: VirtualRegister::new(
                         ShadowedRegister::Cr4,
                         vtl,
-                        regs.cr4,
+                        params
+                            .runner
+                            .read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR4),
                         Some(allowed_cr4_bits),
                     ),
                     tpr_threshold: 0,
@@ -754,7 +749,7 @@ impl BackingPrivate for TdxBacked {
                     exception_error_code: 0,
                     interruption_set: false,
                     flush_state: TdxFlushState::new(),
-                    private_regs: TdxPrivateRegs::new(regs.rflags, regs.rip, vtl),
+                    private_regs: TdxPrivateRegs::new(vtl),
                     enter_stats: Default::default(),
                     exit_stats: Default::default(),
                 }
@@ -833,6 +828,26 @@ impl BackingPrivate for TdxBacked {
         this.backing.cvm.lapics[GuestVtl::Vtl0]
             .lapic
             .enable_offload();
+
+        // Initialize registers to the reset state, since this may be different
+        // than what's on the VMCS and is certainly different than what's in the
+        // VP enter and private register state (which was mostly zero
+        // initialized).
+        for vtl in [GuestVtl::Vtl0, GuestVtl::Vtl1] {
+            let registers = Registers::at_reset(&this.partition.caps, &this.inner.vp_info);
+
+            let mut state = this.access_state(vtl.into());
+            state
+                .set_registers(&registers)
+                .expect("Resetting to architectural state should succeed");
+
+            state.commit().expect("committing state should succeed");
+        }
+
+        // FX regs and XMM registers are zero-initialized by the kernel. Set
+        // them to the arch default.
+        *this.runner.fx_state_mut() =
+            vp::Xsave::at_reset(&this.partition.caps, &this.inner.vp_info).fxsave();
     }
 
     async fn run_vp(
@@ -889,19 +904,6 @@ impl BackingPrivate for TdxBacked {
                 return true;
             }
 
-            let interruptibility: Interruptibility = this
-                .runner
-                .read_vmcs32(vtl, VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY)
-                .into();
-
-            if (check_rflags
-                && !RFlags::from_bits(backing_vtl.private_regs.rflags).interrupt_enable())
-                || interruptibility.blocked_by_sti()
-                || interruptibility.blocked_by_movss()
-            {
-                return false;
-            }
-
             let (vector, ppr) = if this.backing.cvm.lapics[vtl].lapic.is_offloaded() {
                 let vector = backing_vtl.private_regs.rvi;
                 let ppr = std::cmp::max(
@@ -925,7 +927,27 @@ impl BackingPrivate for TdxBacked {
             };
             let vector_priority = (vector as u32) >> 4;
             let ppr_priority = ppr >> 4;
-            vector_priority > ppr_priority
+
+            if vector_priority <= ppr_priority {
+                return false;
+            }
+
+            if check_rflags
+                && !RFlags::from_bits(backing_vtl.private_regs.rflags).interrupt_enable()
+            {
+                return false;
+            }
+
+            let interruptibility: Interruptibility = this
+                .runner
+                .read_vmcs32(vtl, VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY)
+                .into();
+
+            if interruptibility.blocked_by_sti() || interruptibility.blocked_by_movss() {
+                return false;
+            }
+
+            true
         })
     }
 
@@ -1952,6 +1974,172 @@ impl UhProcessor<'_, TdxBacked> {
         Ok(())
     }
 
+    /// Trace processor state for debugging purposes.
+    fn trace_processor_state(&self, vtl: GuestVtl) {
+        let raw_exit = self.runner.tdx_vp_enter_exit_info();
+        tracing::error!(?raw_exit, "raw tdx vp enter exit info");
+
+        let gprs = self.runner.tdx_enter_guest_gps();
+        tracing::error!(?gprs, "guest gpr list");
+
+        let TdxPrivateRegs {
+            rflags,
+            rip,
+            ssp,
+            rvi,
+            svi,
+            msr_kernel_gs_base,
+            msr_star,
+            msr_lstar,
+            msr_sfmask,
+            msr_xss,
+            msr_tsc_aux,
+            vp_entry_flags,
+        } = self.backing.vtls[vtl].private_regs;
+        tracing::error!(
+            rflags,
+            rip,
+            ssp,
+            rvi,
+            svi,
+            msr_kernel_gs_base,
+            msr_star,
+            msr_lstar,
+            msr_sfmask,
+            msr_xss,
+            msr_tsc_aux,
+            ?vp_entry_flags,
+            "private registers"
+        );
+
+        let physical_cr0 = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR0);
+        let shadow_cr0 = self
+            .runner
+            .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR0_READ_SHADOW);
+        let cr0_guest_host_mask: u64 = self
+            .runner
+            .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR0_GUEST_HOST_MASK);
+        tracing::error!(physical_cr0, shadow_cr0, cr0_guest_host_mask, "cr0 values");
+
+        let physical_cr4 = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR4);
+        let shadow_cr4 = self
+            .runner
+            .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR4_READ_SHADOW);
+        let cr4_guest_host_mask = self
+            .runner
+            .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR4_GUEST_HOST_MASK);
+        tracing::error!(physical_cr4, shadow_cr4, cr4_guest_host_mask, "cr4 values");
+
+        let cr3 = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR3);
+        tracing::error!(cr3, "cr3");
+
+        let cached_efer = self.backing.vtls[vtl].efer;
+        let vmcs_efer = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_EFER);
+        let entry_controls = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_ENTRY_CONTROLS);
+        tracing::error!(cached_efer, vmcs_efer, "efer");
+        tracing::error!(entry_controls, "entry controls");
+
+        let cs = self.read_segment(vtl, TdxSegmentReg::Cs);
+        let ds = self.read_segment(vtl, TdxSegmentReg::Ds);
+        let es = self.read_segment(vtl, TdxSegmentReg::Es);
+        let fs = self.read_segment(vtl, TdxSegmentReg::Fs);
+        let gs = self.read_segment(vtl, TdxSegmentReg::Gs);
+        let ss = self.read_segment(vtl, TdxSegmentReg::Ss);
+        let tr = self.read_segment(vtl, TdxSegmentReg::Tr);
+        let ldtr = self.read_segment(vtl, TdxSegmentReg::Ldtr);
+
+        tracing::error!(?cs, ?ds, ?es, ?fs, ?gs, ?ss, ?tr, ?ldtr, "segment values");
+
+        let exception_bitmap = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_EXCEPTION_BITMAP);
+        tracing::error!(exception_bitmap, "exception bitmap");
+
+        let cached_processor_controls = self.backing.vtls[vtl].processor_controls;
+        let cached_secondary_processor_controls =
+            self.backing.vtls[vtl].secondary_processor_controls;
+        let vmcs_processor_controls = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_PROCESSOR_CONTROLS);
+        let vmcs_secondary_processor_controls = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_SECONDARY_PROCESSOR_CONTROLS);
+        tracing::error!(
+            ?cached_processor_controls,
+            ?cached_secondary_processor_controls,
+            vmcs_processor_controls,
+            vmcs_secondary_processor_controls,
+            "processor controls"
+        );
+
+        let cached_tpr_threshold = self.backing.vtls[vtl].tpr_threshold;
+        let vmcs_tpr_threshold = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_TPR_THRESHOLD);
+        tracing::error!(cached_tpr_threshold, vmcs_tpr_threshold, "tpr threshold");
+
+        let cached_eoi_exit_bitmap = self.backing.eoi_exit_bitmap;
+        let vmcs_eoi_exit_bitmap = {
+            let fields = [
+                VmcsField::VMX_VMCS_EOI_EXIT_0,
+                VmcsField::VMX_VMCS_EOI_EXIT_1,
+                VmcsField::VMX_VMCS_EOI_EXIT_2,
+                VmcsField::VMX_VMCS_EOI_EXIT_3,
+            ];
+            fields
+                .iter()
+                .map(|field| self.runner.read_vmcs64(vtl, *field))
+                .collect::<Vec<_>>()
+        };
+        tracing::error!(
+            ?cached_eoi_exit_bitmap,
+            ?vmcs_eoi_exit_bitmap,
+            "eoi exit bitmap"
+        );
+
+        let cached_interrupt_information = self.backing.vtls[vtl].interruption_information;
+        let cached_interruption_set = self.backing.vtls[vtl].interruption_set;
+        let vmcs_interrupt_information = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_ENTRY_INTERRUPT_INFO);
+        let vmcs_entry_exception_code = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_ENTRY_EXCEPTION_ERROR_CODE);
+        tracing::error!(
+            ?cached_interrupt_information,
+            cached_interruption_set,
+            vmcs_interrupt_information,
+            vmcs_entry_exception_code,
+            "interrupt information"
+        );
+
+        let guest_interruptibility = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY);
+        tracing::error!(guest_interruptibility, "guest interruptibility");
+
+        let vmcs_sysenter_cs = self
+            .runner
+            .read_vmcs32(vtl, VmcsField::VMX_VMCS_GUEST_SYSENTER_CS_MSR);
+        let vmcs_sysenter_esp = self
+            .runner
+            .read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_SYSENTER_ESP_MSR);
+        let vmcs_sysenter_eip = self
+            .runner
+            .read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_SYSENTER_EIP_MSR);
+        tracing::error!(
+            vmcs_sysenter_cs,
+            vmcs_sysenter_esp,
+            vmcs_sysenter_eip,
+            "sysenter values"
+        );
+
+        let vmcs_pat = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_PAT);
+        tracing::error!(vmcs_pat, "guest PAT");
+    }
+
     fn handle_vm_enter_failed(
         &self,
         vtl: GuestVtl,
@@ -1963,41 +2151,7 @@ impl UhProcessor<'_, TdxBacked> {
                 // Log system register state for debugging why we were
                 // unable to enter the guest. This is a VMM bug.
                 tracing::error!("VP.ENTER failed with bad guest state");
-
-                let physical_cr0 = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR0);
-                let shadow_cr0 = self
-                    .runner
-                    .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR0_READ_SHADOW);
-                let cr0_guest_host_mask: u64 = self
-                    .runner
-                    .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR0_GUEST_HOST_MASK);
-                tracing::error!(physical_cr0, shadow_cr0, cr0_guest_host_mask, "cr0 values");
-
-                let physical_cr4 = self.runner.read_vmcs64(vtl, VmcsField::VMX_VMCS_GUEST_CR4);
-                let shadow_cr4 = self
-                    .runner
-                    .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR4_READ_SHADOW);
-                let cr4_guest_host_mask = self
-                    .runner
-                    .read_vmcs64(vtl, VmcsField::VMX_VMCS_CR4_GUEST_HOST_MASK);
-                tracing::error!(physical_cr4, shadow_cr4, cr4_guest_host_mask, "cr4 values");
-
-                let efer = self.backing.vtls[vtl].efer;
-                let entry_controls = self
-                    .runner
-                    .read_vmcs32(vtl, VmcsField::VMX_VMCS_ENTRY_CONTROLS);
-                tracing::error!(efer, entry_controls, "efer & entry controls");
-
-                let cs = self.read_segment(vtl, TdxSegmentReg::Cs);
-                let ds = self.read_segment(vtl, TdxSegmentReg::Ds);
-                let es = self.read_segment(vtl, TdxSegmentReg::Es);
-                let fs = self.read_segment(vtl, TdxSegmentReg::Fs);
-                let gs = self.read_segment(vtl, TdxSegmentReg::Gs);
-                let ss = self.read_segment(vtl, TdxSegmentReg::Ss);
-                let tr = self.read_segment(vtl, TdxSegmentReg::Tr);
-                let ldtr = self.read_segment(vtl, TdxSegmentReg::Ldtr);
-
-                tracing::error!(?cs, ?ds, ?es, ?fs, ?gs, ?ss, ?tr, ?ldtr, "segment values");
+                self.trace_processor_state(vtl);
 
                 // TODO: panic instead?
                 VpHaltReason::Hypervisor(UhRunVpError::VmxBadGuestState)
