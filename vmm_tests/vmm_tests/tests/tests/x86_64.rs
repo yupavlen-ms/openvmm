@@ -58,13 +58,7 @@ async fn boot_alias_map(config: PetriVmConfigOpenVmm) -> anyhow::Result<()> {
 )]
 async fn boot_with_tpm(config: PetriVmConfigOpenVmm) -> anyhow::Result<()> {
     let os_flavor = config.os_flavor();
-    let config = config
-        // "OPENHCL_ENABLE_VTL2_GPA_POOL=1" is currently required to make test
-        // pass as the page pool is not enabled by default.
-        //
-        // TODO: Remove this once the page pool is always on.
-        .with_openhcl_command_line("OPENHCL_ENABLE_VTL2_GPA_POOL=1")
-        .with_tpm();
+    let config = config.with_tpm().with_tpm_state_persistence();
 
     let (vm, agent) = match os_flavor {
         OsFlavor::Windows => {
@@ -74,14 +68,18 @@ async fn boot_with_tpm(config: PetriVmConfigOpenVmm) -> anyhow::Result<()> {
             config.run().await?
         }
         OsFlavor::Linux => {
+            // First boot - AK cert request will be served by GED
             let mut vm = config.run_with_lazy_pipette().await?;
             // Workaround to https://github.com/microsoft/openvmm/issues/379
             assert_eq!(vm.wait_for_halt().await?, HaltReason::Reset);
+
+            // Second boot - Ak cert request will be bypassed by GED
             vm.reset().await?;
             let agent = vm.wait_for_agent().await?;
             vm.wait_for_successful_boot_event().await?;
 
             // Use the python script to read AK cert from TPM nv index
+            // and verify that the AK cert preserves across boot.
             // TODO: Replace the script with tpm2-tools
             const TEST_FILE: &str = "tpm.py";
             const TEST_CONTENT: &str = include_str!("../../test_data/tpm.py");
