@@ -1834,6 +1834,7 @@ dependencies = [
  "log",
  "serde",
  "target-lexicon",
+ "vmm_test_images",
 ]
 
 [[package]]

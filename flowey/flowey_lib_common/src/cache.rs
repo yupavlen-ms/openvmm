@@ -480,6 +480,7 @@ impl FlowNode for Node {
                                 );
 
                                 let key = rt.read(key);
+                                let key = format!("{key}-{}-{}", rt.arch(), rt.platform());
                                 rt.write(write_processed_key, &key);
 
                                 if let Some(write_processed_keys) = write_processed_keys {
@@ -490,7 +491,11 @@ impl FlowNode for Node {
                                             r#""[{}]""#,
                                             restore_keys
                                                 .into_iter()
-                                                .map(|s| format!("'{s}'"))
+                                                .map(|s| format!(
+                                                    "'{s}-{}-{}'",
+                                                    rt.arch(),
+                                                    rt.platform()
+                                                ))
                                                 .collect::<Vec<_>>()
                                                 .join(", ")
                                         ),

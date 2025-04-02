@@ -11,6 +11,8 @@ use crate::run_cargo_build::common::CommonTriple;
 use crate::run_cargo_nextest_run::NextestProfile;
 use flowey::node::prelude::*;
 use std::collections::BTreeMap;
+use vmm_test_images::KnownIso;
+use vmm_test_images::KnownVhd;
 
 flowey_request! {
     pub struct Params {
@@ -26,6 +28,10 @@ flowey_request! {
         pub nextest_filter_expr: Option<String>,
         /// If the VMM tests requires openhcl - specify a custom target for it.
         pub openhcl_custom_target: Option<CommonTriple>,
+        /// VHDs to download
+        pub vhds: Vec<KnownVhd>,
+        /// ISOs to download
+        pub isos: Vec<KnownIso>,
 
         /// Whether the job should fail if any test has failed
         pub fail_job_on_test_fail: bool,
@@ -60,6 +66,8 @@ impl SimpleFlowNode for Node {
             nextest_profile,
             nextest_filter_expr,
             openhcl_custom_target,
+            vhds,
+            isos,
             fail_job_on_test_fail,
             artifact_dir,
             done,
@@ -171,25 +179,10 @@ impl SimpleFlowNode for Node {
             guest_test_uefi: v,
         });
 
-        match arch {
-            CommonArch::X86_64 => {
-                ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
-                    crate::download_openvmm_vmm_tests_vhds::Request::DownloadVhds(vec![
-                        vmm_test_images::KnownVhd::FreeBsd13_2,
-                        vmm_test_images::KnownVhd::Gen1WindowsDataCenterCore2022,
-                        vmm_test_images::KnownVhd::Gen2WindowsDataCenterCore2022,
-                        vmm_test_images::KnownVhd::Ubuntu2204Server,
-                    ]),
-                ]);
-
-                ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
-                    crate::download_openvmm_vmm_tests_vhds::Request::DownloadIsos(vec![
-                        vmm_test_images::KnownIso::FreeBsd13_2,
-                    ]),
-                ]);
-            }
-            CommonArch::Aarch64 => {}
-        }
+        ctx.requests::<crate::download_openvmm_vmm_tests_vhds::Node>([
+            crate::download_openvmm_vmm_tests_vhds::Request::DownloadVhds(vhds),
+            crate::download_openvmm_vmm_tests_vhds::Request::DownloadIsos(isos),
+        ]);
 
         let disk_images_dir =
             ctx.reqv(crate::download_openvmm_vmm_tests_vhds::Request::GetDownloadFolder);
