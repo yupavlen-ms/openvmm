@@ -18,7 +18,6 @@ use openssl::rsa::Rsa;
 use pal_async::local::LocalDriver;
 use tee_call::TeeCall;
 use thiserror::Error;
-use vmgs::EncryptionAlgorithm;
 use vmgs::Vmgs;
 
 #[derive(Debug, Error)]
@@ -109,7 +108,8 @@ pub async fn request_vmgs_encryption_keys(
     // Retry attestation call-out if necessary (if VMGS encrypted).
     // The IGVm Agent could be down for servicing, or the TDX service VM might not be ready, or a dynamic firmware
     // update could mean that the report was not verifiable.
-    let max_retry = if vmgs.get_encryption_algorithm() != EncryptionAlgorithm::NONE {
+    let vmgs_encrypted = vmgs.is_encrypted();
+    let max_retry = if vmgs_encrypted {
         MAXIMUM_RETRY_COUNT
     } else {
         NO_RETRY_COUNT
@@ -143,6 +143,7 @@ pub async fn request_vmgs_encryption_keys(
             &mut igvm_attest_request_helper,
             &result.report,
             agent_data,
+            vmgs_encrypted,
         )
         .await
         {
@@ -245,6 +246,7 @@ async fn make_igvm_attest_requests(
     igvm_attest_request_helper: &mut IgvmAttestRequestHelper,
     attestation_report: &[u8],
     agent_data: &mut [u8; AGENT_DATA_MAX_SIZE],
+    vmgs_encrypted: bool,
 ) -> Result<WrappedKeyVmgsEncryptionKeys, RequestVmgsEncryptionKeysError> {
     // Attempt to get wrapped DiskEncryptionSettings key
     igvm_attest_request_helper.set_request_type(
@@ -292,10 +294,10 @@ async fn make_igvm_attest_requests(
         }
         Err(igvm_attest::wrapped_key::WrappedKeyError::ResponseSizeTooSmall) => {
             // The request does not succeed.
-            // Empty `agent_data` from VMGS implies that the data required by the KeyRelease request needs
-            // to come from the WrappedKey response. Return an error for this case, otherwise ignore and
-            // set the `wrapped_des_key` to None.
-            if agent_data.iter().all(|&x| x == 0) {
+            // When VMGS is encrypted, empty `agent_data` from VMGS implies that the data required by the
+            // KeyRelease request needs to come from the WrappedKey response. Return an error for this case,
+            // otherwise ignore the error and set the `wrapped_des_key` to None.
+            if vmgs_encrypted && agent_data.iter().all(|&x| x == 0) {
                 return Err(
                     RequestVmgsEncryptionKeysError::RequiredButInvalidIgvmAttestWrappedKeyResponse,
                 );
