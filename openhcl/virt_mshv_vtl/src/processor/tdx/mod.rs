@@ -541,6 +541,18 @@ impl HardwareIsolatedBacking for TdxBacked {
             shared,
         }
     }
+
+    fn pending_event_vector(_this: &UhProcessor<'_, Self>, _vtl: GuestVtl) -> Option<u8> {
+        todo!()
+    }
+
+    fn set_pending_exception(
+        _this: &mut UhProcessor<'_, Self>,
+        _vtl: GuestVtl,
+        _event: HvX64PendingExceptionEvent,
+    ) {
+        todo!()
+    }
 }
 
 /// Partition-wide shared data for TDX VPs.
@@ -976,6 +988,11 @@ impl BackingPrivate for TdxBacked {
 
     fn vtl1_inspectable(this: &UhProcessor<'_, Self>) -> bool {
         this.hcvm_vtl1_inspectable()
+    }
+
+    fn handle_exit_activity(_this: &mut UhProcessor<'_, Self>) {
+        // TODO TDX GUEST VSM: uncomment when pending event is fully implemented
+        // this.cvm_handle_exit_activity();
     }
 }
 
