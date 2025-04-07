@@ -541,6 +541,30 @@ impl HardwareIsolatedBacking for TdxBacked {
             shared,
         }
     }
+
+    fn pending_event_vector(this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> Option<u8> {
+        let event_inject = this.backing.vtls[vtl].interruption_information;
+        if event_inject.valid() {
+            Some(event_inject.vector())
+        } else {
+            None
+        }
+    }
+
+    fn set_pending_exception(
+        this: &mut UhProcessor<'_, Self>,
+        vtl: GuestVtl,
+        event: HvX64PendingExceptionEvent,
+    ) {
+        let new_intr = InterruptionInformation::new()
+            .with_valid(true)
+            .with_deliver_error_code(event.deliver_error_code())
+            .with_vector(event.vector().try_into().unwrap())
+            .with_interruption_type(INTERRUPT_TYPE_HARDWARE_EXCEPTION);
+
+        this.backing.vtls[vtl].interruption_information = new_intr;
+        this.backing.vtls[vtl].exception_error_code = event.error_code();
+    }
 }
 
 /// Partition-wide shared data for TDX VPs.
@@ -977,6 +1001,10 @@ impl BackingPrivate for TdxBacked {
     fn vtl1_inspectable(this: &UhProcessor<'_, Self>) -> bool {
         this.hcvm_vtl1_inspectable()
     }
+
+    fn handle_exit_activity(this: &mut UhProcessor<'_, Self>) {
+        this.cvm_handle_exit_activity();
+    }
 }
 
 impl UhProcessor<'_, TdxBacked> {
@@ -1359,12 +1387,19 @@ impl UhProcessor<'_, TdxBacked> {
         self.runner
             .set_halted(activity != MpState::Running || tlb_halt);
 
-        // Turn on kernel interrupt handling if possible
+        // Turn on kernel interrupt handling if possible. This will cause the
+        // kernel to handle some exits internally, without returning to user
+        // mode, to improve performance.
+        //
+        // Do not do this if there is a pending interruption, since we need to
+        // run code on the next exit to clear it. If we miss this opportunity,
+        // we will probably double-inject the interruption, wreaking havoc.
         let offload_enabled = next_vtl == GuestVtl::Vtl0
             && self.backing.vtls[next_vtl]
                 .secondary_processor_controls
                 .virtual_interrupt_delivery()
-            && self.backing.cvm.lapics[next_vtl].lapic.can_offload_irr();
+            && self.backing.cvm.lapics[next_vtl].lapic.can_offload_irr()
+            && !self.backing.vtls[next_vtl].interruption_information.valid();
         let x2apic_enabled = self.backing.cvm.lapics[next_vtl].lapic.x2apic_enabled();
 
         let offload_flags = hcl_intr_offload_flags::new()
@@ -1474,6 +1509,13 @@ impl UhProcessor<'_, TdxBacked> {
         intercepted_vtl: GuestVtl,
     ) -> Result<(), VpHaltReason<UhRunVpError>> {
         let exit_info = TdxExit(self.runner.tdx_vp_enter_exit_info());
+
+        // First, check that the VM entry was even successful.
+        let vmx_exit = exit_info.code().vmx_exit();
+        if vmx_exit.vm_enter_failed() {
+            return Err(self.handle_vm_enter_failed(intercepted_vtl, vmx_exit));
+        }
+
         let next_interruption = exit_info.idt_vectoring_info();
 
         // Acknowledge the APIC interrupt/NMI if it was delivered.
@@ -1567,12 +1609,6 @@ impl UhProcessor<'_, TdxBacked> {
             } else {
                 self.backing.vtls[intercepted_vtl].interruption_information = Default::default();
             }
-        }
-
-        // First, check that the VM entry was even successful.
-        let vmx_exit = exit_info.code().vmx_exit();
-        if vmx_exit.vm_enter_failed() {
-            return Err(self.handle_vm_enter_failed(intercepted_vtl, vmx_exit));
         }
 
         let mut breakpoint_debug_exception = false;
@@ -2653,15 +2689,15 @@ impl<T: CpuIo> X86EmulatorSupport for UhEmulationState<'_, '_, T, TdxBacked> {
             event_info.reg_0.event_type(),
             hvdef::HV_X64_PENDING_EVENT_EXCEPTION
         );
-        let exception = HvX64PendingExceptionEvent::from(u128::from(event_info.reg_0));
+        assert!(!self.interruption_pending);
 
-        self.vp.backing.vtls[self.vtl].interruption_information = InterruptionInformation::new()
-            .with_deliver_error_code(exception.deliver_error_code())
-            .with_interruption_type(INTERRUPT_TYPE_HARDWARE_EXCEPTION)
-            .with_vector(exception.vector() as u8)
-            .with_valid(true);
-
-        self.vp.backing.vtls[self.vtl].exception_error_code = exception.error_code();
+        // There's no interruption pending, so just inject the exception
+        // directly without checking for double fault.
+        TdxBacked::set_pending_exception(
+            self.vp,
+            self.vtl,
+            HvX64PendingExceptionEvent::from(event_info.reg_0.into_bits()),
+        );
     }
 
     fn is_gpa_mapped(&self, gpa: u64, write: bool) -> bool {
