@@ -89,7 +89,6 @@ use x86defs::X64_EFER_NXE;
 use x86defs::X64_EFER_SVME;
 use x86defs::X86X_MSR_EFER;
 use x86defs::apic::X2APIC_MSR_BASE;
-use x86defs::cpuid::CpuidFunction;
 use x86defs::tdx::TdCallResultCode;
 use x86defs::tdx::TdVmCallR10Result;
 use x86defs::tdx::TdxGp;
@@ -565,6 +564,10 @@ impl HardwareIsolatedBacking for TdxBacked {
         this.backing.vtls[vtl].interruption_information = new_intr;
         this.backing.vtls[vtl].exception_error_code = event.error_code();
     }
+
+    fn cr4_for_cpuid(this: &mut UhProcessor<'_, Self>, vtl: GuestVtl) -> u64 {
+        this.backing.vtls[vtl].cr4.read(&this.runner)
+    }
 }
 
 /// Partition-wide shared data for TDX VPs.
@@ -583,7 +586,7 @@ pub struct TdxBackedShared {
 impl TdxBackedShared {
     pub(crate) fn new(
         partition_params: &UhPartitionNewParams<'_>,
-        params: BackingSharedParams,
+        params: BackingSharedParams<'_>,
     ) -> Result<Self, crate::Error> {
         // Create a second synic to fully manage the untrusted SINTs
         // here. At time of writing, the hypervisor does not support
@@ -591,7 +594,12 @@ impl TdxBackedShared {
         // performance would be poor for cases where the L1 implements
         // high-performance devices.
         let untrusted_synic = (partition_params.handle_synic && !partition_params.hide_isolation)
-            .then(|| GlobalSynic::new(partition_params.topology.vp_count()));
+            .then(|| {
+                GlobalSynic::new(
+                    params.guest_memory[GuestVtl::Vtl0].clone(),
+                    partition_params.topology.vp_count(),
+                )
+            });
         Ok(Self {
             untrusted_synic,
             flush_state: VtlArray::from_fn(|_| RwLock::new(TdxPartitionFlushState::new())),
@@ -827,14 +835,8 @@ impl BackingPrivate for TdxBacked {
         ];
 
         let reg_count = if let Some(synic) = &mut this.backing.untrusted_synic {
-            synic.set_simp(
-                &this.partition.gm[GuestVtl::Vtl0],
-                reg(pfns[UhDirectOverlay::Sipp as usize]),
-            );
-            synic.set_siefp(
-                &this.partition.gm[GuestVtl::Vtl0],
-                reg(pfns[UhDirectOverlay::Sifp as usize]),
-            );
+            synic.set_simp(reg(pfns[UhDirectOverlay::Sipp as usize]));
+            synic.set_siefp(reg(pfns[UhDirectOverlay::Sifp as usize]));
             // Set the SIEFP in the hypervisor so that the hypervisor can
             // directly signal synic events. Don't set the SIMP, since the
             // message page is owned by the paravisor.
@@ -1740,40 +1742,15 @@ impl UhProcessor<'_, TdxBacked> {
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.msr_write
             }
             VmxExitBasic::CPUID => {
-                let xss = self.backing.vtls[intercepted_vtl].private_regs.msr_xss;
                 let gps = self.runner.tdx_enter_guest_gps();
                 let leaf = gps[TdxGp::RAX] as u32;
                 let subleaf = gps[TdxGp::RCX] as u32;
-                let xfem = self
-                    .runner
-                    .get_vp_register(intercepted_vtl, HvX64RegisterName::Xfem)
-                    .map_err(|err| VpHaltReason::Hypervisor(UhRunVpError::EmulationState(err)))?
-                    .as_u64();
-                let guest_state = crate::cvm_cpuid::CpuidGuestState {
-                    xfem,
-                    xss,
-                    cr4: self.backing.vtls[intercepted_vtl].cr4.read(&self.runner),
-                    apic_id: self.inner.vp_info.apic_id,
-                };
-
-                let result =
-                    self.shared
-                        .cvm
-                        .cpuid
-                        .guest_result(CpuidFunction(leaf), subleaf, &guest_state);
-
-                let [eax, ebx, ecx, edx] = self.partition.cpuid_result(
-                    leaf,
-                    subleaf,
-                    &[result.eax, result.ebx, result.ecx, result.edx],
-                );
-
+                let [eax, ebx, ecx, edx] = self.cvm_cpuid_result(intercepted_vtl, leaf, subleaf);
                 let gps = self.runner.tdx_enter_guest_gps_mut();
                 gps[TdxGp::RAX] = eax.into();
                 gps[TdxGp::RBX] = ebx.into();
                 gps[TdxGp::RCX] = ecx.into();
                 gps[TdxGp::RDX] = edx.into();
-
                 self.advance_to_next_instruction(intercepted_vtl);
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.cpuid
             }
@@ -2325,7 +2302,7 @@ impl UhProcessor<'_, TdxBacked> {
                     .untrusted_synic
                     .as_mut()
                     .unwrap()
-                    .write_nontimer_msr(&self.partition.gm[intercepted_vtl], msr, value)?;
+                    .write_nontimer_msr(msr, value)?;
                 // Propagate sint MSR writes to the hypervisor as well
                 // so that the hypervisor can directly inject events.
                 if matches!(msr, hvdef::HV_X64_MSR_SINT0..=hvdef::HV_X64_MSR_SINT15) {
