@@ -16,6 +16,7 @@ use host_fdt_parser::VmbusInfo;
 use memory_range::MemoryRange;
 use memory_range::subtract_ranges;
 
+mod dma_hint;
 mod dt;
 mod mmio;
 pub mod shim_params;

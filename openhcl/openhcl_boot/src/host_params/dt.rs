@@ -13,6 +13,7 @@ use crate::host_params::MAX_ENTROPY_SIZE;
 use crate::host_params::MAX_NUMA_NODES;
 use crate::host_params::MAX_PARTITION_RAM_RANGES;
 use crate::host_params::MAX_VTL2_USED_RANGES;
+use crate::host_params::dma_hint::vtl2_calculate_dma_hint;
 use crate::host_params::shim_params::IsolationType;
 use crate::single_threaded::OffStackRef;
 use crate::single_threaded::off_stack;
@@ -339,6 +340,7 @@ impl PartitionInfo {
         let parsed = ParsedDeviceTree::parse(dt, &mut *dt_storage).map_err(DtError::DeviceTree)?;
 
         let command_line = params.command_line();
+        log!("YSP: device_dma_page_count {}", parsed.device_dma_page_count.unwrap_or(0));
 
         // Always write the measured command line.
         write!(
@@ -362,6 +364,7 @@ impl PartitionInfo {
 
         match parsed.memory_allocation_mode {
             MemoryAllocationMode::Host => {
+                log!("YSP: MemoryAllocationMode::Host");
                 storage.vtl2_ram.clear();
                 storage
                     .vtl2_ram
@@ -373,6 +376,7 @@ impl PartitionInfo {
                 memory_size,
                 mmio_size,
             } => {
+                log!("YSP: MemoryAllocationMode::Vtl2");
                 storage.vtl2_ram.clear();
                 storage
                     .vtl2_ram
@@ -461,11 +465,20 @@ impl PartitionInfo {
 
         // Decide if we will reserve memory for a VTL2 private pool. Parse this
         // from the final command line, or the host provided device tree value.
-        let vtl2_gpa_pool_size = {
+        let mut vtl2_gpa_pool_size = {
             let dt_page_count = parsed.device_dma_page_count;
             let cmdline_page_count = options.enable_vtl2_gpa_pool;
             max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0))
         };
+        // If host did not provide the DMA hint value, re-evaluate
+        // it internally if conditions satisfy.
+        if vtl2_gpa_pool_size == 0 && parsed.nvme_keepalive {
+            let dma_hint = vtl2_calculate_dma_hint();
+            if dma_hint != 0 {
+                vtl2_gpa_pool_size = dma_hint;
+                //*parsed.device_dma_page_count = Some(dma_hint);
+            }
+        }
         if vtl2_gpa_pool_size != 0 {
             // Reserve the specified number of pages for the pool. Use the used
             // ranges to figure out which VTL2 memory is free to allocate from.
@@ -502,6 +515,7 @@ impl PartitionInfo {
 
             storage.vtl2_pool_memory = pool;
         }
+        log!("YSP: vtl2_gpa_pool_size {}", vtl2_gpa_pool_size);
 
         // If we can trust the host, use the provided alias map
         if can_trust_host {
