@@ -4,7 +4,7 @@
 //! Calculate DMA hint value if not provided by host.
 
 use crate::log;
-use igvm_defs::MemoryMapEntryType;
+use igvm_defs::{MemoryMapEntryType, PAGE_SIZE_4K};
 use super::PartitionInfo;
 
 struct DmaLookupStruct {
@@ -17,7 +17,7 @@ struct DmaLookupStruct {
 }
 
 /// Lookup table for DMA hint calculation.
-const LookupTable: &'static [DmaLookupStruct] = &[
+const LOOKUP_TABLE: &'static [DmaLookupStruct] = &[
     DmaLookupStruct {
         vp_count: 2,
         vtl2_memory_mb: 98,
@@ -60,8 +60,9 @@ const LookupTable: &'static [DmaLookupStruct] = &[
     },
 ];
 
+/// Returns calculated DMA hint value, in 4k pages.
 pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 {
-    let mut dma_hint = 0;
+    let mut dma_hint_4k = 0;
     log!("YSP: vp_count = {}", vp_count);
     let mem_size = storage
         .vtl2_ram
@@ -74,18 +75,18 @@ pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 
         let mem_size_mb = (mem_size / 1048576) as u32;
         log!("YSP: mem_size_mb = {}", mem_size_mb);
 
-        LookupTable
+        LOOKUP_TABLE
             .iter()
             .filter(|e| e.vp_count == vp_count as u32)
             .for_each(|f| {
                 if f.vtl2_memory_mb == mem_size_mb {
                     // Found exact match.
-                    dma_hint = f.dma_hint_mb as u64;
+                    dma_hint_4k = f.dma_hint_mb as u64 * 1048576 / PAGE_SIZE_4K;
                 } else {
                     // Try to extrapolate based on similar values.
                 }
         });
     }
 
-    dma_hint
+    dma_hint_4k
 }
