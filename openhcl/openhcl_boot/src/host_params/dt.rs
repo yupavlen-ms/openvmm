@@ -461,23 +461,21 @@ impl PartitionInfo {
 
         // Decide if we will reserve memory for a VTL2 private pool. Parse this
         // from the final command line, or the host provided device tree value.
-        let mut vtl2_gpa_pool_size = {
+        let vtl2_gpa_pool_size = {
             let dt_page_count = parsed.device_dma_page_count;
             let cmdline_page_count =
                 crate::cmdline::parse_boot_command_line(storage.cmdline.as_str())
                     .enable_vtl2_gpa_pool;
 
-            max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0))
-        };
-        // If host did not provide the DMA hint value, re-evaluate
-        // it internally if conditions satisfy.
-        if vtl2_gpa_pool_size == 0 && parsed.nvme_keepalive {
-            let dma_hint = vtl2_calculate_dma_hint();
-            if dma_hint != 0 {
-                vtl2_gpa_pool_size = dma_hint;
-                //*parsed.device_dma_page_count = Some(dma_hint);
+            let hostval = max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0));
+            if hostval == 0 && parsed.nvme_keepalive {
+                // If host did not provide the DMA hint value, re-evaluate
+                // it internally if conditions satisfy.
+                vtl2_calculate_dma_hint()
+            } else {
+                hostval
             }
-        }
+        };
         if vtl2_gpa_pool_size != 0 {
             // Reserve the specified number of pages for the pool. Use the used
             // ranges to figure out which VTL2 memory is free to allocate from.
