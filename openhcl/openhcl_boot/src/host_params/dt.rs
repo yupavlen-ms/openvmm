@@ -465,7 +465,7 @@ impl PartitionInfo {
 
         // Decide if we will reserve memory for a VTL2 private pool. Parse this
         // from the final command line, or the host provided device tree value.
-        let mut vtl2_gpa_pool_size = {
+        let vtl2_gpa_pool_size = {
             let dt_page_count = parsed.device_dma_page_count;
             let cmdline_page_count = options.enable_vtl2_gpa_pool;
             max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0))
@@ -478,7 +478,7 @@ impl PartitionInfo {
                 vtl2_gpa_pool_size = dma_hint;
                 //*parsed.device_dma_page_count = Some(dma_hint);
             }
-        }
+        };
         if vtl2_gpa_pool_size != 0 {
             // Reserve the specified number of pages for the pool. Use the used
             // ranges to figure out which VTL2 memory is free to allocate from.
