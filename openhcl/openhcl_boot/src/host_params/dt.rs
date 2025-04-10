@@ -468,10 +468,13 @@ impl PartitionInfo {
                     .enable_vtl2_gpa_pool;
 
             let hostval = max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0));
-            if hostval == 0 && parsed.nvme_keepalive {
+            if hostval == 0 &&
+                parsed.nvme_keepalive &&
+                params.isolation_type == IsolationType::None &&
+                storage.memory_allocation_mode == MemoryAllocationMode::Host {
                 // If host did not provide the DMA hint value, re-evaluate
                 // it internally if conditions satisfy.
-                vtl2_calculate_dma_hint()
+                vtl2_calculate_dma_hint(parsed.cpu_count(), storage)
             } else {
                 hostval
             }
