@@ -2877,6 +2877,7 @@ dependencies = [
  "hvdef",
  "inspect",
  "parking_lot",
+ "safeatomic",
  "tracelimit",
  "tracing",
  "virt",
