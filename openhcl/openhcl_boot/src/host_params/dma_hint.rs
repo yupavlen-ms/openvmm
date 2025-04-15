@@ -156,5 +156,15 @@ mod test {
             vnode: 0,
         });
         assert_eq!(vtl2_calculate_dma_hint(4, &storage), 1536);
+
+        // Test VP count higher than max from LOOKUP_TABLE.
+        storage.vtl2_ram.clear();
+        storage.vtl2_ram.push(MemoryEntry {
+            range: MemoryRange::new(0x0..0x7000000),
+            mem_type: MemoryMapEntryType::VTL2_PROTECTABLE,
+            vnode: 0,
+        });
+        // TODO: Unfinished, maybe the return value is incorrect.
+        assert_eq!(vtl2_calculate_dma_hint(112, &storage), 2048);
     }
 }
