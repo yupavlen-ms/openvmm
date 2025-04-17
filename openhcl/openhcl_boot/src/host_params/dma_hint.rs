@@ -6,57 +6,21 @@
 use igvm_defs::{MemoryMapEntryType, PAGE_SIZE_4K};
 use super::PartitionInfo;
 
-struct DmaLookupStruct {
-    /// Logical processors for VM.
-    vp_count: u32,
-    /// Vtl2AddressRangeSize - Vtl2MmioAddressRangeSize.
-    vtl2_memory_mb: u32,
-    /// DMA hint in MiB.
-    dma_hint_mb: u32,
-}
-
 /// Lookup table for DMA hint calculation.
-const LOOKUP_TABLE: &'static [DmaLookupStruct] = &[
-    DmaLookupStruct {
-        vp_count: 2,
-        vtl2_memory_mb: 98,
-        dma_hint_mb: 4,
-    },
-    DmaLookupStruct {
-        vp_count: 4,
-        vtl2_memory_mb: 110,
-        dma_hint_mb: 6,
-    },
-    DmaLookupStruct {
-        vp_count: 8,
-        vtl2_memory_mb: 148,
-        dma_hint_mb: 10,
-    },
-    DmaLookupStruct {
-        vp_count: 16,
-        vtl2_memory_mb: 256,
-        dma_hint_mb: 18,
-    },
-    DmaLookupStruct {
-        vp_count: 32,
-        vtl2_memory_mb: 516,
-        dma_hint_mb: 36,
-    },
-    DmaLookupStruct {
-        vp_count: 48,
-        vtl2_memory_mb: 718,
-        dma_hint_mb: 52,
-    },
-    DmaLookupStruct {
-        vp_count: 64,
-        vtl2_memory_mb: 924,
-        dma_hint_mb: 68,
-    },
-    DmaLookupStruct {
-        vp_count: 96,
-        vtl2_memory_mb: 1340,
-        dma_hint_mb: 102,
-    },
+/// Using tuples instead of structs to keep it readable.
+/// Let's keep the table sorted by VP count, then by assigned memory.
+/// Using u16 to keep the memory req short.
+/// Max VTL2 memory known today is 24838 MiB.
+/// (vp_count, vtl2_memory_mb, dma_hint_mb)
+const LOOKUP_TABLE: &[(u16, u16, u16)] = &[
+    (2, 98, 4),
+    (4, 110, 6),
+    (8, 148, 10),
+    (16, 256, 18),
+    (32, 516, 36),
+    (48, 718, 52),
+    (64, 924, 68),
+    (96, 1340, 102),
 ];
 
 /// Round up to next 2MiB.
@@ -77,34 +41,40 @@ pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 
     if mem_size > 0 && mem_size < 0xFFFFFFFF00000 {
         let mem_size_mb = (mem_size / 1048576) as u32;
 
-        let mut min_vtl2_memory_mb = 1000000;
+        let mut min_vtl2_memory_mb = 65535;
         let mut max_vtl2_memory_mb = 0;
 
         // To avoid using floats, scale ratios to 1:1000.
         let mut min_ratio_1000th = 100000;
         let mut max_ratio_1000th = 1000;
 
-        let mut min_vp_count = 1;
-        let mut max_vp_count = vp_count as u32;
+        let mut min_vp_count: u16 = 1;
+        let mut max_vp_count = vp_count as u16;
 
-        for f in LOOKUP_TABLE {
-            if f.vp_count == vp_count as u32 {
-                if f.vtl2_memory_mb == mem_size_mb {
-                    // Found exact match.
-                    dma_hint_4k = f.dma_hint_mb as u64 * 1048576 / PAGE_SIZE_4K;
-                    break;
-                } else {
-                    // Prepare for possible extrapolation.
-                    min_vtl2_memory_mb = min_vtl2_memory_mb.min(f.vtl2_memory_mb);
-                    max_vtl2_memory_mb = max_vtl2_memory_mb.max(f.vtl2_memory_mb);
-                    min_ratio_1000th = min_ratio_1000th.min(f.vtl2_memory_mb as u32 * 1000 / f.dma_hint_mb as u32);
-                    max_ratio_1000th = max_ratio_1000th.max(f.vtl2_memory_mb as u32 * 1000 / f.dma_hint_mb as u32);
+        for (vp_lookup, vtl2_memory_mb, dma_hint_mb) in LOOKUP_TABLE {
+            match (*vp_lookup).cmp(&(vp_count as u16)) {
+                core::cmp::Ordering::Less => {
+                    // Find nearest.
+                    min_vp_count = min_vp_count.max(*vp_lookup);
                 }
-            } else if f.vp_count < vp_count as u32 {
-                // Find the nearest VP counts if exact match is not in the table.
-                min_vp_count = min_vp_count.max(f.vp_count);
-            } else if f.vp_count > vp_count as u32 {
-                max_vp_count = max_vp_count.min(f.vp_count);
+                core::cmp::Ordering::Equal => {
+                    if *vtl2_memory_mb == mem_size_mb as u16 {
+                        // Found exact match.
+                        dma_hint_4k = *dma_hint_mb as u64 * 1048576 / PAGE_SIZE_4K;
+                        max_vtl2_memory_mb = *vtl2_memory_mb;
+                        break;
+                    } else {
+                        // Prepare for possible extrapolation.
+                        min_vtl2_memory_mb = min_vtl2_memory_mb.min(*vtl2_memory_mb);
+                        max_vtl2_memory_mb = max_vtl2_memory_mb.max(*vtl2_memory_mb);
+                        min_ratio_1000th = min_ratio_1000th.min(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                        max_ratio_1000th = max_ratio_1000th.max(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                    }
+                }
+                core::cmp::Ordering::Greater => {
+                    // Find nearest.
+                    max_vp_count = max_vp_count.min(*vp_lookup);
+                }
             }
         }
 
@@ -113,17 +83,17 @@ pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 
         if max_vtl2_memory_mb == 0 {
             LOOKUP_TABLE
             .iter()
-            .filter(|e| e.vp_count == min_vp_count || e.vp_count == max_vp_count)
-            .for_each(|f| {
-                min_vtl2_memory_mb = min_vtl2_memory_mb.min(f.vtl2_memory_mb);
-                max_vtl2_memory_mb = max_vtl2_memory_mb.max(f.vtl2_memory_mb);
-                min_ratio_1000th = min_ratio_1000th.min(f.vtl2_memory_mb as u32 * 1000 / f.dma_hint_mb as u32);
-                max_ratio_1000th = max_ratio_1000th.max(f.vtl2_memory_mb as u32 * 1000 / f.dma_hint_mb as u32);
+            .filter(|(vp_lookup, _, _)| *vp_lookup == min_vp_count || *vp_lookup == max_vp_count)
+            .for_each(|(_, vtl2_memory_mb, dma_hint_mb)| {
+                min_vtl2_memory_mb = min_vtl2_memory_mb.min(*vtl2_memory_mb);
+                max_vtl2_memory_mb = max_vtl2_memory_mb.max(*vtl2_memory_mb);
+                min_ratio_1000th = min_ratio_1000th.min(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                max_ratio_1000th = max_ratio_1000th.max(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
             });
         }
 
         if dma_hint_4k == 0 {
-            // If we didn't find an exact match for our vp_count, try to extrapolate.
+            // Didn't find an exact match for vp_count, try to extrapolate.
             dma_hint_4k = (mem_size_mb as u64 * 1000u64 * (1048576u64 / PAGE_SIZE_4K)) /
                 ((min_ratio_1000th + max_ratio_1000th) as u64 / 2u64);
 
