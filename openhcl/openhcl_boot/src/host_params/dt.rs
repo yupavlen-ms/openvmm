@@ -340,7 +340,6 @@ impl PartitionInfo {
         let parsed = ParsedDeviceTree::parse(dt, &mut *dt_storage).map_err(DtError::DeviceTree)?;
 
         let command_line = params.command_line();
-        log!("YSP: device_dma_page_count {}", parsed.device_dma_page_count.unwrap_or(0));
 
         // Always write the measured command line.
         write!(
@@ -364,7 +363,6 @@ impl PartitionInfo {
 
         match parsed.memory_allocation_mode {
             MemoryAllocationMode::Host => {
-                log!("YSP: MemoryAllocationMode::Host");
                 storage.vtl2_ram.clear();
                 storage
                     .vtl2_ram
@@ -376,7 +374,6 @@ impl PartitionInfo {
                 memory_size,
                 mmio_size,
             } => {
-                log!("YSP: MemoryAllocationMode::Vtl2");
                 storage.vtl2_ram.clear();
                 storage
                     .vtl2_ram
@@ -515,7 +512,6 @@ impl PartitionInfo {
 
             storage.vtl2_pool_memory = pool;
         }
-        log!("YSP: vtl2_gpa_pool_size {}", vtl2_gpa_pool_size);
 
         // If we can trust the host, use the provided alias map
         if can_trust_host {

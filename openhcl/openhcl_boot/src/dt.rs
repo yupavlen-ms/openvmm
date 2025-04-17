@@ -9,7 +9,6 @@ use crate::ReservedMemoryType;
 use crate::host_params::COMMAND_LINE_SIZE;
 use crate::host_params::PartitionInfo;
 use crate::host_params::shim_params::IsolationType;
-use crate::log; // YSP
 use crate::sidecar::SidecarConfig;
 use crate::single_threaded::off_stack;
 use arrayvec::ArrayString;
@@ -217,7 +216,6 @@ pub fn write_dt(
     let p_enable_method = builder.add_string("enable-method")?;
 
     let num_cpus = partition_info.cpus.len();
-    log!("YSP: num_cpus2 = {}", num_cpus);
 
     let mut root_builder = builder
         .start_node("")?
