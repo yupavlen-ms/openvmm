@@ -3034,6 +3034,7 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
         is_servicing_scenario,
         firmware_mode_is_pcat,
         psp_enabled,
+        default_boot_always_attempt,
 
         // Minimum level enforced by UEFI loader
         memory_protection_mode: _,
@@ -3094,6 +3095,9 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
     }
     if *psp_enabled {
         anyhow::bail!("PSP is not yet supported");
+    }
+    if *default_boot_always_attempt {
+        anyhow::bail!("default_boot_always_attempt is not supported");
     }
 
     Ok(())
