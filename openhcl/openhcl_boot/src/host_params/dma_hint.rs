@@ -13,14 +13,44 @@ use super::PartitionInfo;
 /// Max VTL2 memory known today is 24838 MiB.
 /// (vp_count, vtl2_memory_mb, dma_hint_mb)
 const LOOKUP_TABLE: &[(u16, u16, u16)] = &[
+    (2, 96, 2),
     (2, 98, 4),
+    (2, 100, 4),
+    (2, 104, 4),
+    (4, 108, 2),
     (4, 110, 6),
+    (4, 112, 6),
+    (4, 118, 8),
+    (4, 130, 12),
+    (8, 140, 4),
     (8, 148, 10),
-    (16, 256, 18),
+    (8, 170, 20),
+    (8, 176, 20),
+    (16, 234, 12),
+    (16, 256, 18), // There is another configuration with '20'.
+    (16, 268, 38),
+    (16, 282, 54),
+    (24, 420, 66),
+    (32, 404, 22),
     (32, 516, 36),
+    (32, 538, 74), // There is another configuration with '52'.
+    (48, 558, 32),
     (48, 718, 52),
+    (48, 730, 52),
+    (48, 746, 78),
+    (64, 712, 42),
     (64, 924, 68),
+    (64, 938, 68),
+    (96, 1030, 64),
+    (96, 1042, 114), // Can be '64'.
+    (96, 1058, 114), // Can be '106'.
     (96, 1340, 102),
+    (96, 1358, 104),
+    (96, 1382, 120),
+    (112, 1566, 288),
+    (128, 1342, 84),
+    (128, 1360, 84),
+    // (896, 12912, 516), // Needs to be validated as the vNIC number is unknown.
 ];
 
 /// Round up to next 2MiB.
@@ -139,7 +169,7 @@ mod test {
             mem_type: MemoryMapEntryType::VTL2_PROTECTABLE,
             vnode: 0,
         });
-        assert_eq!(vtl2_calculate_dma_hint(112, &storage), 2560);
+        assert_eq!(vtl2_calculate_dma_hint(112, &storage), 5632);
 
         // Test unusual VP count.
         storage.vtl2_ram.clear();
