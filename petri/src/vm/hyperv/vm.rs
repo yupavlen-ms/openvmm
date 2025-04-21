@@ -89,7 +89,21 @@ impl HyperVVM {
         tracing::info!(name, vmid = vmid.to_string(), "Created Hyper-V VM");
 
         // Remove the default network adapter
-        powershell::run_remove_vm_network_adapter(&vmid)?;
+        powershell::run_remove_vm_network_adapter(&vmid)
+            .context("remove default network adapter")?;
+
+        // TODO: Fix vm config so that we get more information at this layer
+        // what kind of VM it is. For now, if it's UEFI, assume that it's
+        // OpenHCL and set the default behavior to disable the UEFI frontpage,
+        // via OpenHCL cmdline, since Hyper-V doesn't support setting this
+        // option thru WMI.
+        if generation == powershell::HyperVGeneration::Two {
+            powershell::run_set_vm_command_line(
+                &vmid,
+                &ps_mod,
+                "OPENHCL_DISABLE_UEFI_FRONTPAGE=1",
+            )?;
+        }
 
         Ok(Self {
             name,
@@ -247,7 +261,7 @@ impl HyperVVM {
     pub async fn start(&self) -> anyhow::Result<()> {
         self.check_state(VmState::Off)?;
         hvc::hvc_start(&self.vmid)?;
-        self.wait_for_state(VmState::Running).await
+        Ok(())
     }
 
     /// Attempt to gracefully shut down the VM
@@ -255,7 +269,7 @@ impl HyperVVM {
         self.wait_for_shutdown_ic().await?;
         self.check_state(VmState::Running)?;
         hvc::hvc_stop(&self.vmid)?;
-        self.wait_for_state(VmState::Off).await
+        Ok(())
     }
 
     /// Attempt to gracefully restart the VM
@@ -263,7 +277,6 @@ impl HyperVVM {
         self.wait_for_shutdown_ic().await?;
         self.check_state(VmState::Running)?;
         hvc::hvc_restart(&self.vmid)?;
-        tracing::warn!("end state checking on restart not yet implemented for hyper-v vms");
         Ok(())
     }
 
