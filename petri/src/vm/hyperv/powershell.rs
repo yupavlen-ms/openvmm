@@ -18,7 +18,7 @@ use std::process::Stdio;
 use std::str::FromStr;
 
 /// Hyper-V VM Generation
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum HyperVGeneration {
     /// Generation 1 (with emulated legacy devices and PCAT BIOS)
     One,
@@ -288,16 +288,24 @@ pub struct HyperVSetVMFirmwareArgs<'a> {
 
 /// Runs Set-VMFirmware with the given arguments.
 pub fn run_set_vm_firmware(args: HyperVSetVMFirmwareArgs<'_>) -> anyhow::Result<()> {
-    PowerShellBuilder::new()
+    let mut builder = PowerShellBuilder::new()
         .cmdlet("Get-VM")
         .arg_string("Id", args.vmid)
-        .pipeline()
-        .cmdlet("Set-VMFirmware")
-        .arg_opt("SecureBootTemplate", args.secure_boot_template)
-        .finish()
-        .output(true)
-        .map(|_| ())
-        .context("set_vm_firmware")
+        .pipeline();
+
+    builder = match args.secure_boot_template {
+        Some(HyperVSecureBootTemplate::SecureBootDisabled) | None => builder
+            .cmdlet("Set-VMFirmware")
+            .arg("EnableSecureBoot", "Off")
+            .finish(),
+        Some(template) => builder
+            .cmdlet("Set-VMFirmware")
+            .arg("EnableSecureBoot", "On")
+            .arg("SecureBootTemplate", template)
+            .finish(),
+    };
+
+    builder.output(true).map(|_| ()).context("set_vm_firmware")
 }
 
 /// Runs Set-VMFirmware with the given arguments.
@@ -321,6 +329,27 @@ pub fn run_set_openhcl_firmware(
         .output(true)
         .map(|_| ())
         .context("set_openhcl_firmware")
+}
+
+/// Runs Set-VmCommandLine with the given arguments.
+pub fn run_set_vm_command_line(
+    vmid: &Guid,
+    ps_mod: &Path,
+    command_line: &str,
+) -> anyhow::Result<()> {
+    PowerShellBuilder::new()
+        .cmdlet("Import-Module")
+        .positional(ps_mod)
+        .next()
+        .cmdlet("Get-VM")
+        .arg_string("Id", vmid)
+        .pipeline()
+        .cmdlet("Set-VmCommandLine")
+        .arg("CommandLine", command_line)
+        .finish()
+        .output(true)
+        .map(|_| ())
+        .context("set_vm_command_line")
 }
 
 /// Sets the initial machine configuration for a VM
@@ -356,7 +385,7 @@ pub fn run_set_vm_com_port(vmid: &Guid, port: u8, path: &Path) -> anyhow::Result
         .finish()
         .output(true)
         .map(|_| ())
-        .context("run_set_vm_com_port")
+        .context("set_vm_com_port")
 }
 
 /// Windows event log as retrieved by `run_get_winevent`
@@ -441,7 +470,7 @@ pub fn run_get_winevent(
             {
                 Ok(Vec::new())
             }
-            e => Err(e).context("run_get_winevent"),
+            e => Err(e).context("get_winevent"),
         },
     }
 }
@@ -558,6 +587,19 @@ pub fn vm_shutdown_ic_status(vmid: &Guid) -> anyhow::Result<VmShutdownIcStatus> 
     })
 }
 
+/// Runs Remove-VmNetworkAdapter to remove all network adapters from a VM.
+pub fn run_remove_vm_network_adapter(vmid: &Guid) -> anyhow::Result<()> {
+    PowerShellBuilder::new()
+        .cmdlet("Get-VM")
+        .arg_string("Id", vmid)
+        .pipeline()
+        .cmdlet("Remove-VMNetworkAdapter")
+        .finish()
+        .output(true)
+        .map(|_| ())
+        .context("remove_vm_network_adapters")
+}
+
 /// A PowerShell script builder
 pub struct PowerShellBuilder(Command);
 
@@ -590,12 +632,26 @@ impl PowerShellBuilder {
     /// Run the PowerShell script and return the output
     pub fn output(mut self, log_stdout: bool) -> Result<String, CommandError> {
         self.0.stderr(Stdio::piped()).stdin(Stdio::null());
+
+        let ps_cmd = self.cmd();
+        tracing::debug!(ps_cmd, "executing powershell command");
+
+        let start = Timestamp::now();
         let output = self.0.output()?;
+        let time_elapsed = Timestamp::now() - start;
 
         let ps_stdout = (log_stdout || !output.status.success())
             .then(|| String::from_utf8_lossy(&output.stdout).to_string());
         let ps_stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        tracing::debug!(ps_cmd = self.cmd(), ps_stdout, ps_stderr);
+        tracing::debug!(
+            ps_cmd,
+            ps_stdout,
+            ps_stderr,
+            "powershell command exited in {:.3}s with status {}",
+            time_elapsed.total(jiff::Unit::Second).unwrap_or(-1.0),
+            output.status
+        );
+
         if !output.status.success() {
             return Err(CommandError::Command(output.status, ps_stderr));
         }

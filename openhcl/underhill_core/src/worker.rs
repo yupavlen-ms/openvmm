@@ -34,6 +34,7 @@ use crate::emuplat::netvsp::HclNetworkVFManagerEndpointInfo;
 use crate::emuplat::netvsp::HclNetworkVFManagerShutdownInProgress;
 use crate::emuplat::netvsp::RuntimeSavedState;
 use crate::emuplat::non_volatile_store::VmbsBrokerNonVolatileStore;
+use crate::emuplat::tpm::resources::GetTpmLoggerHandle;
 use crate::emuplat::tpm::resources::GetTpmRequestAkCertHelperHandle;
 use crate::emuplat::vga_proxy::UhRegisterHostIoFastPath;
 use crate::emuplat::watchdog::UnderhillWatchdog;
@@ -51,6 +52,7 @@ use crate::servicing::ServicingState;
 use crate::servicing::transposed::OptionServicingInitState;
 use crate::threadpool_vm_task_backend::ThreadpoolBackend;
 use crate::vmbus_relay_unit::VmbusRelayHandle;
+use crate::vmgs_logger::GetVmgsLogger;
 use crate::wrapped_partition::WrappedPartition;
 use anyhow::Context;
 use async_trait::async_trait;
@@ -283,6 +285,9 @@ pub struct UnderhillEnvCfg {
 
     /// test configuration
     pub test_configuration: Option<TestScenarioConfig>,
+
+    /// Disable the UEFI front page.
+    pub disable_uefi_frontpage: bool,
 }
 
 /// Bundle of config + runtime objects for hooking into the underhill remote
@@ -1341,7 +1346,11 @@ async fn new_underhill_vm(
             .context("failed to open VMGS disk")?;
             (
                 disk.save_meta(),
-                Vmgs::open_from_saved(Disk::new(disk).context("invalid vmgs disk")?, vmgs_state),
+                Vmgs::open_from_saved(
+                    Disk::new(disk).context("invalid vmgs disk")?,
+                    vmgs_state,
+                    Some(Arc::new(GetVmgsLogger::new(get_client.clone()))),
+                ),
             )
         }
         None => {
@@ -1354,9 +1363,12 @@ async fn new_underhill_vm(
             let disk = Disk::new(disk).context("invalid vmgs disk")?;
 
             let vmgs = if !env_cfg.reformat_vmgs {
-                match Vmgs::open(disk.clone())
-                    .instrument(tracing::info_span!("vmgs_open"))
-                    .await
+                match Vmgs::open(
+                    disk.clone(),
+                    Some(Arc::new(GetVmgsLogger::new(get_client.clone()))),
+                )
+                .instrument(tracing::info_span!("vmgs_open"))
+                .await
                 {
                     Ok(vmgs) => Some(vmgs),
                     Err(vmgs::Error::EmptyFile) if !is_restoring => {
@@ -1385,7 +1397,7 @@ async fn new_underhill_vm(
             let vmgs = if let Some(vmgs) = vmgs {
                 vmgs
             } else {
-                Vmgs::format_new(disk)
+                Vmgs::format_new(disk, Some(Arc::new(GetVmgsLogger::new(get_client.clone()))))
                     .instrument(tracing::info_span!("vmgs_format"))
                     .await
                     .context("failed to format vmgs")?
@@ -2439,6 +2451,7 @@ async fn new_underhill_vm(
                 ak_cert_type,
                 register_layout,
                 guest_secret_key: platform_attestation_data.guest_secret_key,
+                logger: Some(GetTpmLoggerHandle.into_resource()),
             }
             .into_resource(),
         });
@@ -2938,6 +2951,7 @@ async fn new_underhill_vm(
             load_kind,
             &dps,
             isolation.is_isolated(),
+            env_cfg.disable_uefi_frontpage,
         )
         .instrument(tracing::info_span!("load_firmware"))
         .await?;
@@ -3020,6 +3034,7 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
         is_servicing_scenario,
         firmware_mode_is_pcat,
         psp_enabled,
+        default_boot_always_attempt,
 
         // Minimum level enforced by UEFI loader
         memory_protection_mode: _,
@@ -3080,6 +3095,9 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
     }
     if *psp_enabled {
         anyhow::bail!("PSP is not yet supported");
+    }
+    if *default_boot_always_attempt {
+        anyhow::bail!("default_boot_always_attempt is not supported");
     }
 
     Ok(())
@@ -3228,12 +3246,16 @@ async fn load_firmware(
     load_kind: LoadKind,
     dps: &DevicePlatformSettings,
     isolated: bool,
+    disable_uefi_frontpage: bool,
 ) -> Result<(), anyhow::Error> {
     let cmdline_append = match cmdline_append {
         Some(cmdline) => CString::new(cmdline.as_bytes()).context("bad command line")?,
         None => CString::default(),
     };
-    let loader_config = crate::loader::Config { cmdline_append };
+    let loader_config = crate::loader::Config {
+        cmdline_append,
+        disable_uefi_frontpage,
+    };
     let caps = partition.caps();
     let vtl0_vp_context = crate::loader::load(
         gm,

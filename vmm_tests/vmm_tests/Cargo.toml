@@ -10,14 +10,20 @@ rust-version.workspace = true
 name = "tests"
 harness = false
 
+[[test]]
+name = "tmks"
+harness = false
+
 [dev-dependencies]
 petri_artifact_resolver_openvmm_known_paths.workspace = true
 petri_artifacts_vmm_test.workspace = true
 vmm_test_macros.workspace = true
+tmk_tests.workspace = true
 
 petri_artifacts_common.workspace = true
 petri.workspace = true
 
+get_resources.workspace = true
 hvlite_defs.workspace = true
 vtl2_settings_proto.workspace = true
 disk_backend_resources.workspace = true
@@ -35,6 +41,7 @@ pal_async.workspace = true
 unix_socket.workspace = true
 
 anyhow.workspace = true
+jiff.workspace = true
 tracing.workspace = true
 
 hvlite_ttrpc_vmservice.workspace = true

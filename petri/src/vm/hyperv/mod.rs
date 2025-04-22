@@ -51,6 +51,8 @@ pub struct PetriVmConfigHyperV {
     guest_state_isolation_type: powershell::HyperVGuestStateIsolationType,
     // Specifies the amount of memory, in bytes, to assign to the virtual machine.
     memory: u64,
+    // Specifies the number of virtual processors to assign to the virtual machine.
+    proc_count: u32,
     // Specifies the path to a virtual hard disk file(s) to attach to the
     // virtual machine as SCSI (Gen2) or IDE (Gen1) drives.
     vhd_paths: Vec<Vec<PathBuf>>,
@@ -82,6 +84,14 @@ impl PetriVmConfig for PetriVmConfigHyperV {
     async fn run(self: Box<Self>) -> anyhow::Result<(Box<dyn PetriVm>, PipetteClient)> {
         let (vm, client) = Self::run(*self).await?;
         Ok((Box::new(vm), client))
+    }
+
+    fn with_windows_secure_boot_template(self: Box<Self>) -> Box<dyn PetriVmConfig> {
+        Box::new(Self::with_windows_secure_boot_template(*self))
+    }
+
+    fn with_processors(self: Box<Self>, count: u32) -> Box<dyn PetriVmConfig> {
+        Box::new(Self::with_processors(*self, count))
     }
 }
 
@@ -117,6 +127,10 @@ impl PetriVm for PetriVmHyperV {
 
     async fn wait_for_successful_boot_event(&mut self) -> anyhow::Result<()> {
         Self::wait_for_successful_boot_event(self).await
+    }
+
+    async fn wait_for_boot_event(&mut self) -> anyhow::Result<FirmwareEvent> {
+        Self::wait_for_boot_event(self).await
     }
 
     async fn send_enlightened_shutdown(&mut self, kind: ShutdownKind) -> anyhow::Result<()> {
@@ -161,7 +175,7 @@ impl PetriVmConfigHyperV {
                 Firmware::Pcat { guest, .. } => (
                     powershell::HyperVGuestStateIsolationType::Disabled,
                     powershell::HyperVGeneration::One,
-                    guest.artifact(),
+                    Some(guest.artifact()),
                     None,
                 ),
                 Firmware::Uefi { guest, .. } => (
@@ -189,7 +203,9 @@ impl PetriVmConfigHyperV {
                 // TODO: OpenHCL PCAT
             };
 
-        let reference_disk_path = guest_artifact;
+        let vhd_paths = guest_artifact
+            .map(|artifact| vec![vec![artifact.into()]])
+            .unwrap_or_default();
         let openhcl_igvm = igvm_artifact.cloned();
 
         Ok(PetriVmConfigHyperV {
@@ -197,7 +213,8 @@ impl PetriVmConfigHyperV {
             generation,
             guest_state_isolation_type,
             memory: 0x1_0000_0000,
-            vhd_paths: vec![vec![reference_disk_path.clone().into()]],
+            proc_count: 2,
+            vhd_paths,
             secure_boot_template: matches!(generation, powershell::HyperVGeneration::Two)
                 .then_some(match firmware.os_flavor() {
                     OsFlavor::Windows => powershell::HyperVSecureBootTemplate::MicrosoftWindows,
@@ -250,9 +267,7 @@ impl PetriVmConfigHyperV {
             self.driver.clone(),
         )?;
 
-        // Hard code the processor count to 2 for now, to match the openvmm
-        // configuration.
-        vm.set_processor_count(2)?;
+        vm.set_processor_count(self.proc_count)?;
 
         if let Some(igvm_file) = &self.openhcl_igvm {
             // TODO: only increase VTL2 memory on debug builds
@@ -345,10 +360,9 @@ impl PetriVmConfigHyperV {
             let openhcl_log_file = self.log_source.log_file("openhcl")?;
             log_tasks.push(self.driver.spawn("openhcl-log", {
                 let driver = self.driver.clone();
-                let name = self.name.clone();
+                let vmid = *vm.vmid();
                 async move {
-                    let diag_client =
-                        diag_client::DiagClient::from_hyperv_name(driver.clone(), &name)?;
+                    let diag_client = diag_client::DiagClient::from_hyperv_id(driver.clone(), vmid);
                     loop {
                         diag_client.wait_for_server().await?;
                         crate::kmsg_log_task(
@@ -360,7 +374,7 @@ impl PetriVmConfigHyperV {
                 }
             }));
             Some(OpenHclDiagHandler::new(
-                diag_client::DiagClient::from_hyperv_name(self.driver.clone(), &self.name)?,
+                diag_client::DiagClient::from_hyperv_id(self.driver.clone(), *vm.vmid()),
             ))
         } else {
             None
@@ -374,6 +388,27 @@ impl PetriVmConfigHyperV {
             openhcl_diag_handler,
             log_tasks,
         })
+    }
+
+    /// Set the VM to use the specified number of virtual processors.
+    pub fn with_processors(mut self, count: u32) -> Self {
+        self.proc_count = count;
+        self
+    }
+
+    /// Inject Windows secure boot templates into the VM's UEFI.
+    pub fn with_windows_secure_boot_template(mut self) -> Self {
+        if !matches!(self.generation, powershell::HyperVGeneration::Two) {
+            panic!("Secure boot templates are only supported for UEFI firmware.");
+        }
+        self.secure_boot_template = Some(powershell::HyperVSecureBootTemplate::MicrosoftWindows);
+        self
+    }
+
+    /// Adds a file to the agent image.
+    pub fn with_agent_file(mut self, name: &str, artifact: ResolvedArtifact) -> Self {
+        self.agent_image.add_file(name, artifact);
+        self
     }
 }
 
@@ -429,6 +464,12 @@ impl PetriVmHyperV {
     ///   method is best effort for them.
     pub async fn wait_for_successful_boot_event(&mut self) -> anyhow::Result<()> {
         self.vm.wait_for_successful_boot_event().await
+    }
+
+    /// Waits for an event emitted by the firmware about its boot status, and
+    /// returns that status.
+    pub async fn wait_for_boot_event(&mut self) -> anyhow::Result<FirmwareEvent> {
+        self.vm.wait_for_boot_event().await
     }
 
     /// Instruct the guest to shutdown via the Hyper-V shutdown IC.

@@ -53,6 +53,8 @@ pub struct Config {
     pub vmbus_devices: Vec<(DeviceVtl, Resource<VmbusDeviceHandleKind>)>,
     pub chipset_devices: Vec<ChipsetDeviceHandle>,
     pub generation_id_recv: Option<mesh::Receiver<[u8; 16]>>,
+    // This is used for testing. TODO: resourcify, and also store this in VMGS.
+    pub rtc_delta_milliseconds: i64,
 }
 
 // ARM64 needs a larger low gap.
@@ -104,6 +106,7 @@ pub enum LoadMode {
         enable_serial: bool,
         enable_vpci_boot: bool,
         uefi_console_mode: Option<UefiConsoleMode>,
+        default_boot_always_attempt: bool,
     },
     Pcat {
         firmware: RomFileLocation,

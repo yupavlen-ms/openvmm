@@ -85,7 +85,6 @@ use parking_lot::RwLock;
 use processor::BackingSharedParams;
 use processor::SidecarExitReason;
 use sidecar_client::NewSidecarClientError;
-use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 use std::os::fd::AsRawFd;
 use std::sync::Arc;
@@ -109,7 +108,9 @@ use vm_topology::memory::MemoryLayout;
 use vm_topology::processor::ProcessorTopology;
 use vm_topology::processor::TargetVpInfo;
 use vmcore::monitor::MonitorPage;
-use vmcore::reference_time_source::ReferenceTimeSource;
+use vmcore::reference_time::GetReferenceTime;
+use vmcore::reference_time::ReferenceTimeResult;
+use vmcore::reference_time::ReferenceTimeSource;
 use vmcore::vmtime::VmTimeSource;
 use x86defs::snp::REG_TWEAK_BITMAP_OFFSET;
 use x86defs::snp::REG_TWEAK_BITMAP_SIZE;
@@ -348,6 +349,17 @@ struct GuestVsmVpState {
     /// next exit to VTL 0.
     #[inspect(with = "|x| x.as_ref().map(inspect::AsDebug)")]
     vtl0_exit_pending_event: Option<hvdef::HvX64PendingExceptionEvent>,
+    reg_intercept: SecureRegisterInterceptState,
+}
+
+#[cfg(guest_arch = "x86_64")]
+impl GuestVsmVpState {
+    fn new() -> Self {
+        GuestVsmVpState {
+            vtl0_exit_pending_event: None,
+            reg_intercept: Default::default(),
+        }
+    }
 }
 
 #[cfg(guest_arch = "x86_64")]
@@ -384,7 +396,10 @@ impl UhCvmVpState {
         let apic_base = virt::vp::Apic::at_reset(&inner.caps, vp_info).apic_base;
         let lapics = VtlArray::from_fn(|vtl| {
             let apic_set = &cvm_partition.lapic[vtl];
-            let mut lapic = apic_set.add_apic(vp_info);
+
+            // The APIC is software-enabled after reset for secure VTLs, to
+            // maintain compatibility with released versions of secure kernel
+            let mut lapic = apic_set.add_apic(vp_info, vtl == Vtl::Vtl1);
             // Initialize APIC base to match the reset VM state.
             lapic.set_apic_base(apic_base).unwrap();
             // Only the VTL 0 non-BSP LAPICs should be in the WaitForSipi state.
@@ -406,6 +421,19 @@ impl UhCvmVpState {
             vtl1: None,
         })
     }
+}
+
+#[cfg(guest_arch = "x86_64")]
+#[derive(Inspect, Default)]
+/// Configuration of VTL 1 registration for intercepts on certain registers
+pub struct SecureRegisterInterceptState {
+    #[inspect(with = "|x| inspect::AsHex(u64::from(*x))")]
+    intercept_control: hvdef::HvRegisterCrInterceptControl,
+    cr0_mask: u64,
+    cr4_mask: u64,
+    // Writes to X86X_IA32_MSR_MISC_ENABLE are dropped, so this is only used so
+    // that get_vp_register returns the correct value from a set_vp_register
+    ia32_misc_enable_mask: u64,
 }
 
 #[derive(Inspect)]
@@ -519,22 +547,22 @@ impl TscReferenceTimeSource {
 }
 
 /// A time implementation based on TSC.
-impl ReferenceTimeSource for TscReferenceTimeSource {
-    fn now_100ns(&self) -> u64 {
+impl GetReferenceTime for TscReferenceTimeSource {
+    fn now(&self) -> ReferenceTimeResult {
         #[cfg(guest_arch = "x86_64")]
         {
             let tsc = safe_intrinsics::rdtsc();
-            ((self.tsc_scale as u128 * tsc as u128) >> 64) as u64
+            let ref_time = ((self.tsc_scale as u128 * tsc as u128) >> 64) as u64;
+            ReferenceTimeResult {
+                ref_time,
+                system_time: None,
+            }
         }
 
         #[cfg(guest_arch = "aarch64")]
         {
             todo!("AARCH64_TODO");
         }
-    }
-
-    fn is_backed_by_tsc(&self) -> bool {
-        true
     }
 }
 
@@ -767,10 +795,14 @@ impl UhPartition {
 
     /// Returns the current hypervisor reference time, in 100ns units.
     pub fn reference_time(&self) -> u64 {
-        self.inner
-            .hcl
-            .reference_time()
-            .expect("should not fail to get the reference time")
+        if let Some(hv) = self.inner.hv() {
+            hv.ref_time_source().now().ref_time
+        } else {
+            self.inner
+                .hcl
+                .reference_time()
+                .expect("should not fail to get the reference time")
+        }
     }
 }
 
@@ -927,10 +959,22 @@ impl virt::Synic for UhPartition {
         );
     }
 
-    fn new_guest_event_port(&self) -> Box<dyn vmcore::synic::GuestEventPort> {
+    fn new_guest_event_port(
+        &self,
+        vtl: Vtl,
+        vp: u32,
+        sint: u8,
+        flag: u16,
+    ) -> Box<dyn vmcore::synic::GuestEventPort> {
+        let vtl = GuestVtl::try_from(vtl).expect("higher vtl not configured");
         Box::new(UhEventPort {
             partition: Arc::downgrade(&self.inner),
-            params: Default::default(),
+            params: Arc::new(Mutex::new(UhEventPortParams {
+                vp: VpIndex::new(vp),
+                sint,
+                flag,
+                vtl,
+            })),
         })
     }
 
@@ -951,7 +995,7 @@ impl virt::Synic for UhPartition {
 }
 
 impl virt::SynicMonitor for UhPartition {
-    fn set_monitor_page(&self, gpa: Option<u64>) -> anyhow::Result<()> {
+    fn set_monitor_page(&self, _vtl: Vtl, gpa: Option<u64>) -> anyhow::Result<()> {
         let old_gpa = self.inner.monitor_page.set_gpa(gpa);
         if let Some(old_gpa) = old_gpa {
             self.inner
@@ -995,7 +1039,7 @@ impl virt::SynicMonitor for UhPartition {
         &self,
         monitor_id: vmcore::monitor::MonitorId,
         connection_id: u32,
-    ) -> Box<dyn Send> {
+    ) -> Box<dyn Sync + Send> {
         self.inner
             .monitor_page
             .register_monitor(monitor_id, connection_id)
@@ -1032,7 +1076,7 @@ impl UhPartitionInner {
 #[derive(Debug)]
 struct UhEventPort {
     partition: Weak<UhPartitionInner>,
-    params: Arc<Mutex<Option<UhEventPortParams>>>,
+    params: Arc<Mutex<UhEventPortParams>>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -1048,15 +1092,12 @@ impl vmcore::synic::GuestEventPort for UhEventPort {
         let partition = self.partition.clone();
         let params = self.params.clone();
         vmcore::interrupt::Interrupt::from_fn(move || {
-            let Some(UhEventPortParams {
+            let UhEventPortParams {
                 vp,
                 sint,
                 flag,
                 vtl,
-            }) = *params.lock()
-            else {
-                return;
-            };
+            } = *params.lock();
             let Some(partition) = partition.upgrade() else {
                 return;
             };
@@ -1096,25 +1137,8 @@ impl vmcore::synic::GuestEventPort for UhEventPort {
         })
     }
 
-    fn clear(&mut self) {
-        *self.params.lock() = None;
-    }
-
-    fn set(
-        &mut self,
-        vtl: Vtl,
-        vp: u32,
-        sint: u8,
-        flag: u16,
-    ) -> Result<(), vmcore::synic::HypervisorError> {
-        let vtl = GuestVtl::try_from(vtl).expect("higher vtl not configured");
-        *self.params.lock() = Some(UhEventPortParams {
-            vp: VpIndex::new(vp),
-            sint,
-            flag,
-            vtl,
-        });
-
+    fn set_target_vp(&mut self, vp: u32) -> Result<(), vmcore::synic::HypervisorError> {
+        self.params.lock().vp = VpIndex::new(vp);
         Ok(())
     }
 }
@@ -1123,10 +1147,27 @@ impl virt::Hv1 for UhPartition {
     type Error = Error;
     type Device = virt::x86::apic_software_device::ApicSoftwareDevice;
 
+    fn reference_time_source(&self) -> Option<ReferenceTimeSource> {
+        Some(if let Some(hv) = self.inner.hv() {
+            hv.ref_time_source().clone()
+        } else {
+            ReferenceTimeSource::from(self.inner.clone() as Arc<_>)
+        })
+    }
+
     fn new_virtual_device(
         &self,
     ) -> Option<&dyn virt::DeviceBuilder<Device = Self::Device, Error = Self::Error>> {
         self.inner.software_devices.is_some().then_some(self)
+    }
+}
+
+impl GetReferenceTime for UhPartitionInner {
+    fn now(&self) -> ReferenceTimeResult {
+        ReferenceTimeResult {
+            ref_time: self.hcl.reference_time().unwrap(),
+            system_time: None,
+        }
     }
 }
 
@@ -1682,8 +1723,8 @@ impl<'a> UhProtoPartition<'a> {
                 guest_memory: late_params.gm.clone(),
                 #[cfg(guest_arch = "x86_64")]
                 cpuid: &cpuid,
+                hcl: &hcl,
                 guest_vsm_available,
-                _phantom: PhantomData,
             },
         )?;
 
@@ -1862,6 +1903,8 @@ impl UhProtoPartition<'_> {
         guest_memory: VtlArray<GuestMemory, 2>,
         guest_vsm_available: bool,
     ) -> Result<UhCvmPartitionState, Error> {
+        use vmcore::reference_time::ReferenceTimeSource;
+
         let vp_count = params.topology.vp_count() as usize;
         let vps = (0..vp_count)
             .map(|vp_index| UhCvmVpInner {
@@ -1882,7 +1925,7 @@ impl UhProtoPartition<'_> {
         });
 
         let tsc_frequency = get_tsc_frequency(params.isolation)?;
-        let ref_time = Box::new(TscReferenceTimeSource::new(tsc_frequency));
+        let ref_time = ReferenceTimeSource::new(TscReferenceTimeSource::new(tsc_frequency));
 
         // If we're emulating the APIC, then we also must emulate the hypervisor
         // enlightenments, since the hypervisor can't support enlightenments
@@ -1895,6 +1938,7 @@ impl UhProtoPartition<'_> {
             vendor: caps.vendor,
             tsc_frequency,
             ref_time,
+            is_ref_time_backed_by_tsc: true,
             guest_memory,
         });
 

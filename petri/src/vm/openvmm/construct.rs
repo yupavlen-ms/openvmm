@@ -250,6 +250,12 @@ impl PetriVmConfigOpenVmm {
             hyperv_ic_resources::kvp::KvpIcHandle { recv: kvp_ic_recv }.into_resource(),
         ));
 
+        // Add the Hyper-V timesync IC
+        vmbus_devices.push((
+            DeviceVtl::Vtl0,
+            hyperv_ic_resources::timesync::TimesyncIcHandle.into_resource(),
+        ));
+
         // Make a vmbus vsock path for pipette connections
         let (vmbus_vsock_listener, vmbus_vsock_path) = make_vsock_listener()?;
 
@@ -337,6 +343,7 @@ impl PetriVmConfigOpenVmm {
             secure_boot_enabled: false,
             debugger_rpc: None,
             generation_id_recv: None,
+            rtc_delta_milliseconds: 0,
         };
 
         // Make the pipette connection listener.
@@ -562,6 +569,7 @@ impl PetriVmConfigSetupCore<'_> {
                     enable_serial: true,
                     enable_vpci_boot: false,
                     uefi_console_mode: Some(hvlite_defs::config::UefiConsoleMode::Com1),
+                    default_boot_always_attempt: false,
                 }
             }
             (
@@ -685,9 +693,12 @@ impl PetriVmConfigSetupCore<'_> {
                                 disk: LayeredDiskHandle {
                                     layers: vec![
                                         RamDiskLayerHandle { len: None }.into_resource().into(),
-                                        DiskLayerHandle(open_disk_type(disk_path.as_ref(), true)?)
-                                            .into_resource()
-                                            .into(),
+                                        DiskLayerHandle(open_disk_type(
+                                            disk_path.expect("not uefi guest none").as_ref(),
+                                            true,
+                                        )?)
+                                        .into_resource()
+                                        .into(),
                                     ],
                                 }
                                 .into_resource(),
@@ -717,9 +728,12 @@ impl PetriVmConfigSetupCore<'_> {
                             disk: LayeredDiskHandle {
                                 layers: vec![
                                     RamDiskLayerHandle { len: None }.into_resource().into(),
-                                    DiskLayerHandle(open_disk_type(disk_path.as_ref(), true)?)
-                                        .into_resource()
-                                        .into(),
+                                    DiskLayerHandle(open_disk_type(
+                                        disk_path.expect("not uefi guest none").as_ref(),
+                                        true,
+                                    )?)
+                                    .into_resource()
+                                    .into(),
                                 ],
                             }
                             .into_resource(),
@@ -815,6 +829,7 @@ impl PetriVmConfigSetupCore<'_> {
                 disable_frontpage: true,
                 enable_vpci_boot: false,
                 console_mode: get_resources::ged::UefiConsoleMode::COM1,
+                default_boot_always_attempt: false,
             },
             com1: true,
             com2: true,

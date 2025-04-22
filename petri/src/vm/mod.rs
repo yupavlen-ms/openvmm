@@ -33,6 +33,11 @@ pub trait PetriVmConfig: Send {
     async fn run_with_lazy_pipette(self: Box<Self>) -> anyhow::Result<Box<dyn PetriVm>>;
     /// Run the VM, launching pipette and returning a client to it.
     async fn run(self: Box<Self>) -> anyhow::Result<(Box<dyn PetriVm>, PipetteClient)>;
+
+    /// Inject Windows secure boot templates into the VM's UEFI.
+    fn with_windows_secure_boot_template(self: Box<Self>) -> Box<dyn PetriVmConfig>;
+    /// Set the VM to use the specified number of virtual processors.
+    fn with_processors(self: Box<Self>, count: u32) -> Box<dyn PetriVmConfig>;
 }
 
 /// A running VM that tests can interact with.
@@ -61,6 +66,9 @@ pub trait PetriVm: Send {
     /// * PCAT guests may not emit an event depending on the PCAT version, this
     /// method is best effort for them.
     async fn wait_for_successful_boot_event(&mut self) -> anyhow::Result<()>;
+    /// Waits for an event emitted by the firmware about its boot status, and
+    /// returns that status.
+    async fn wait_for_boot_event(&mut self) -> anyhow::Result<FirmwareEvent>;
     /// Instruct the guest to shutdown via the Hyper-V shutdown IC.
     async fn send_enlightened_shutdown(&mut self, kind: ShutdownKind) -> anyhow::Result<()>;
 }
@@ -331,11 +339,11 @@ impl UefiGuest {
         UefiGuest::GuestTestUefi(artifact)
     }
 
-    fn artifact(&self) -> &ResolvedArtifact {
+    fn artifact(&self) -> Option<&ResolvedArtifact> {
         match self {
-            UefiGuest::Vhd(vhd) => &vhd.artifact,
-            UefiGuest::GuestTestUefi(p) => p,
-            UefiGuest::None => unreachable!(),
+            UefiGuest::Vhd(vhd) => Some(&vhd.artifact),
+            UefiGuest::GuestTestUefi(p) => Some(p),
+            UefiGuest::None => None,
         }
     }
 }

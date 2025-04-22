@@ -127,6 +127,14 @@ impl PetriVmConfig for PetriVmConfigOpenVmm {
         let (vm, client) = Self::run(*self).await?;
         Ok((Box::new(vm), client))
     }
+
+    fn with_windows_secure_boot_template(self: Box<Self>) -> Box<dyn PetriVmConfig> {
+        Box::new(Self::with_windows_secure_boot_template(*self))
+    }
+
+    fn with_processors(self: Box<Self>, count: u32) -> Box<dyn PetriVmConfig> {
+        Box::new(Self::with_processors(*self, count))
+    }
 }
 
 /// Various channels and resources used to interact with the VM while it is running.

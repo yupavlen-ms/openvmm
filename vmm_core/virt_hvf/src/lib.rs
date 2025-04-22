@@ -64,6 +64,9 @@ use virt::vp::AccessVpState;
 use virt_support_gic as gic;
 use vm_topology::processor::aarch64::Aarch64VpInfo;
 use vmcore::interrupt::Interrupt;
+use vmcore::reference_time::GetReferenceTime;
+use vmcore::reference_time::ReferenceTimeResult;
+use vmcore::reference_time::ReferenceTimeSource;
 use vmcore::synic::GuestEventPort;
 use vmcore::vmtime::VmTimeAccess;
 
@@ -249,6 +252,12 @@ impl virt::Hv1 for HvfPartition {
     type Error = Error;
     type Device = virt::aarch64::gic_software_device::GicSoftwareDevice;
 
+    fn reference_time_source(&self) -> Option<ReferenceTimeSource> {
+        Some(ReferenceTimeSource::from(
+            self.inner.clone() as Arc<dyn GetReferenceTime>
+        ))
+    }
+
     fn new_virtual_device(
         &self,
     ) -> Option<&dyn virt::DeviceBuilder<Device = Self::Device, Error = Self::Error>> {
@@ -261,6 +270,15 @@ impl virt::DeviceBuilder for HvfPartition {
         Ok(virt::aarch64::gic_software_device::GicSoftwareDevice::new(
             self.inner.clone(),
         ))
+    }
+}
+
+impl GetReferenceTime for HvfPartitionInner {
+    fn now(&self) -> ReferenceTimeResult {
+        ReferenceTimeResult {
+            ref_time: self.vmtime.now().as_100ns(),
+            system_time: None,
+        }
     }
 }
 
@@ -286,10 +304,20 @@ impl virt::Synic for HvfPartition {
         }
     }
 
-    fn new_guest_event_port(&self) -> Box<dyn GuestEventPort> {
+    fn new_guest_event_port(
+        &self,
+        _vtl: Vtl,
+        vp: u32,
+        sint: u8,
+        flag: u16,
+    ) -> Box<dyn GuestEventPort> {
         Box::new(HvfEventPort {
             partition: Arc::downgrade(&self.inner),
-            params: Default::default(),
+            params: Arc::new(RwLock::new(HvfEventPortParams {
+                vp: VpIndex::new(vp),
+                sint,
+                flag,
+            })),
         })
     }
 
@@ -300,7 +328,13 @@ impl virt::Synic for HvfPartition {
 
 struct HvfEventPort {
     partition: Weak<HvfPartitionInner>,
-    params: Arc<RwLock<Option<(VpIndex, u8, u16)>>>,
+    params: Arc<RwLock<HvfEventPortParams>>,
+}
+
+struct HvfEventPortParams {
+    vp: VpIndex,
+    sint: u8,
+    flag: u16,
 }
 
 impl GuestEventPort for HvfEventPort {
@@ -310,35 +344,23 @@ impl GuestEventPort for HvfEventPort {
         Interrupt::from_fn(move || {
             if let Some(partition) = partition.upgrade() {
                 let params = params.read();
-                if let Some((vp, sint, flag)) = *params {
-                    let _ = partition.hv1.synic.signal_event(
-                        vp,
-                        sint,
-                        flag,
-                        &mut |vector, _auto_eoi| {
+                let HvfEventPortParams { vp, sint, flag } = *params;
+                let _ =
+                    partition
+                        .hv1
+                        .synic
+                        .signal_event(vp, sint, flag, &mut |vector, _auto_eoi| {
                             if partition.gicd.raise_ppi(vp, vector) {
                                 tracing::debug!(vector, "ppi from event");
                                 partition.vps[vp.index() as usize].wake();
                             }
-                        },
-                    );
-                }
+                        });
             }
         })
     }
 
-    fn clear(&mut self) {
-        *self.params.write() = None;
-    }
-
-    fn set(
-        &mut self,
-        _vtl: Vtl,
-        vp: u32,
-        sint: u8,
-        flag: u16,
-    ) -> Result<(), vmcore::synic::HypervisorError> {
-        *self.params.write() = Some((VpIndex::new(vp), sint, flag));
+    fn set_target_vp(&mut self, vp: u32) -> Result<(), vmcore::synic::HypervisorError> {
+        self.params.write().vp = VpIndex::new(vp);
         Ok(())
     }
 }
