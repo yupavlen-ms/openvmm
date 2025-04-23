@@ -45,6 +45,13 @@ use zerocopy::FromZeros;
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
 const INVALID_PAGE_ADDR: u64 = !(PAGE_SIZE as u64 - 1);
 
+/// Memory allocator errors.
+#[derive(Debug, Error)]
+pub enum AllocatorError {
+    #[error("no fallback allocator")]
+    NoFallbackAllocator,
+}
+
 pub(crate) struct QueuePair {
     task: Task<QueueHandler>,
     cancel: Cancel,
@@ -53,6 +60,7 @@ pub(crate) struct QueuePair {
     qid: u16,
     sq_entries: u16,
     cq_entries: u16,
+    fallback_alloc_used: bool,
 }
 
 impl Inspect for QueuePair {
@@ -65,6 +73,7 @@ impl Inspect for QueuePair {
             qid: _,
             sq_entries: _,
             cq_entries: _,
+            fallback_alloc_used: _,
         } = self;
         issuer.send.send(Req::Inspect(req.defer()));
     }
@@ -181,18 +190,29 @@ impl QueuePair {
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
     ) -> anyhow::Result<Self> {
+        assert!(sq_entries <= Self::MAX_SQ_ENTRIES);
+        assert!(cq_entries <= Self::MAX_CQ_ENTRIES);
+
+        let mut fallback_involved = false;
         let total_size =
             QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::PER_QUEUE_PAGES * PAGE_SIZE;
         let dma_client = device.dma_client();
         let mem = dma_client
             .allocate_dma_buffer(total_size)
-            .context("failed to allocate memory for queues")?;
-
-        assert!(sq_entries <= Self::MAX_SQ_ENTRIES);
-        assert!(cq_entries <= Self::MAX_CQ_ENTRIES);
+            .context("failed to allocate memory for the queues")
+            .or_else(|_| {
+                fallback_involved = true;
+                device.fallback_dma_client().map_or(
+                    Err(AllocatorError::NoFallbackAllocator.into()),
+                    |f| {
+                        f.allocate_dma_buffer(total_size)
+                            .context("fallback allocator also failed")
+                    },
+                )
+            });
 
         QueuePair::new_or_restore(
-            spawner, qid, sq_entries, cq_entries, interrupt, registers, mem, None,
+            spawner, qid, sq_entries, cq_entries, interrupt, registers, mem?, None, fallback_involved,
         )
     }
 
@@ -206,6 +226,7 @@ impl QueuePair {
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         mem: MemoryBlock,
         saved_state: Option<&QueueHandlerSavedState>,
+        fallback_alloc_used: bool,
     ) -> anyhow::Result<Self> {
         // MemoryBlock is either allocated or restored prior calling here.
         let sq_mem_block = mem.subblock(0, QueuePair::SQ_SIZE);
@@ -255,6 +276,7 @@ impl QueuePair {
             qid,
             sq_entries,
             cq_entries,
+            fallback_alloc_used,
         })
     }
 
@@ -273,6 +295,11 @@ impl QueuePair {
     pub async fn shutdown(mut self) -> impl Send {
         self.cancel.cancel();
         self.task.await
+    }
+
+    /// Indicates that fallback allocator was used for this queue pair.
+    pub fn fallback_used(&self) -> bool {
+        self.fallback_alloc_used
     }
 
     /// Save queue pair state for servicing.
@@ -321,6 +348,7 @@ impl QueuePair {
             registers,
             mem,
             Some(handler_data),
+            false,
         )
     }
 }

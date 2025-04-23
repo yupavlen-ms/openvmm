@@ -366,6 +366,11 @@ impl<T: 'static + Send + InspectMut + MmioIntercept, U: 'static + DmaClient> Dev
         self.device.dma_client()
     }
 
+    // TODO: We should add one for testing.
+    fn fallback_dma_client(&self) -> Option<Arc<dyn DmaClient>> {
+        None
+    }
+
     fn max_interrupt_count(&self) -> u32 {
         self.device.max_interrupt_count()
     }

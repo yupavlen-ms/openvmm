@@ -122,7 +122,7 @@ pub struct OpenhclDmaManager {
 }
 
 /// The required VTL permissions on DMA allocations.
-#[derive(Inspect)]
+#[derive(Clone, Inspect)]
 pub enum LowerVtlPermissionPolicy {
     /// No specific permission constraints are required.
     Any,

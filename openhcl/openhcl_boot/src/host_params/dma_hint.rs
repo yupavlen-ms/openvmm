@@ -3,8 +3,8 @@
 
 //! Calculate DMA hint value if not provided by host.
 
-use igvm_defs::{MemoryMapEntryType, PAGE_SIZE_4K};
 use super::PartitionInfo;
+use igvm_defs::{MemoryMapEntryType, PAGE_SIZE_4K};
 
 /// Lookup table for DMA hint calculation.
 /// Using tuples instead of structs to keep it readable.
@@ -97,8 +97,10 @@ pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 
                         // Prepare for possible extrapolation.
                         min_vtl2_memory_mb = min_vtl2_memory_mb.min(*vtl2_memory_mb);
                         max_vtl2_memory_mb = max_vtl2_memory_mb.max(*vtl2_memory_mb);
-                        min_ratio_1000th = min_ratio_1000th.min(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
-                        max_ratio_1000th = max_ratio_1000th.max(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                        min_ratio_1000th = min_ratio_1000th
+                            .min(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                        max_ratio_1000th = max_ratio_1000th
+                            .max(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
                     }
                 }
                 core::cmp::Ordering::Greater => {
@@ -112,20 +114,24 @@ pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 
         // (i.e. unexpected VP count).
         if max_vtl2_memory_mb == 0 {
             LOOKUP_TABLE
-            .iter()
-            .filter(|(vp_lookup, _, _)| *vp_lookup == min_vp_count || *vp_lookup == max_vp_count)
-            .for_each(|(_, vtl2_memory_mb, dma_hint_mb)| {
-                min_vtl2_memory_mb = min_vtl2_memory_mb.min(*vtl2_memory_mb);
-                max_vtl2_memory_mb = max_vtl2_memory_mb.max(*vtl2_memory_mb);
-                min_ratio_1000th = min_ratio_1000th.min(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
-                max_ratio_1000th = max_ratio_1000th.max(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
-            });
+                .iter()
+                .filter(|(vp_lookup, _, _)| {
+                    *vp_lookup == min_vp_count || *vp_lookup == max_vp_count
+                })
+                .for_each(|(_, vtl2_memory_mb, dma_hint_mb)| {
+                    min_vtl2_memory_mb = min_vtl2_memory_mb.min(*vtl2_memory_mb);
+                    max_vtl2_memory_mb = max_vtl2_memory_mb.max(*vtl2_memory_mb);
+                    min_ratio_1000th =
+                        min_ratio_1000th.min(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                    max_ratio_1000th =
+                        max_ratio_1000th.max(*vtl2_memory_mb as u32 * 1000 / *dma_hint_mb as u32);
+                });
         }
 
         if dma_hint_4k == 0 {
             // Didn't find an exact match for vp_count, try to extrapolate.
-            dma_hint_4k = (mem_size_mb as u64 * 1000u64 * (1048576u64 / PAGE_SIZE_4K)) /
-                ((min_ratio_1000th + max_ratio_1000th) as u64 / 2u64);
+            dma_hint_4k = (mem_size_mb as u64 * 1000u64 * (1048576u64 / PAGE_SIZE_4K))
+                / ((min_ratio_1000th + max_ratio_1000th) as u64 / 2u64);
 
             // And then round up to 2MiB.
             dma_hint_4k = round_up_to_2mb(dma_hint_4k);
@@ -138,14 +144,14 @@ pub fn vtl2_calculate_dma_hint(vp_count: usize, storage: &PartitionInfo) -> u64 
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::host_params::MemoryEntry;
     use crate::MemoryRange;
+    use crate::host_params::MemoryEntry;
     use test_with_tracing::test;
 
     #[test]
     fn test_vtl2_calculate_dma_hint() {
         let mut storage = PartitionInfo::new();
-        
+
         storage.vtl2_ram.clear();
         storage.vtl2_ram.push(MemoryEntry {
             range: MemoryRange::new(0x0..0x6200000),
@@ -153,7 +159,7 @@ mod test {
             vnode: 0,
         });
         assert_eq!(vtl2_calculate_dma_hint(2, &storage), 1024);
-        
+
         storage.vtl2_ram.clear();
         storage.vtl2_ram.push(MemoryEntry {
             range: MemoryRange::new(0x0..0x6E00000),
