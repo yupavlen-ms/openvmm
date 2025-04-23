@@ -344,6 +344,7 @@ impl Worker for UnderhillVmWorker {
             let get_client = get_infra.get_client.clone();
 
             let result = Self::new_or_restart(get_infra, params, true, None, driver).await;
+            tracing::info!("YSP: VM started");
 
             if let Err(err) = &result {
                 tracing::error!(
@@ -1451,6 +1452,7 @@ async fn new_underhill_vm(
         hide_isolation,
     };
 
+    tracing::info!("YSP: Building proto partition {:?}", isolation.is_hardware_isolated());
     let proto_partition = UhProtoPartition::new(params, |cpu| tp.driver(cpu).clone())
         .context("failed to create prototype partition")?;
 
@@ -1548,6 +1550,7 @@ async fn new_underhill_vm(
                 .with_context(|| format!("failed to read shared RAM at {gpa:#x} above VTOM"))?;
         }
     }
+    tracing::info!("YSP: Accepted memory?..");
 
     // Set the gpa allocator to GET that is required by the attestation message.
     //
@@ -1646,6 +1649,7 @@ async fn new_underhill_vm(
             .context("failed to initialize platform security")?
         }
     };
+    tracing::info!("YSP: Passed attestation");
 
     let mut resolver = ResourceResolver::new();
     // Make the GET available for other resources.
@@ -1688,6 +1692,7 @@ async fn new_underhill_vm(
             (firmware_type, Some(config), load_kind)
         }
     };
+    tracing::info!("YSP: Measured config");
 
     // Only advertise extended IOAPIC on non-PCAT systems.
     #[cfg(guest_arch = "x86_64")]
@@ -2956,6 +2961,7 @@ async fn new_underhill_vm(
         .instrument(tracing::info_span!("load_firmware"))
         .await?;
     }
+    tracing::info!("YSP: pretty much done");
 
     // Construct a LoadedVm struct directly, and call the common run loop.
     let loaded_vm = LoadedVm {

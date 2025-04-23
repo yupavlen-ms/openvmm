@@ -708,3 +708,29 @@ pub fn tdcall_vp_invgla(
         _ => Err(output.rax),
     }
 }
+
+/// MigTD: Wait for request.
+pub fn tdcall_wait_for_request(
+    call: &mut impl Tdcall,
+) -> Result<(), TdCallResult> {
+    let input = TdcallInput {
+        leaf: TdCallLeaf::VP_VMCALL,
+        rcx: 0x1c00, // pass R10-R12
+        rdx: 0,
+        r8: 0,
+        r9: 0,
+        r10: 0, // <<< use this one>>>
+        r11: 0,
+        r12: 0,
+        r13: 0,
+        r14: 0,
+        r15: 0,
+    };
+
+    let output = call.tdcall(input);
+
+    match output.rax.code() {
+        TdCallResultCode::SUCCESS => Ok(()),
+        _ => Err(output.rax),
+    }
+}

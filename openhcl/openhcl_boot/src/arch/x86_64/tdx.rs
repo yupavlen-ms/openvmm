@@ -13,6 +13,7 @@ use tdcall::Tdcall;
 use tdcall::TdcallInput;
 use tdcall::TdcallOutput;
 use tdcall::tdcall_map_gpa;
+use x86defs::tdx::TdCallResult;
 
 /// Perform a tdcall instruction with the specified inputs.
 fn tdcall(input: TdcallInput) -> TdcallOutput {
@@ -83,6 +84,11 @@ pub fn change_page_visibility(range: MemoryRange, host_visible: bool) {
             "failed to change page visibility for {range}, host_visible = {host_visible}: {err:?}"
         );
     }
+}
+
+/// TDX MigTD: Wait for request.
+pub fn tdx_wait_for_request() -> Result<(), TdCallResult>{
+    tdcall::tdcall_wait_for_request(&mut TdcallInstruction)
 }
 
 /// Tdcall based io port access.

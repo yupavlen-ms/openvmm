@@ -19,6 +19,7 @@ mod rt;
 mod sidecar;
 mod single_threaded;
 
+use crate::arch::migtd_wait_for_request;
 use crate::arch::setup_vtl2_memory;
 use crate::arch::setup_vtl2_vp;
 #[cfg(target_arch = "x86_64")]
@@ -678,6 +679,7 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
     setup_vtl2_vp(partition_info);
     setup_vtl2_memory(&p, partition_info);
     verify_imported_regions_hash(&p);
+    log!("YSP: boot-shim accepted memory");
 
     let mut sidecar_params = off_stack!(PageAlign<SidecarParams>, zeroed());
     let mut sidecar_output = off_stack!(PageAlign<SidecarOutput>, zeroed());
@@ -792,7 +794,10 @@ fn shim_main(shim_params_raw_offset: isize) -> ! {
 
     rt::verify_stack_cookie();
 
-    log!("uninitializing hypercalls, about to jump to kernel");
+    #[cfg(target_arch = "x86_64")] 
+    migtd_wait_for_request();
+
+    log!("YSP: no TDCALLs beyond this point (boot-shim)");
     hvcall().uninitialize();
 
     cfg_if::cfg_if! {
