@@ -7,6 +7,7 @@ mod pci_shutdown;
 pub mod vtl2_settings_worker;
 
 use self::vtl2_settings_worker::DeviceInterfaces;
+use crate::nvme_manager;
 use crate::ControlRequest;
 use crate::emuplat::EmuplatServicing;
 use crate::emuplat::netvsp::RuntimeSavedState;
@@ -183,7 +184,7 @@ pub(crate) struct LoadedVm {
 
     pub _periodic_telemetry_task: Task<()>,
 
-    pub nvme_keep_alive: bool,
+    pub nvme_keepalive: bool,
     pub test_configuration: Option<TestScenarioConfig>,
     pub dma_manager: OpenhclDmaManager,
 }
@@ -500,7 +501,13 @@ impl LoadedVm {
 
         // NOTE: This is set via the corresponding env arg, as this feature is
         // experimental.
-        let nvme_keepalive = self.nvme_keep_alive && capabilities_flags.enable_nvme_keepalive();
+        let nvme_keepalive_runtime_enabled = if let Some(nvme_manager) = self.nvme_manager.as_ref() {
+            nvme_manager.is_keepalive_still_enabled().await
+        } else {
+            false
+        };
+        let nvme_keepalive = self.nvme_keepalive && capabilities_flags.enable_nvme_keepalive() && nvme_keepalive_runtime_enabled;
+        tracing::info!("YSP: {nvme_keepalive_runtime_enabled} {nvme_keepalive}");
 
         // Do everything before the log flush under a span.
         let r = async {

@@ -33,6 +33,9 @@ pub trait DeviceBacking: 'static + Send + Inspect {
     /// DMA Client for the device.
     fn dma_client(&self) -> Arc<dyn DmaClient>;
 
+    /// Fallback DMA Client for the device.
+    fn fallback_dma_client(&self) -> Option<Arc<dyn DmaClient>>;
+
     /// Returns the maximum number of interrupts that can be mapped.
     fn max_interrupt_count(&self) -> u32;
 

@@ -280,8 +280,8 @@ pub struct UnderhillEnvCfg {
     pub gdbstub: bool,
     /// Hide the isolation mode from the guest.
     pub hide_isolation: bool,
-    /// Enable nvme keep alive.
-    pub nvme_keep_alive: bool,
+    /// Enable nvme keep-alive.
+    pub nvme_keepalive: bool,
     /// test configuration
     pub test_configuration: Option<TestScenarioConfig>,
     /// Disable the UEFI front page.
@@ -1875,7 +1875,10 @@ async fn new_underhill_vm(
         // TODO: reevaluate enablement of nvme save restore when private pool
         // save restore to bootshim is available.
         let private_pool_available = !runtime_params.private_pool_ranges().is_empty();
-        let save_restore_supported = env_cfg.nvme_keep_alive && private_pool_available;
+        // Two separate flags because:
+        //  - private pool alone can be used for other purposes;
+        //  - host must explicitly indicate that keepalive is supported (compatibility).
+        let save_restore_supported = env_cfg.nvme_keepalive && private_pool_available;
 
         let manager = NvmeManager::new(
             &driver_source,
@@ -3095,7 +3098,7 @@ async fn new_underhill_vm(
         control_send,
 
         _periodic_telemetry_task: periodic_telemetry_task,
-        nvme_keep_alive: env_cfg.nvme_keep_alive,
+        nvme_keepalive: env_cfg.nvme_keepalive,
         test_configuration: env_cfg.test_configuration,
         dma_manager,
     };

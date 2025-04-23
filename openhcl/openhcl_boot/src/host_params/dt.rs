@@ -464,16 +464,21 @@ impl PartitionInfo {
         // from the final command line, or the host provided device tree value.
         let vtl2_gpa_pool_size = {
             let dt_page_count = parsed.device_dma_page_count;
-            let cmdline_page_count = options.enable_vtl2_gpa_pool;
-            max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0))
-        };
-        // If host did not provide the DMA hint value, re-evaluate
-        // it internally if conditions satisfy.
-        if vtl2_gpa_pool_size == 0 && parsed.nvme_keepalive {
-            let dma_hint = vtl2_calculate_dma_hint();
-            if dma_hint != 0 {
-                vtl2_gpa_pool_size = dma_hint;
-                //*parsed.device_dma_page_count = Some(dma_hint);
+            let cmdline_page_count =
+                crate::cmdline::parse_boot_command_line(storage.cmdline.as_str())
+                    .enable_vtl2_gpa_pool;
+
+            let hostval = max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0));
+            if hostval == 0
+                && parsed.nvme_keepalive
+                && params.isolation_type == IsolationType::None
+                && storage.memory_allocation_mode == MemoryAllocationMode::Host
+            {
+                // If host did not provide the DMA hint value, re-evaluate
+                // it internally if conditions satisfy.
+                vtl2_calculate_dma_hint(parsed.cpu_count(), storage)
+            } else {
+                hostval
             }
         };
         if vtl2_gpa_pool_size != 0 {
