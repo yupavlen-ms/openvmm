@@ -68,8 +68,10 @@ use virt::x86::SegmentRegister;
 use virt::x86::TableRegister;
 use virt_support_apic::ApicClient;
 use virt_support_apic::OffloadNotSupported;
+use virt_support_x86emu::emulate::EmulatedMemoryOperation;
 use virt_support_x86emu::emulate::EmulatorSupport as X86EmulatorSupport;
 use virt_support_x86emu::emulate::TranslateMode;
+use virt_support_x86emu::emulate::emulate_insn_memory_op;
 use virt_support_x86emu::emulate::emulate_io;
 use virt_support_x86emu::emulate::emulate_translate_gva;
 use virt_support_x86emu::translate::TranslationRegisters;
@@ -80,6 +82,7 @@ use x86defs::X64_CR0_NE;
 use x86defs::X64_CR0_PE;
 use x86defs::X64_CR0_PG;
 use x86defs::X64_CR4_MCE;
+use x86defs::X64_CR4_UMIP;
 use x86defs::X64_CR4_VMXE;
 use x86defs::X64_EFER_FFXSR;
 use x86defs::X64_EFER_LMA;
@@ -100,6 +103,8 @@ use x86defs::vmx::CR_ACCESS_TYPE_LMSW;
 use x86defs::vmx::CR_ACCESS_TYPE_MOV_TO_CR;
 use x86defs::vmx::CrAccessQualification;
 use x86defs::vmx::ExitQualificationIo;
+use x86defs::vmx::GdtrOrIdtrInstruction;
+use x86defs::vmx::GdtrOrIdtrInstructionInfo;
 use x86defs::vmx::INTERRUPT_TYPE_EXTERNAL;
 use x86defs::vmx::INTERRUPT_TYPE_HARDWARE_EXCEPTION;
 use x86defs::vmx::INTERRUPT_TYPE_NMI;
@@ -108,6 +113,8 @@ use x86defs::vmx::IO_SIZE_16_BIT;
 use x86defs::vmx::IO_SIZE_32_BIT;
 use x86defs::vmx::Interruptibility;
 use x86defs::vmx::InterruptionInformation;
+use x86defs::vmx::LdtrOrTrInstruction;
+use x86defs::vmx::LdtrOrTrInstructionInfo;
 use x86defs::vmx::ProcessorControls;
 use x86defs::vmx::SecondaryProcessorControls;
 use x86defs::vmx::VMX_ENTRY_CONTROL_LONG_MODE_GUEST;
@@ -218,7 +225,7 @@ impl ShadowedRegister {
                     | x86defs::X64_CR4_PCE
                     | x86defs::X64_CR4_FXSR
                     | x86defs::X64_CR4_XMMEXCPT
-                    | x86defs::X64_CR4_UMIP
+                    | X64_CR4_UMIP
                     | x86defs::X64_CR4_LA57
                     | x86defs::X64_CR4_RWFSGS
                     | x86defs::X64_CR4_PCIDE
@@ -462,6 +469,7 @@ struct ExitStats {
     pause: Counter,
     needs_interrupt_reinject: Counter,
     exception: Counter,
+    descriptor_table: Counter,
 }
 
 enum UhDirectOverlay {
@@ -618,7 +626,23 @@ impl HardwareIsolatedBacking for TdxBacked {
                 },
         );
 
-        // TODO Update descriptor table intercepts and MSR bitmaps
+        // Update descriptor table intercepts.
+        let intercept_tables = intercept_control.gdtr_write()
+            | intercept_control.idtr_write()
+            | intercept_control.ldtr_write()
+            | intercept_control.tr_write();
+        this.runner.write_vmcs32(
+            vtl,
+            VmcsField::VMX_VMCS_SECONDARY_PROCESSOR_CONTROLS,
+            SecondaryProcessorControls::new()
+                .with_descriptor_table_exiting(true)
+                .into_bits(),
+            SecondaryProcessorControls::new()
+                .with_descriptor_table_exiting(intercept_tables)
+                .into_bits(),
+        );
+
+        // TODO Update MSR bitmaps
     }
 }
 
@@ -2035,6 +2059,48 @@ impl UhProcessor<'_, TdxBacked> {
                     vtl: intercepted_vtl.into(),
                 });
             }
+            VmxExitBasic::GDTR_OR_IDTR => {
+                let info = GdtrOrIdtrInstructionInfo::from(exit_info.instr_info().info());
+                tracing::trace!("Intercepted GDT or IDT instruction: {:?}", info);
+                let reg = match info.instruction() {
+                    GdtrOrIdtrInstruction::Sidt | GdtrOrIdtrInstruction::Lidt => {
+                        HvX64RegisterName::Idtr
+                    }
+                    GdtrOrIdtrInstruction::Sgdt | GdtrOrIdtrInstruction::Lgdt => {
+                        HvX64RegisterName::Gdtr
+                    }
+                };
+                // We only support fowarding intercepts for descriptor table writes today.
+                if (info.instruction().is_write()
+                    && !self.cvm_try_protect_secure_register_write(intercepted_vtl, reg, 0))
+                    || !info.instruction().is_write()
+                {
+                    self.emulate_gdtr_or_idtr(intercepted_vtl, dev).await?;
+                }
+                &mut self.backing.vtls[intercepted_vtl]
+                    .exit_stats
+                    .descriptor_table
+            }
+            VmxExitBasic::LDTR_OR_TR => {
+                let info = LdtrOrTrInstructionInfo::from(exit_info.instr_info().info());
+                tracing::trace!("Intercepted LDT or TR instruction: {:?}", info);
+                let reg = match info.instruction() {
+                    LdtrOrTrInstruction::Sldt | LdtrOrTrInstruction::Lldt => {
+                        HvX64RegisterName::Ldtr
+                    }
+                    LdtrOrTrInstruction::Str | LdtrOrTrInstruction::Ltr => HvX64RegisterName::Tr,
+                };
+                // We only support fowarding intercepts for descriptor table writes today.
+                if (info.instruction().is_write()
+                    && !self.cvm_try_protect_secure_register_write(intercepted_vtl, reg, 0))
+                    || !info.instruction().is_write()
+                {
+                    self.emulate_ldtr_or_tr(intercepted_vtl, dev).await?;
+                }
+                &mut self.backing.vtls[intercepted_vtl]
+                    .exit_stats
+                    .descriptor_table
+            }
             _ => {
                 return Err(VpHaltReason::Hypervisor(UhRunVpError::UnknownVmxExit(
                     exit_info.code().vmx_exit(),
@@ -2936,17 +3002,11 @@ impl UhProcessor<'_, TdxBacked> {
         self.backing.vtls[vtl].cr4.write(value, &mut self.runner)
     }
 
-    fn write_table_register(
-        &mut self,
-        vtl: GuestVtl,
-        table: TdxTableReg,
-        reg: TableRegister,
-    ) -> Result<(), vp_state::Error> {
+    fn write_table_register(&mut self, vtl: GuestVtl, table: TdxTableReg, reg: TableRegister) {
         self.runner
             .write_vmcs64(vtl, table.base_code(), !0, reg.base);
         self.runner
             .write_vmcs32(vtl, table.limit_code(), !0, reg.limit.into());
-        Ok(())
     }
 
     fn read_table_register(&self, vtl: GuestVtl, table: TdxTableReg) -> TableRegister {
@@ -2983,6 +3043,138 @@ impl UhProcessor<'_, TdxBacked> {
                 0
             },
         );
+    }
+
+    async fn emulate_gdtr_or_idtr(
+        &mut self,
+        vtl: GuestVtl,
+        dev: &impl CpuIo,
+    ) -> Result<(), VpHaltReason<UhRunVpError>> {
+        let exit_info = TdxExit(self.runner.tdx_vp_enter_exit_info());
+        assert_eq!(
+            exit_info.code().vmx_exit().basic_reason(),
+            VmxExitBasic::GDTR_OR_IDTR
+        );
+        let instr_info = GdtrOrIdtrInstructionInfo::from(exit_info.instr_info().info());
+        let gps = self.runner.tdx_enter_guest_gps();
+
+        // Check if read instructions are blocked by UMIP.
+        if !instr_info.instruction().is_write()
+            && exit_info.cpl() > 0
+            && self.read_cr4(vtl) & X64_CR4_UMIP != 0
+        {
+            self.inject_gpf(vtl);
+            return Ok(());
+        }
+
+        // Displacement is stored in the qualification field for these instructions.
+        let mut gva = exit_info.qualification();
+        if !instr_info.base_register_invalid() {
+            gva += gps[instr_info.base_register() as usize];
+        }
+        if !instr_info.index_register_invalid() {
+            gva += gps[instr_info.index_register() as usize] << instr_info.scaling();
+        }
+        match instr_info.address_size() {
+            // 16-bit address size
+            0 => gva &= 0xFFFF,
+            // 32-bit address size
+            1 => gva &= 0xFFFFFFFF,
+            // 64-bit address size
+            2 => {}
+            _ => unreachable!(),
+        }
+
+        let segment = match instr_info.segment_register() {
+            0 => Segment::ES,
+            1 => Segment::CS,
+            2 => Segment::SS,
+            3 => Segment::DS,
+            4 => Segment::FS,
+            5 => Segment::GS,
+            _ => unreachable!(),
+        };
+
+        let gm = &self.partition.gm[vtl];
+        let interruption_pending = self.backing.vtls[vtl].interruption_information.valid();
+        let len = 2 + if self.long_mode(vtl) { 8 } else { 4 };
+        let mut buf = [0u8; 10];
+
+        match instr_info.instruction() {
+            GdtrOrIdtrInstruction::Sidt | GdtrOrIdtrInstruction::Sgdt => {
+                let table = self.read_table_register(
+                    vtl,
+                    if matches!(instr_info.instruction(), GdtrOrIdtrInstruction::Sidt) {
+                        TdxTableReg::Idtr
+                    } else {
+                        TdxTableReg::Gdtr
+                    },
+                );
+                buf[..2].copy_from_slice(&table.limit.to_le_bytes());
+                buf[2..].copy_from_slice(&table.base.to_le_bytes());
+                let mut emulation_state = UhEmulationState {
+                    vp: &mut *self,
+                    interruption_pending,
+                    devices: dev,
+                    vtl,
+                    cache: TdxEmulationCache::default(),
+                };
+                emulate_insn_memory_op(
+                    &mut emulation_state,
+                    gm,
+                    dev,
+                    gva,
+                    segment,
+                    x86emu::AlignmentMode::Unaligned,
+                    EmulatedMemoryOperation::Write(&buf[..len]),
+                )
+                .await?;
+            }
+
+            GdtrOrIdtrInstruction::Lgdt | GdtrOrIdtrInstruction::Lidt => {
+                let mut emulation_state = UhEmulationState {
+                    vp: &mut *self,
+                    interruption_pending,
+                    devices: dev,
+                    vtl,
+                    cache: TdxEmulationCache::default(),
+                };
+                emulate_insn_memory_op(
+                    &mut emulation_state,
+                    gm,
+                    dev,
+                    gva,
+                    segment,
+                    x86emu::AlignmentMode::Unaligned,
+                    EmulatedMemoryOperation::Read(&mut buf[..len]),
+                )
+                .await?;
+                let table = TableRegister {
+                    limit: u16::from_le_bytes(buf[..2].try_into().unwrap()),
+                    base: u64::from_le_bytes(buf[2..len].try_into().unwrap()),
+                };
+                self.write_table_register(
+                    vtl,
+                    if matches!(instr_info.instruction(), GdtrOrIdtrInstruction::Lidt) {
+                        TdxTableReg::Idtr
+                    } else {
+                        TdxTableReg::Gdtr
+                    },
+                    table,
+                );
+            }
+        }
+
+        self.advance_to_next_instruction(vtl);
+        Ok(())
+    }
+
+    async fn emulate_ldtr_or_tr(
+        &mut self,
+        _vtl: GuestVtl,
+        _dev: &impl CpuIo,
+    ) -> Result<(), VpHaltReason<UhRunVpError>> {
+        todo!()
     }
 }
 
@@ -3268,9 +3460,9 @@ impl AccessVpState for UhVpStateAccess<'_, '_, TdxBacked> {
 
         // Set table registers
         self.vp
-            .write_table_register(self.vtl, TdxTableReg::Gdtr, *gdtr)?;
+            .write_table_register(self.vtl, TdxTableReg::Gdtr, *gdtr);
         self.vp
-            .write_table_register(self.vtl, TdxTableReg::Idtr, *idtr)?;
+            .write_table_register(self.vtl, TdxTableReg::Idtr, *idtr);
 
         self.vp.write_cr0(self.vtl, *cr0)?;
 
