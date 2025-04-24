@@ -7,7 +7,6 @@ mod pci_shutdown;
 pub mod vtl2_settings_worker;
 
 use self::vtl2_settings_worker::DeviceInterfaces;
-use crate::nvme_manager;
 use crate::ControlRequest;
 use crate::emuplat::EmuplatServicing;
 use crate::emuplat::netvsp::RuntimeSavedState;
