@@ -116,6 +116,30 @@ impl<'a> arbitrary::Arbitrary<'a> for SegmentAttributes {
     }
 }
 
+/// Segment selector (what goes into a segment register)
+#[bitfield(u16)]
+#[derive(PartialEq, Eq)]
+pub struct SegmentSelector {
+    #[bits(2)]
+    /// Request Privilege Level (ring 0-3, where 0 is the highest)
+    pub rpl: u8,
+    /// Table indicator: 0 - GDT, 1 - LDT
+    pub ti: bool,
+    #[bits(13)]
+    /// Index in the descriptor table
+    pub index: u16,
+}
+
+impl SegmentSelector {
+    pub const fn as_bits(&self) -> u16 {
+        self.0
+    }
+
+    pub fn from_gdt_index(index: u16, rpl: u8) -> Self {
+        Self::new().with_index(index).with_rpl(rpl).with_ti(false)
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct SegmentRegister {
     pub base: u64,
@@ -374,6 +398,17 @@ impl LargeGdtEntry {
         entries.as_mut_bytes().copy_from_slice(self.as_bytes());
         entries
     }
+}
+
+#[repr(C, packed)]
+#[derive(Clone, Copy, Immutable, KnownLayout, IntoBytes, FromBytes)]
+pub struct Tss64 {
+    pub _mbz0: u32,
+    pub rsp: [u64; 3],
+    pub ist: [u64; 8],
+    pub _mbz1: u64,
+    pub _mbz2: u16,
+    pub io_map_base: u16,
 }
 
 open_enum! {
