@@ -79,6 +79,10 @@ impl PetriVm for PetriVmOpenVmm {
     async fn send_enlightened_shutdown(&mut self, kind: ShutdownKind) -> anyhow::Result<()> {
         Self::send_enlightened_shutdown(self, kind).await
     }
+
+    async fn wait_for_vtl2_agent(&mut self) -> anyhow::Result<PipetteClient> {
+        Self::wait_for_vtl2_agent(self).await
+    }
 }
 
 pub(super) struct PetriVmInner {
