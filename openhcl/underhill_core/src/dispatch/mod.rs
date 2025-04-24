@@ -500,13 +500,14 @@ impl LoadedVm {
 
         // NOTE: This is set via the corresponding env arg, as this feature is
         // experimental.
-        let nvme_keepalive_runtime_enabled = if let Some(nvme_manager) = self.nvme_manager.as_ref() {
-            nvme_manager.is_keepalive_still_enabled().await
+        let nvme_keepalive_runtime = if let Some(nvme_manager) = self.nvme_manager.as_ref() {
+            nvme_manager.query_keepalive_runtime_status().await
         } else {
             false
         };
-        let nvme_keepalive = self.nvme_keepalive && capabilities_flags.enable_nvme_keepalive() && nvme_keepalive_runtime_enabled;
-        tracing::info!("YSP: {nvme_keepalive_runtime_enabled} {nvme_keepalive}");
+        let nvme_keepalive = self.nvme_keepalive
+            && capabilities_flags.enable_nvme_keepalive()
+            && nvme_keepalive_runtime;
 
         // Do everything before the log flush under a span.
         let r = async {
@@ -539,7 +540,7 @@ impl LoadedVm {
                 if let Some(nvme_manager) = self.nvme_manager.take() {
                     nvme_manager
                         .shutdown(nvme_keepalive)
-                        .instrument(tracing::info_span!("shutdown_nvme_vfio", CVM_ALLOWED, %correlation_id, %nvme_keepalive))
+                        .instrument(tracing::info_span!("shutdown_nvme_vfio", CVM_ALLOWED, %correlation_id, %nvme_keepalive, %nvme_keepalive_runtime))
                         .await;
                 }
             };

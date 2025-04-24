@@ -135,9 +135,18 @@ impl NvmeManager {
     }
 
     /// Save could have been disabled if fallback allocator was used.
-    pub async fn is_keepalive_still_enabled(&self) -> bool {
-        let worker_save_restore = match self.client.sender.call(Request::KeepAliveStatus, ()).await {
-            Ok(s) => s,
+    pub async fn query_keepalive_runtime_status(&self) -> bool {
+        let worker_save_restore = match self.client.sender.call(Request::KeepAliveStatus, ()).await
+        {
+            Ok(s) => {
+                if s.fallback_alloc > 0 {
+                    tracing::warn!(
+                        mem_size = s.fallback_alloc,
+                        "fallback mem allocator was used"
+                    );
+                }
+                s.nvme_keepalive
+            }
             Err(_) => false,
         };
         self.save_restore_supported && worker_save_restore
@@ -183,6 +192,13 @@ impl NvmeManager {
     }
 }
 
+pub struct NvmeKeepaliveRuntimeStatus {
+    /// Indicates if keepalive still enabled.
+    pub nvme_keepalive: bool,
+    /// How much memory (bytes) was allocated by fallback allocator.
+    pub fallback_alloc: u64,
+}
+
 enum Request {
     Inspect(inspect::Deferred),
     ForceLoadDriver(inspect::DeferredUpdate),
@@ -192,7 +208,7 @@ enum Request {
         span: tracing::Span,
         nvme_keepalive: bool,
     },
-    KeepAliveStatus(Rpc<(), bool>),
+    KeepAliveStatus(Rpc<(), NvmeKeepaliveRuntimeStatus>),
 }
 
 #[derive(Debug, Clone)]
@@ -287,17 +303,19 @@ impl NvmeManagerWorker {
                     break (span, do_not_reset);
                 }
                 Request::KeepAliveStatus(rpc) => {
-                    let mut fallback_used = false;
+                    let mut fallback_alloc = 0u64;
                     for (_s, dev) in self.devices.iter_mut() {
-                        // Prevent devices from originating controller reset in drop().
-                        fallback_used |= dev.query_fallback_used().await;
+                        fallback_alloc += dev.query_fallback_alloc().await;
                     }
-                    if fallback_used {
+                    if fallback_alloc > 0 {
                         // If any of the attached devices ever used fallback allocator,
-                        // update internal tracking as well, and return the result.
+                        // update internal tracking and return the result.
                         self.save_restore_supported = false;
                     }
-                    rpc.complete(self.save_restore_supported);
+                    rpc.complete(NvmeKeepaliveRuntimeStatus {
+                        nvme_keepalive: self.save_restore_supported,
+                        fallback_alloc,
+                    });
                 }
             }
         };
@@ -340,7 +358,7 @@ impl NvmeManagerWorker {
                 // Create a fallback allocator which uses heap.
                 // When fallback allocator is involved, nvme_keepalive
                 // will be implicitly disabled.
-                let fallback_dma_client = if self.save_restore_supported {
+                let fallback_dma_client = if self.save_restore_supported && !self.is_isolated {
                     let client: Arc<dyn DmaClient> = self
                         .dma_client_spawner
                         .new_client(DmaClientParameters {
