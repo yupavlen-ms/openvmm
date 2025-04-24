@@ -283,7 +283,8 @@ impl NvmeManagerWorker {
                         // Prevent devices from originating controller reset in drop().
                         dev.update_servicing_flags(do_not_reset);
                     }
-                    break (span, nvme_keepalive);
+                    // Use final combined flag to report back.
+                    break (span, do_not_reset);
                 }
                 Request::KeepAliveStatus(rpc) => {
                     rpc.complete(self.save_restore_supported);
@@ -295,6 +296,7 @@ impl NvmeManagerWorker {
         // because the Shutdown request is never sent.
         //
         // Tear down all the devices if nvme_keepalive is not set.
+        // TODO: Since the loop above is returning combined flag, this condition can be simplified.
         if !nvme_keepalive || !self.save_restore_supported {
             async {
                 join_all(self.devices.drain().map(|(pci_id, driver)| {

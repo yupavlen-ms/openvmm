@@ -94,6 +94,8 @@ struct WorkerState {
     qsize: u16,
     #[inspect(skip)]
     async_event_task: Task<()>,
+    /// Tracks if fallback memory allocator was ever used.
+    fallback_used: bool,
 }
 
 /// An error restoring from saved state.
@@ -302,8 +304,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         )
         .context("failed to create admin queue pair")?;
 
-        if admin.fallback_used() {
-            // Unconditionally disable keepalive if fallback allocator was involved.
+        let fallback_used = admin.fallback_used();
+        if fallback_used {
+            // Unconditionally override keepalive if fallback allocator was involved.
             self.nvme_keepalive = false;
             tracing::info!("YSP: nvme_keepalive explicitly disabled");
         }
@@ -456,13 +459,14 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             qsize,
             async_event_task,
             max_io_queues,
+            fallback_used, // May be updated in create_io_queue() below.
         };
 
         self.admin = Some(admin.issuer().clone());
 
         // Pre-create the IO queue 1 for CPU 0. The other queues will be created
         // lazily. Numbering for I/O queues starts with 1 (0 is Admin).
-        let (issuer, fallback_alloc) = worker
+        let issuer = worker
             .create_io_queue(&mut state, 0)
             .await
             .context("failed to create io queue 1")?;
@@ -680,6 +684,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             qsize: saved_state.worker_data.qsize,
             async_event_task,
             max_io_queues: saved_state.worker_data.max_io_queues,
+            fallback_used: false, // Because this is restore() which implies that everything was saved.
         };
 
         this.admin = Some(admin.issuer().clone());
@@ -858,7 +863,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             return;
         }
 
-        let (issuer, fallback_alloc) = match self
+        let issuer = match self
             .create_io_queue(state, cpu)
             .instrument(info_span!("create_nvme_io_queue", cpu))
             .await
@@ -879,7 +884,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
                     error = err.as_ref() as &dyn std::error::Error,
                     "failed to create io queue, falling back"
                 );
-                (fallback.clone(), false)
+                fallback.clone()
             }
         };
 
@@ -893,7 +898,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
         &mut self,
         state: &mut WorkerState,
         cpu: u32,
-    ) -> anyhow::Result<(IoIssuer, bool)> {
+    ) -> anyhow::Result<IoIssuer> {
         if self.io.len() >= state.max_io_queues as usize {
             anyhow::bail!("no more io queues available");
         }
@@ -920,7 +925,8 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             self.bounce_buffer,
         )
         .with_context(|| format!("failed to create io queue pair {qid}"))?;
-        let fallback_used = queue.fallback_used();
+        // Keep tracking if fallback allocator was ever used.
+        state.fallback_used |= queue.fallback_used();
 
         let io_sq_addr = queue.sq_addr();
         let io_cq_addr = queue.cq_addr();
@@ -992,12 +998,10 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             return Err(err);
         }
 
-        Ok((IoIssuer {
+        Ok(IoIssuer {
             issuer: io_queue.queue.issuer().clone(),
             cpu,
-        },
-        fallback_used,
-        ))
+        })
     }
 
     /// Save NVMe driver state for servicing.
