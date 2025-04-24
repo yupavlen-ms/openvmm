@@ -287,6 +287,16 @@ impl NvmeManagerWorker {
                     break (span, do_not_reset);
                 }
                 Request::KeepAliveStatus(rpc) => {
+                    let mut fallback_used = false;
+                    for (_s, dev) in self.devices.iter_mut() {
+                        // Prevent devices from originating controller reset in drop().
+                        fallback_used |= dev.query_fallback_used().await;
+                    }
+                    if fallback_used {
+                        // If any of the attached devices ever used fallback allocator,
+                        // update internal tracking as well, and return the result.
+                        self.save_restore_supported = false;
+                    }
                     rpc.complete(self.save_restore_supported);
                 }
             }

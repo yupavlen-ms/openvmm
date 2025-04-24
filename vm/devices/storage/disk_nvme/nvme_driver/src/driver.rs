@@ -172,6 +172,8 @@ enum NvmeWorkerRequest {
     CreateIssuer(Rpc<u32, ()>),
     /// Save worker state.
     Save(Rpc<(), anyhow::Result<NvmeDriverWorkerSavedState>>),
+    /// Query worker state.
+    QueryAllocatorFallback(Rpc<(), bool>),
 }
 
 impl<T: DeviceBacking> NvmeDriver<T> {
@@ -749,6 +751,21 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     pub fn update_servicing_flags(&mut self, nvme_keepalive: bool) {
         self.nvme_keepalive = nvme_keepalive;
     }
+
+    /// Queries worker task if memory allocator ever fell back.
+    pub async fn query_fallback_used(&self) -> bool {
+        let fb = self
+            .io_issuers
+            .send
+            .call(NvmeWorkerRequest::QueryAllocatorFallback, ())
+            .await;
+        match fb {
+            Ok(fallback_used) => fallback_used,
+            Err(_) => {
+                false
+            }
+        }
+    }
 }
 
 async fn handle_asynchronous_events(
@@ -847,6 +864,9 @@ impl<T: DeviceBacking> AsyncRun<WorkerState> for DriverWorkerTask<T> {
                     }
                     Some(NvmeWorkerRequest::Save(rpc)) => {
                         rpc.handle(async |_| self.save(state).await).await
+                    }
+                    Some(NvmeWorkerRequest::QueryAllocatorFallback(rpc)) => {
+                        rpc.complete(state.fallback_used)
                     }
                     None => break,
                 }
