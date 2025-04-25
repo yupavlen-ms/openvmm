@@ -7,6 +7,7 @@
 
 use hvdef::HV_PAGE_SIZE;
 use memory_range::MemoryRange;
+use x86defs::tdx::MigTdSubFunction;
 use x86defs::tdx::TDX_SHARED_GPA_BOUNDARY_ADDRESS_BIT;
 use x86defs::tdx::TdCallLeaf;
 use x86defs::tdx::TdCallResult;
@@ -709,25 +710,32 @@ pub fn tdcall_vp_invgla(
     }
 }
 
-/// MigTD: Wait for request.
+/// YSP: MigTD: Wait for request.
 pub fn tdcall_wait_for_request(
     call: &mut impl Tdcall,
 ) -> Result<(), TdCallResult> {
     let input = TdcallInput {
         leaf: TdCallLeaf::VP_VMCALL,
-        rcx: 0x1c00, // pass R10-R12
+        rcx: 0x1c00, // pass R10-R12 // YSP: update bitmask. 0x3c00 is R10-R13.
         rdx: 0,
         r8: 0,
         r9: 0,
-        r10: 0, // <<< use this one>>>
-        r11: 0,
-        r12: 0,
-        r13: 0,
-        r14: 0,
-        r15: 0,
+        r10: 0, // YSP: it says "must be 0 for GHCI call" - is this true?..
+        r11: TdVmCallSubFunction::MigTd as u64,
+        r12: MigTdSubFunction::WaitForRequest as u64,
+        r13: 0, // YSP: data buffer length
+        r14: 0, // YSP: data buffer | SHARED_BIT_MASK
+        r15: 0, // YSP: interrupt
     };
 
     let output = call.tdcall(input);
+
+    // YSP: result, if present, should be in R10.
+    // let result = TdVmCallR10Result(output.r10);
+    // match result {
+    //     TdVmCallR10Result::SUCCESS => Ok(()),
+    //     val => Err(val),
+    // }
 
     match output.rax.code() {
         TdCallResultCode::SUCCESS => Ok(()),

@@ -195,10 +195,20 @@ pub struct TdgMemPageAttrWriteR8 {
 /// 0`.
 #[repr(u64)]
 pub enum TdVmCallSubFunction {
-    IoInstr = 0x1e,
-    RdMsr = 0x1f,
-    WrMsr = 0x20,
-    MapGpa = 0x10001,
+    IoInstr = 0x1e, // YSP: Corresponds to TDVMCALL_IO
+    RdMsr = 0x1f, // YSP: Corresponds to TDVMCALL_RDMSR
+    WrMsr = 0x20, // YSP: Corresponds to TDVMCALL_WRMSR
+    MapGpa = 0x10001, // YSP: Corresponds to TDVMCALL_MAPGPA
+
+    MigTd = 0x10006, // YSP: Added this, is this the right place?
+}
+
+#[repr(u64)]
+pub enum MigTdSubFunction {
+    WaitForRequest = 0x1, // YSP: Corresponds to TDVMCALL_MIGTD_WAITFORREQUEST
+    ReportStatus = 0x2,
+    Send = 0x3,
+    Receive = 0x4,
 }
 
 open_enum! {

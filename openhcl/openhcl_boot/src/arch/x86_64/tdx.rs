@@ -15,6 +15,7 @@ use tdcall::TdcallOutput;
 use tdcall::tdcall_map_gpa;
 use x86defs::tdx::TdCallResult;
 
+// YSP: We should call here.
 /// Perform a tdcall instruction with the specified inputs.
 fn tdcall(input: TdcallInput) -> TdcallOutput {
     let rax: u64;
@@ -62,6 +63,7 @@ fn tdcall(input: TdcallInput) -> TdcallOutput {
 pub struct TdcallInstruction;
 
 impl Tdcall for TdcallInstruction {
+    // YSP: This one is probably the main interface.
     fn tdcall(&mut self, input: TdcallInput) -> TdcallOutput {
         tdcall(input)
     }
@@ -87,7 +89,8 @@ pub fn change_page_visibility(range: MemoryRange, host_visible: bool) {
 }
 
 /// TDX MigTD: Wait for request.
-pub fn tdx_wait_for_request() -> Result<(), TdCallResult>{
+pub fn tdx_wait_for_request() -> Result<(), TdCallResult> {
+    // YSP: Added this.
     tdcall::tdcall_wait_for_request(&mut TdcallInstruction)
 }
 
