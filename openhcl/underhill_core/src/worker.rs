@@ -1533,6 +1533,14 @@ async fn new_underhill_vm(
             .context("failed to restore global dma manager")?;
     }
 
+    // Print important info about DMA sizes.
+    tracing::info!(
+        dma_hint_self = boot_info.dma_hint_self,
+        shared_pool_size = shared_pool_size,
+        private_pool_size = dma_manager.private_pool_size(),
+        "dma pool"
+    );
+
     // Test with the highest VTL for which we have a GuestMemory object
     let highest_vtl_gm = gm.vtl1().unwrap_or(gm.vtl0());
 

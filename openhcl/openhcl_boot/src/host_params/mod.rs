@@ -98,6 +98,8 @@ pub struct PartitionInfo {
     pub nvme_keepalive: bool,
     /// Parsed boot command line options.
     pub boot_options: BootCommandLineOptions,
+    /// DMA hint was calculated in boot-shim instead of host.
+    pub dma_hint_self: bool,
 }
 
 impl PartitionInfo {
@@ -130,6 +132,7 @@ impl PartitionInfo {
             vtl0_alias_map: None,
             nvme_keepalive: false,
             boot_options: BootCommandLineOptions::new(),
+            dma_hint_self: false,
         }
     }
 

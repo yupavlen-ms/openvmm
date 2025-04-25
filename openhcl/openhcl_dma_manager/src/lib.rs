@@ -425,6 +425,20 @@ impl OpenhclDmaManager {
 
         Ok(())
     }
+
+    /// Return shared pool size in bytes.
+    pub fn shared_pool_size(&self) -> u64 {
+        self.shared_pool
+            .as_ref()
+            .map_or(0, |pool| pool.total_size())
+    }
+
+    /// Return private pool size in bytes.
+    pub fn private_pool_size(&self) -> u64 {
+        self.private_pool
+            .as_ref()
+            .map_or(0, |pool| pool.total_size())
+    }
 }
 
 /// A spawner for creating DMA clients.
