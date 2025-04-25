@@ -3808,6 +3808,7 @@ dependencies = [
  "anyhow",
  "hvdef",
  "inspect",
+ "parking_lot",
  "user_driver",
  "virt",
 ]
