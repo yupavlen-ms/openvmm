@@ -108,4 +108,19 @@ impl<T: DmaClient> DmaClient for LowerVtlMemorySpawner<T> {
     fn attach_pending_buffers(&self) -> Result<Vec<MemoryBlock>> {
         anyhow::bail!("restore is not supported for LowerVtlMemorySpawner")
     }
+
+    /// Query if this client supports persistent allocations.
+    fn is_persistent(&self) -> bool {
+        false
+    }
+
+    /// How much memory was allocated during session.
+    fn alloc_size(&self) -> u64 {
+        0
+    }
+
+    /// How much backup memory was allocated during session (fallback).
+    fn fallback_alloc_size(&self) -> u64 {
+        0
+    }
 }

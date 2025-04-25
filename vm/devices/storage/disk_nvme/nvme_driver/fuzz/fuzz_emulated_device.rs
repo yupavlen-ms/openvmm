@@ -53,11 +53,6 @@ impl<T: 'static + Send + InspectMut + MmioIntercept, U: 'static + DmaClient> Dev
         self.device.dma_client()
     }
 
-    // Not implemented for Fuzzer yet.
-    fn fallback_dma_client(&self) -> Option<Arc<dyn DmaClient>> {
-        None
-    }
-
     /// Arbitrarily decide to passthrough or return arbitrary value.
     fn max_interrupt_count(&self) -> u32 {
         // Case: Fuzz response

@@ -134,4 +134,19 @@ impl crate::DmaClient for LockedMemorySpawner {
     fn attach_pending_buffers(&self) -> anyhow::Result<Vec<crate::memory::MemoryBlock>> {
         anyhow::bail!("restore not supported for lockmem")
     }
+
+    /// Query if this client supports persistent allocations.
+    fn is_persistent(&self) -> bool {
+        false
+    }
+
+    /// How much memory was allocated during session.
+    fn alloc_size(&self) -> u64 {
+        0
+    }
+
+    /// How much backup memory was allocated during session (fallback).
+    fn fallback_alloc_size(&self) -> u64 {
+        0
+    }
 }
