@@ -306,7 +306,7 @@ impl DmaManagerInner {
                     LowerVtlPermissionPolicy::Any => {
                         // No persistence needed means the `LockedMemorySpawner`
                         // using normal VTL2 ram is fine.
-                        DmaClientBacking::LockedMemory(LockedMemorySpawner)
+                        DmaClientBacking::LockedMemory(LockedMemorySpawner::new())
                     }
                     LowerVtlPermissionPolicy::Vtl0 => {
                         // `LockedMemorySpawner` uses private VTL2 ram, so
@@ -517,6 +517,7 @@ impl DmaClient for OpenhclDmaClient {
         &self,
         total_size: usize,
     ) -> anyhow::Result<user_driver::memory::MemoryBlock> {
+        // The stats must be tracked here, not in the backing.
         let mut stats = self.inner_stats.lock();
         stats.total_alloc += total_size as u64;
         let mem_block = self.backing.allocate_dma_buffer(total_size).or_else(|_| {
