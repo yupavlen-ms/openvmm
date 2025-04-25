@@ -504,6 +504,7 @@ pub struct PagePool {
     inner: Arc<PagePoolInner>,
     #[inspect(iter_by_index)]
     ranges: Vec<MemoryRange>,
+    total_len: u64,
 }
 
 impl PagePool {
@@ -557,6 +558,7 @@ impl PagePool {
                 mapping,
             }),
             ranges: memory.to_vec(),
+            total_len: total_len as u64,
         })
     }
 
@@ -620,6 +622,11 @@ impl PagePool {
         } else {
             Ok(())
         }
+    }
+
+    /// Returns the total size of the pool in bytes.
+    pub fn total_size(&self) -> u64 {
+        self.total_len
     }
 }
 

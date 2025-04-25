@@ -456,6 +456,7 @@ impl PartitionInfo {
             .vtl2_used_ranges
             .extend(flatten_ranges(used_ranges.iter().copied()));
 
+        let mut vtl2_dma_hint_self = false;
         // Decide if we will reserve memory for a VTL2 private pool. Parse this
         // from the final command line, or the host provided device tree value.
         let vtl2_gpa_pool_size = {
@@ -472,6 +473,7 @@ impl PartitionInfo {
             {
                 // If host did not provide the DMA hint value, re-evaluate
                 // it internally if conditions satisfy.
+                vtl2_dma_hint_self = true;
                 vtl2_calculate_dma_hint(parsed.cpu_count(), storage)
             } else {
                 hostval
@@ -512,6 +514,7 @@ impl PartitionInfo {
                 .extend(flatten_ranges(used_ranges.iter().copied()));
 
             storage.vtl2_pool_memory = pool;
+            storage.dma_hint_self = vtl2_dma_hint_self;
         }
 
         // If we can trust the host, use the provided alias map
@@ -540,6 +543,7 @@ impl PartitionInfo {
             entropy,
             vtl0_alias_map: _,
             nvme_keepalive,
+            dma_hint_self,
         } = storage;
 
         assert!(!vtl2_used_ranges.is_empty());
@@ -562,6 +566,7 @@ impl PartitionInfo {
         *gic = parsed.gic.clone();
         *entropy = parsed.entropy.clone();
         *nvme_keepalive = parsed.nvme_keepalive;
+        *dma_hint_self = vtl2_dma_hint_self;
 
         Ok(Some(storage))
     }
