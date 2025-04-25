@@ -45,13 +45,6 @@ use zerocopy::FromZeros;
 /// Value for unused PRP entries, to catch/mitigate buffer size mismatches.
 const INVALID_PAGE_ADDR: u64 = !(PAGE_SIZE as u64 - 1);
 
-/// Memory allocator errors.
-#[derive(Debug, Error)]
-pub enum AllocatorError {
-    #[error("no fallback mem allocator")]
-    NoFallbackAllocator,
-}
-
 pub(crate) struct QueuePair {
     task: Task<QueueHandler>,
     cancel: Cancel,
@@ -60,7 +53,6 @@ pub(crate) struct QueuePair {
     qid: u16,
     sq_entries: u16,
     cq_entries: u16,
-    fallback_alloc: u64,
 }
 
 impl Inspect for QueuePair {
@@ -73,7 +65,6 @@ impl Inspect for QueuePair {
             qid: _,
             sq_entries: _,
             cq_entries: _,
-            fallback_alloc: _,
         } = self;
         issuer.send.send(Req::Inspect(req.defer()));
     }
@@ -217,17 +208,7 @@ impl QueuePair {
         let dma_client = device.dma_client();
         let mem = dma_client
             .allocate_dma_buffer(total_size)
-            .context("failed to allocate memory for the queues")
-            .or_else(|_| {
-                fallback_alloc += total_size as u64;
-                device.fallback_dma_client().map_or(
-                    Err(AllocatorError::NoFallbackAllocator.into()),
-                    |f| {
-                        f.allocate_dma_buffer(total_size)
-                            .context("fallback mem allocator also failed")
-                    },
-                )
-            });
+            .context("failed to allocate memory for the queues")?;
 
         QueuePair::new_or_restore(
             spawner,
@@ -321,7 +302,6 @@ impl QueuePair {
             qid,
             sq_entries,
             cq_entries,
-            fallback_alloc,
         })
     }
 
@@ -340,11 +320,6 @@ impl QueuePair {
     pub async fn shutdown(mut self) -> impl Send {
         self.cancel.cancel();
         self.task.await
-    }
-
-    /// Indicates that fallback allocator was used for this queue pair.
-    pub fn fallback_alloc(&self) -> u64 {
-        self.fallback_alloc
     }
 
     /// Save queue pair state for servicing.

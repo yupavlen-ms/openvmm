@@ -161,11 +161,6 @@ impl<T: 'static + Send + InspectMut + MmioIntercept, U: 'static + Send + DmaClie
         self.dma_client.clone()
     }
 
-    // Not needed for Emulated.
-    fn fallback_dma_client(&self) -> Option<Arc<dyn DmaClient>> {
-        None
-    }
-
     fn max_interrupt_count(&self) -> u32 {
         self.controller.events.len() as u32
     }

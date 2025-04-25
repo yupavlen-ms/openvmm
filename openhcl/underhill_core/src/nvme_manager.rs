@@ -30,6 +30,7 @@ use std::sync::Arc;
 use thiserror::Error;
 use tracing::Instrument;
 use user_driver::DmaClient;
+use user_driver::DmaClientAllocStats;
 use user_driver::vfio::VfioDevice;
 use vm_resource::AsyncResolveResource;
 use vm_resource::ResourceId;
@@ -139,9 +140,9 @@ impl NvmeManager {
         let worker_save_restore = match self.client.sender.call(Request::KeepAliveStatus, ()).await
         {
             Ok(s) => {
-                if s.fallback_alloc > 0 {
+                if s.stats.fallback_alloc > 0 {
                     tracing::warn!(
-                        mem_size = s.fallback_alloc,
+                        mem_size = s.stats.fallback_alloc,
                         "fallback mem allocator was used"
                     );
                 }
@@ -193,10 +194,10 @@ impl NvmeManager {
 }
 
 pub struct NvmeKeepaliveRuntimeStatus {
-    /// Indicates if keepalive still enabled.
+    /// Indicates if keepalive is still enabled.
     pub nvme_keepalive: bool,
-    /// How much memory (bytes) was allocated by fallback allocator.
-    pub fallback_alloc: u64,
+    /// Retrieve statistics from connected DMA client.
+    pub stats: DmaClientAllocStats,
 }
 
 enum Request {
@@ -303,18 +304,23 @@ impl NvmeManagerWorker {
                     break (span, do_not_reset);
                 }
                 Request::KeepAliveStatus(rpc) => {
-                    let mut fallback_alloc = 0u64;
+                    let mut stats = DmaClientAllocStats {
+                        total_alloc: 0,
+                        fallback_alloc: 0,
+                    };
                     for (_s, dev) in self.devices.iter_mut() {
-                        fallback_alloc += dev.query_fallback_alloc().await;
+                        let dev_stats = dev.get_alloc_stats().await;
+                        stats.total_alloc += dev_stats.total_alloc;
+                        stats.fallback_alloc += dev_stats.fallback_alloc;
                     }
-                    if fallback_alloc > 0 {
+                    if stats.fallback_alloc > 0 {
                         // If any of the attached devices ever used fallback allocator,
                         // update internal tracking and return the result.
                         self.save_restore_supported = false;
                     }
                     rpc.complete(NvmeKeepaliveRuntimeStatus {
                         nvme_keepalive: self.save_restore_supported,
-                        fallback_alloc,
+                        stats,
                     });
                 }
             }
@@ -347,51 +353,45 @@ impl NvmeManagerWorker {
             hash_map::Entry::Occupied(entry) => entry.into_mut(),
             hash_map::Entry::Vacant(entry) => {
                 let device_name = format!("nvme_{}", pci_id);
+                let lower_vtl_policy = LowerVtlPermissionPolicy::Any;
                 let allocation_visibility = if self.is_isolated {
                     AllocationVisibility::Shared
                 } else {
                     AllocationVisibility::Private
                 };
-                let lower_vtl_policy = LowerVtlPermissionPolicy::Any;
+
+                // Main client parameters.
+                let main_params = DmaClientParameters {
+                    device_name: device_name.clone(),
+                    lower_vtl_policy: lower_vtl_policy.clone(),
+                    allocation_visibility,
+                    persistent_allocations: self.save_restore_supported,
+                };
 
                 // Persistent allocations use fixed size memory.
                 // Create a fallback allocator which uses heap.
                 // When fallback allocator is involved, nvme_keepalive
                 // will be implicitly disabled.
-                let fallback_dma_client = if self.save_restore_supported && !self.is_isolated {
-                    let client: Arc<dyn DmaClient> = self
-                        .dma_client_spawner
-                        .new_client(DmaClientParameters {
-                            device_name: device_name.clone(),
-                            lower_vtl_policy: lower_vtl_policy.clone(),
-                            allocation_visibility,
-                            persistent_allocations: false,
-                        })
-                        .map_err(InnerError::DmaClient)?;
-                    Some(client)
+                let fallback_params = if self.save_restore_supported && !self.is_isolated {
+                    Some(DmaClientParameters {
+                        device_name,
+                        lower_vtl_policy,
+                        allocation_visibility,
+                        persistent_allocations: false,
+                    })
                 } else {
                     None
                 };
 
                 let dma_client = self
                     .dma_client_spawner
-                    .new_client(DmaClientParameters {
-                        device_name,
-                        lower_vtl_policy,
-                        allocation_visibility,
-                        persistent_allocations: self.save_restore_supported,
-                    })
+                    .new_client(main_params, fallback_params)
                     .map_err(InnerError::DmaClient)?;
 
-                let device = VfioDevice::new(
-                    &self.driver_source,
-                    entry.key(),
-                    dma_client,
-                    fallback_dma_client,
-                )
-                .instrument(tracing::info_span!("vfio_device_open", pci_id))
-                .await
-                .map_err(InnerError::Vfio)?;
+                let device = VfioDevice::new(&self.driver_source, entry.key(), dma_client)
+                    .instrument(tracing::info_span!("vfio_device_open", pci_id))
+                    .await
+                    .map_err(InnerError::Vfio)?;
 
                 // TODO: For now, any isolation means use bounce buffering. This
                 // needs to change when we have nvme devices that support DMA to
@@ -427,6 +427,45 @@ impl NvmeManagerWorker {
             .map_err(|source| InnerError::Namespace { nsid, source })
     }
 
+    /// Copy of the code from get_driver.
+    fn get_dma_client(&self, pci_id: String) -> Result<Arc<dyn DmaClient>, InnerError> {
+        let device_name = format!("nvme_{}", pci_id);
+        let lower_vtl_policy = LowerVtlPermissionPolicy::Any;
+        let allocation_visibility = if self.is_isolated {
+            AllocationVisibility::Shared
+        } else {
+            AllocationVisibility::Private
+        };
+
+        // Main client parameters.
+        let main_params = DmaClientParameters {
+            device_name: device_name.clone(),
+            lower_vtl_policy: lower_vtl_policy.clone(),
+            allocation_visibility,
+            persistent_allocations: self.save_restore_supported,
+        };
+
+        // Persistent allocations use fixed size memory.
+        // Create a fallback allocator which uses heap.
+        // When fallback allocator is involved, nvme_keepalive
+        // will be implicitly disabled.
+        let fallback_params = if self.save_restore_supported && !self.is_isolated {
+            Some(DmaClientParameters {
+                device_name,
+                lower_vtl_policy,
+                allocation_visibility,
+                persistent_allocations: false,
+            })
+        } else {
+            None
+        };
+
+        Ok(self
+            .dma_client_spawner
+            .new_client(main_params, fallback_params)
+            .map_err(InnerError::DmaClient)?)
+    }
+
     /// Saves NVMe device's states into buffer during servicing.
     pub async fn save(&mut self) -> anyhow::Result<NvmeManagerSavedState> {
         let mut nvme_disks: Vec<NvmeSavedDiskConfig> = Vec::new();
@@ -451,30 +490,15 @@ impl NvmeManagerWorker {
         self.devices = HashMap::new();
         for disk in &saved_state.nvme_disks {
             let pci_id = disk.pci_id.clone();
-
-            let dma_client = self.dma_client_spawner.new_client(DmaClientParameters {
-                device_name: format!("nvme_{}", pci_id),
-                lower_vtl_policy: LowerVtlPermissionPolicy::Any,
-                allocation_visibility: if self.is_isolated {
-                    AllocationVisibility::Shared
-                } else {
-                    AllocationVisibility::Private
-                },
-                persistent_allocations: true,
-            })?;
+            let dma_client = self.get_dma_client(pci_id.clone())?;
 
             // This code can wait on each VFIO device until it is arrived.
             // A potential optimization would be to delay VFIO operation
             // until it is ready, but a redesign of VfioDevice is needed.
-            let vfio_device = VfioDevice::restore(
-                &self.driver_source,
-                &disk.pci_id.clone(),
-                true,
-                dma_client,
-                None,
-            )
-            .instrument(tracing::info_span!("vfio_device_restore", pci_id))
-            .await?;
+            let vfio_device =
+                VfioDevice::restore(&self.driver_source, &disk.pci_id.clone(), true, dma_client)
+                    .instrument(tracing::info_span!("vfio_device_restore", pci_id))
+                    .await?;
 
             // TODO: For now, any isolation means use bounce buffering. This
             // needs to change when we have nvme devices that support DMA to

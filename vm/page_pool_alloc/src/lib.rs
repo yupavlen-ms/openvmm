@@ -657,6 +657,8 @@ pub struct PagePoolAllocator {
     inner: Arc<PagePoolInner>,
     #[inspect(skip)]
     device_id: usize,
+    /// Total alloc size in bytes for the duration.
+    alloc_size: Mutex<u64>,
 }
 
 impl PagePoolAllocator {
@@ -695,6 +697,7 @@ impl PagePoolAllocator {
         Ok(Self {
             inner: inner.clone(),
             device_id,
+            alloc_size: Mutex::new(0),
         })
     }
 
@@ -867,7 +870,7 @@ impl user_driver::DmaClient for PagePoolAllocator {
 
         let alloc = self
             .alloc(size_pages, "vfio dma".into())
-            .context("failed to allocate shared mem")?;
+            .context("failed to allocate from page pool")?;
 
         // The VfioDmaBuffer trait requires that newly allocated buffers are
         // zeroed.
@@ -882,6 +885,21 @@ impl user_driver::DmaClient for PagePoolAllocator {
             .into_iter()
             .map(|alloc| alloc.into_memory_block())
             .collect()
+    }
+
+    /// Query if this client supports persistent allocations.
+    fn is_persistent(&self) -> bool {
+        true
+    }
+
+    /// How much memory was allocated during session.
+    fn alloc_size(&self) -> u64 {
+        0
+    }
+
+    /// How much backup memory was allocated during session (fallback).
+    fn fallback_alloc_size(&self) -> u64 {
+        0
     }
 }
 

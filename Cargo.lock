@@ -4860,6 +4860,8 @@ dependencies = [
  "memory_range",
  "mesh",
  "page_pool_alloc",
+ "parking_lot",
+ "thiserror 2.0.12",
  "user_driver",
  "virt",
  "vmcore",

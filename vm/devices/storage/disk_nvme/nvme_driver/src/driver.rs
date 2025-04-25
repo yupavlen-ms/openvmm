@@ -34,6 +34,7 @@ use thiserror::Error;
 use tracing::Instrument;
 use tracing::info_span;
 use user_driver::DeviceBacking;
+use user_driver::DmaClientAllocStats;
 use user_driver::backoff::Backoff;
 use user_driver::interrupt::DeviceInterrupt;
 use user_driver::memory::MemoryBlock;
@@ -94,8 +95,6 @@ struct WorkerState {
     qsize: u16,
     #[inspect(skip)]
     async_event_task: Task<()>,
-    /// Tracks how much memory was allocated using fallback allocator.
-    fallback_alloc: u64,
 }
 
 /// An error restoring from saved state.
@@ -173,7 +172,7 @@ enum NvmeWorkerRequest {
     /// Save worker state.
     Save(Rpc<(), anyhow::Result<NvmeDriverWorkerSavedState>>),
     /// Query how much memory was allocated with fallback allocator.
-    QueryAllocatorFallback(Rpc<(), u64>),
+    QueryAllocatorStats(Rpc<(), DmaClientAllocStats>),
 }
 
 impl<T: DeviceBacking> NvmeDriver<T> {
@@ -306,11 +305,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         )
         .context("failed to create admin queue pair")?;
 
-        let fallback_alloc = admin.fallback_alloc();
-        if fallback_alloc > 0 {
-            // Unconditionally override keepalive if fallback allocator was involved.
-            self.nvme_keepalive = false;
-        }
         let admin = worker.admin.insert(admin);
 
         // Register the admin queue with the controller.
@@ -460,7 +454,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             qsize,
             async_event_task,
             max_io_queues,
-            fallback_alloc, // May be updated in create_io_queue() below.
         };
 
         self.admin = Some(admin.issuer().clone());
@@ -685,7 +678,6 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             qsize: saved_state.worker_data.qsize,
             async_event_task,
             max_io_queues: saved_state.worker_data.max_io_queues,
-            fallback_alloc: 0, // This is restore() which implies that everything was saved.
         };
 
         this.admin = Some(admin.issuer().clone());
@@ -752,13 +744,16 @@ impl<T: DeviceBacking> NvmeDriver<T> {
     }
 
     /// Queries worker task if memory allocator ever fell back.
-    pub async fn query_fallback_alloc(&self) -> u64 {
+    pub async fn get_alloc_stats(&self) -> DmaClientAllocStats {
         let fb = self
             .io_issuers
             .send
-            .call(NvmeWorkerRequest::QueryAllocatorFallback, ())
+            .call(NvmeWorkerRequest::QueryAllocatorStats, ())
             .await;
-        fb.unwrap_or_default()
+        fb.unwrap_or(DmaClientAllocStats {
+            total_alloc: 0,
+            fallback_alloc: 0,
+        })
     }
 }
 
@@ -859,8 +854,11 @@ impl<T: DeviceBacking> AsyncRun<WorkerState> for DriverWorkerTask<T> {
                     Some(NvmeWorkerRequest::Save(rpc)) => {
                         rpc.handle(async |_| self.save(state).await).await
                     }
-                    Some(NvmeWorkerRequest::QueryAllocatorFallback(rpc)) => {
-                        rpc.complete(state.fallback_alloc)
+                    Some(NvmeWorkerRequest::QueryAllocatorStats(rpc)) => {
+                        rpc.complete(DmaClientAllocStats {
+                            total_alloc: self.device.dma_client().alloc_size(),
+                            fallback_alloc: self.device.dma_client().fallback_alloc_size(),
+                        })
                     }
                     None => break,
                 }
@@ -939,8 +937,6 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
             self.bounce_buffer,
         )
         .with_context(|| format!("failed to create io queue pair {qid}"))?;
-        // Keep tracking if fallback allocator was ever used.
-        state.fallback_alloc += queue.fallback_alloc();
 
         let io_sq_addr = queue.sq_addr();
         let io_cq_addr = queue.cq_addr();

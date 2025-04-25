@@ -748,16 +748,19 @@ impl UhVmNetworkSettings {
             .unwrap_or(MAX_SUBCHANNELS_PER_VNIC)
             .min(vps_count as u16);
 
-        let dma_client = dma_client_spawner.new_client(DmaClientParameters {
-            device_name: format!("nic_{}", nic_config.pci_id),
-            lower_vtl_policy: LowerVtlPermissionPolicy::Any,
-            allocation_visibility: if is_isolated {
-                AllocationVisibility::Shared
-            } else {
-                AllocationVisibility::Private
+        let dma_client = dma_client_spawner.new_client(
+            DmaClientParameters {
+                device_name: format!("nic_{}", nic_config.pci_id),
+                lower_vtl_policy: LowerVtlPermissionPolicy::Any,
+                allocation_visibility: if is_isolated {
+                    AllocationVisibility::Shared
+                } else {
+                    AllocationVisibility::Private
+                },
+                persistent_allocations: false,
             },
-            persistent_allocations: false,
-        })?;
+            None,
+        )?;
 
         let (vf_manager, endpoints, save_state) = HclNetworkVFManager::new(
             nic_config.instance_id,
@@ -1571,16 +1574,19 @@ async fn new_underhill_vm(
     if !matches!(isolation, virt::IsolationType::Vbs) {
         get_client.set_gpa_allocator(
             dma_manager
-                .new_client(DmaClientParameters {
-                    device_name: "get".into(),
-                    lower_vtl_policy: LowerVtlPermissionPolicy::Vtl0,
-                    allocation_visibility: if isolation.is_isolated() {
-                        AllocationVisibility::Shared
-                    } else {
-                        AllocationVisibility::Private
+                .new_client(
+                    DmaClientParameters {
+                        device_name: "get".into(),
+                        lower_vtl_policy: LowerVtlPermissionPolicy::Vtl0,
+                        allocation_visibility: if isolation.is_isolated() {
+                            AllocationVisibility::Shared
+                        } else {
+                            AllocationVisibility::Private
+                        },
+                        persistent_allocations: false,
                     },
-                    persistent_allocations: false,
-                })
+                    None,
+                )
                 .context("get dma client")?,
         );
     }
@@ -1754,18 +1760,24 @@ async fn new_underhill_vm(
         Some(virt_mshv_vtl::CvmLateParams {
             shared_gm: cvm_mem.shared_gm.clone(),
             isolated_memory_protector: cvm_mem.protector.clone(),
-            shared_dma_client: dma_manager.new_client(DmaClientParameters {
-                device_name: "partition-shared".into(),
-                lower_vtl_policy: LowerVtlPermissionPolicy::Any,
-                allocation_visibility: AllocationVisibility::Shared,
-                persistent_allocations: false,
-            })?,
-            private_dma_client: dma_manager.new_client(DmaClientParameters {
-                device_name: "partition-private".into(),
-                lower_vtl_policy: LowerVtlPermissionPolicy::Any,
-                allocation_visibility: AllocationVisibility::Private,
-                persistent_allocations: false,
-            })?,
+            shared_dma_client: dma_manager.new_client(
+                DmaClientParameters {
+                    device_name: "partition-shared".into(),
+                    lower_vtl_policy: LowerVtlPermissionPolicy::Any,
+                    allocation_visibility: AllocationVisibility::Shared,
+                    persistent_allocations: false,
+                },
+                None,
+            )?,
+            private_dma_client: dma_manager.new_client(
+                DmaClientParameters {
+                    device_name: "partition-private".into(),
+                    lower_vtl_policy: LowerVtlPermissionPolicy::Any,
+                    allocation_visibility: AllocationVisibility::Private,
+                    persistent_allocations: false,
+                },
+                None,
+            )?,
         })
     } else {
         None
@@ -2953,12 +2965,15 @@ async fn new_underhill_vm(
         let shutdown_guest = SimpleVmbusClientDeviceWrapper::new(
             driver_source.simple(),
             dma_manager
-                .new_client(DmaClientParameters {
-                    device_name: "shutdown-relay".into(),
-                    lower_vtl_policy: LowerVtlPermissionPolicy::Vtl0,
-                    allocation_visibility: AllocationVisibility::Private,
-                    persistent_allocations: false,
-                })
+                .new_client(
+                    DmaClientParameters {
+                        device_name: "shutdown-relay".into(),
+                        lower_vtl_policy: LowerVtlPermissionPolicy::Vtl0,
+                        allocation_visibility: AllocationVisibility::Private,
+                        persistent_allocations: false,
+                    },
+                    None,
+                )
                 .context("shutdown relay dma client")?,
             shutdown_guest,
         )?;

@@ -505,6 +505,13 @@ impl LoadedVm {
         } else {
             false
         };
+        // Three sources to determine if keepalive can be enabled:
+        // 1. Host indicates that it is compatible with keepalive
+        //    by setting device tree property when VM starts.
+        // 2. During servicing the capabilities_flags is also set
+        //    so OpenHCL knows that it wasn't migrated to an older host.
+        // 3. If we ran out of dedicated DMA memory and used non-persistent
+        //    fallback allocator, disable keepalive altogether.
         let nvme_keepalive = self.nvme_keepalive
             && capabilities_flags.enable_nvme_keepalive()
             && nvme_keepalive_runtime;
