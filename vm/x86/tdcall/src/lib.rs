@@ -713,19 +713,31 @@ pub fn tdcall_vp_invgla(
 /// YSP: MigTD: Wait for request.
 pub fn tdcall_wait_for_request(
     call: &mut impl Tdcall,
+    start_gpa: u64, // TODO: Use MemoryRange.
+    end_gpa: u64,
+    interrupt: u64,
 ) -> Result<(), TdCallResult> {
+    // Shared bit mask spec: TDX Module v1.5 ABI spec section 'TDVPS(excluding TD VMCS)'.
+    // Should be either 1 << 47 or 1 << 51 (1 bit less than physical address width).
+    // Should be in range 0x8000000 - 0x30000000? That's default VTL2 for this config.
+    let shared_mask = 1u64 << 47;
+    // TODO: Check for page alignment.
+    let length = end_gpa - start_gpa;
+    // Looks like we don't need to extract GPN from linear address
+    // because R14 input likely already uses 12-bit offset.
+    let data_buffer = start_gpa | TDX_SHARED_GPA_BOUNDARY_ADDRESS_BIT;
     let input = TdcallInput {
         leaf: TdCallLeaf::VP_VMCALL,
-        rcx: 0x1c00, // pass R10-R12 // YSP: update bitmask. 0x3c00 is R10-R13.
+        rcx: 0xFF00, // pass R10-R15.
         rdx: 0,
         r8: 0,
         r9: 0,
         r10: 0, // YSP: it says "must be 0 for GHCI call" - is this true?..
         r11: TdVmCallSubFunction::MigTd as u64,
         r12: MigTdSubFunction::WaitForRequest as u64,
-        r13: 0, // YSP: data buffer length
-        r14: 0, // YSP: data buffer | SHARED_BIT_MASK
-        r15: 0, // YSP: interrupt
+        r13: length,
+        r14: data_buffer,
+        r15: interrupt,
     };
 
     let output = call.tdcall(input);

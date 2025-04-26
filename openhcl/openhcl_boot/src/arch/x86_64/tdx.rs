@@ -3,6 +3,7 @@
 
 //! TDX support.
 
+use crate::log;
 use crate::single_threaded::SingleThreaded;
 use core::arch::asm;
 use core::cell::Cell;
@@ -91,7 +92,15 @@ pub fn change_page_visibility(range: MemoryRange, host_visible: bool) {
 /// TDX MigTD: Wait for request.
 pub fn tdx_wait_for_request() -> Result<(), TdCallResult> {
     // YSP: Added this.
-    tdcall::tdcall_wait_for_request(&mut TdcallInstruction)
+    // YSP: Skipping for now.
+    log!("YSP: tdx_wait_for_request");
+    tdcall::tdcall_wait_for_request(
+        &mut TdcallInstruction,
+        0x2FF00000, // YSP: looks like linear address is OK.
+        0x2FF01000, // YSP: taken from actual boot using cvm-dev.json.
+        33,
+    )
+    // Ok(())
 }
 
 /// Tdcall based io port access.

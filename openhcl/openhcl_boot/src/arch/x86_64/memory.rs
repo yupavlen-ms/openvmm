@@ -5,6 +5,7 @@
 
 use super::address_space::LocalMap;
 use super::address_space::init_local_map;
+use crate::log;
 use crate::ShimParams;
 use crate::host_params::PartitionInfo;
 use crate::host_params::shim_params::IsolationType;
@@ -126,6 +127,8 @@ fn accept_vtl2_memory(
     local_map: &mut Option<LocalMap<'_>>,
     range: MemoryRange,
 ) {
+    let zzz = shim_params.isolation_type as u8;
+    log!("YSP: accept_vtl2_memory: {range:?} isol={zzz}");
     match shim_params.isolation_type {
         IsolationType::Vbs => {
             hvcall()
