@@ -94,12 +94,23 @@ pub fn tdx_wait_for_request() -> Result<(), TdCallResult> {
     // YSP: Added this.
     // YSP: Skipping for now.
     log!("YSP: tdx_wait_for_request");
-    tdcall::tdcall_wait_for_request(
+    let res = tdcall::tdcall_wait_for_request(
         &mut TdcallInstruction,
         0x2FF00000, // YSP: looks like linear address is OK.
         0x2FF01000, // YSP: taken from actual boot using cvm-dev.json.
         33,
-    )
+    );
+    match res {
+        Ok(_) => {
+            log!("YSP: tdx_wait_for_request OK");
+        }
+        Err(err) => {
+            log!("YSP: tdx_wait_for_request failed: {err:?}");
+            return Err(err);
+        }
+    }
+
+    res
     // Ok(())
 }
 
