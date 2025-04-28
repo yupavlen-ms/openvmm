@@ -1020,6 +1020,7 @@ impl IntoPipeline for CheckinGatesCli {
                 nextest_filter_expr: "all()".to_string(),
                 test_artifacts: vec![
                     KnownTestArtifacts::Ubuntu2404ServerAarch64Vhd,
+                    KnownTestArtifacts::Windows11EnterpriseAarch64Vhdx,
                     KnownTestArtifacts::VmgsWithBootEntry,
                 ],
             },
