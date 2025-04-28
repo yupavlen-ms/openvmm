@@ -27,7 +27,7 @@ const LOOKUP_TABLE: &[(u16, u16, u16)] = &[
     (8, 170, 20),
     (8, 176, 20),
     (16, 234, 12),
-    (16, 256, 18), // There is another configuration with '20'.
+    (16, 256, 20), // There is another configuration with '18'.
     (16, 268, 38),
     (16, 282, 54),
     (24, 420, 66),
@@ -50,7 +50,7 @@ const LOOKUP_TABLE: &[(u16, u16, u16)] = &[
     (112, 1566, 288),
     (128, 1342, 84),
     (128, 1360, 84),
-    // (896, 12912, 516), // Needs to be validated as the vNIC number is unknown.
+    (896, 12912, 0), // (516) Needs to be validated as the vNIC number is unknown.
 ];
 
 /// Round up to next 2MiB.
