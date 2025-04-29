@@ -1620,6 +1620,23 @@ impl<B: HardwareIsolatedBacking> UhProcessor<'_, B> {
                 ecx = 0;
                 edx = 0;
             }
+            CpuidFunction(hvdef::HV_CPUID_FUNCTION_MS_HV_ENLIGHTENMENT_INFORMATION) => {
+                // If VSM has been revoked (or just isn't available) then don't
+                // recommend the use of TLB flush hypercalls. They are only needed
+                // for synchronization between VTLs, and the non-hypercall direct
+                // path is always more efficient.
+                if matches!(
+                    *self.cvm_partition().guest_vsm.read(),
+                    GuestVsmState::NotPlatformSupported
+                ) {
+                    // The only bit we care about here is within the first 32 bits,
+                    // so just truncating is fine.
+                    let eax_bit = hvdef::HvEnlightenmentInformation::new()
+                        .with_use_hypercall_for_remote_flush_and_local_flush_entire(true)
+                        .into_bits() as u32;
+                    eax &= !eax_bit;
+                }
+            }
 
             _ => {}
         }
