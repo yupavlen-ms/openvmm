@@ -531,6 +531,7 @@ impl HardwareIsolatedBacking for TdxBacked {
     fn intercept_message_state(
         this: &UhProcessor<'_, Self>,
         vtl: GuestVtl,
+        include_optional_state: bool,
     ) -> super::InterceptMessageState {
         let exit = TdxExit(this.runner.tdx_vp_enter_exit_info());
         let backing_vtl = &this.backing.vtls[vtl];
@@ -540,11 +541,22 @@ impl HardwareIsolatedBacking for TdxBacked {
             instruction_length_and_cr8: exit.instr_info().length() as u8,
             cpl: exit.cpl(),
             efer_lma: backing_vtl.efer & X64_EFER_LMA != 0,
-            cs_segment: exit.cs().into(),
+            cs: exit.cs().into(),
             rip: backing_vtl.private_regs.rip,
             rflags: backing_vtl.private_regs.rflags,
             rax: shared_gps[TdxGp::RAX],
             rdx: shared_gps[TdxGp::RDX],
+            optional: if include_optional_state {
+                Some(super::InterceptMessageOptionalState {
+                    ds: this.read_segment(vtl, TdxSegmentReg::Ds).into(),
+                    es: this.read_segment(vtl, TdxSegmentReg::Es).into(),
+                })
+            } else {
+                None
+            },
+            rcx: shared_gps[TdxGp::RCX],
+            rsi: shared_gps[TdxGp::RSI],
+            rdi: shared_gps[TdxGp::RDI],
         }
     }
 
@@ -1714,41 +1726,57 @@ impl UhProcessor<'_, TdxBacked> {
             VmxExitBasic::IO_INSTRUCTION => {
                 let io_qual = ExitQualificationIo::from(exit_info.qualification() as u32);
 
-                if io_qual.is_string() || io_qual.rep_prefix() {
-                    self.emulate(
-                        dev,
-                        self.backing.vtls[intercepted_vtl]
-                            .interruption_information
-                            .valid(),
-                        intercepted_vtl,
-                        TdxEmulationCache::default(),
-                    )
-                    .await?;
-                } else {
-                    let len = match io_qual.access_size() {
-                        IO_SIZE_8_BIT => 1,
-                        IO_SIZE_16_BIT => 2,
-                        IO_SIZE_32_BIT => 4,
-                        _ => panic!(
-                            "tdx module returned invalid io instr size {}",
-                            io_qual.access_size()
-                        ),
-                    };
+                let len = match io_qual.access_size() {
+                    IO_SIZE_8_BIT => 1,
+                    IO_SIZE_16_BIT => 2,
+                    IO_SIZE_32_BIT => 4,
+                    _ => panic!(
+                        "tdx module returned invalid io instr size {}",
+                        io_qual.access_size()
+                    ),
+                };
 
-                    let mut rax = self.runner.tdx_enter_guest_gps()[TdxGp::RAX];
-                    emulate_io(
-                        self.inner.vp_info.base.vp_index,
-                        !io_qual.is_in(),
-                        io_qual.port(),
-                        &mut rax,
-                        len,
-                        dev,
-                    )
-                    .await;
-                    self.runner.tdx_enter_guest_gps_mut()[TdxGp::RAX] = rax;
+                let port_access_protected = self.cvm_try_protect_io_port_access(
+                    intercepted_vtl,
+                    io_qual.port(),
+                    io_qual.is_in(),
+                    len,
+                    io_qual.is_string(),
+                    io_qual.rep_prefix(),
+                );
 
-                    self.advance_to_next_instruction(intercepted_vtl);
+                if !port_access_protected {
+                    if io_qual.is_string() || io_qual.rep_prefix() {
+                        // TODO GUEST VSM: consider changing the emulation path
+                        // to also check for io port installation, mainly for
+                        // handling rep instructions.
+
+                        self.emulate(
+                            dev,
+                            self.backing.vtls[intercepted_vtl]
+                                .interruption_information
+                                .valid(),
+                            intercepted_vtl,
+                            TdxEmulationCache::default(),
+                        )
+                        .await?;
+                    } else {
+                        let mut rax = self.runner.tdx_enter_guest_gps()[TdxGp::RAX];
+                        emulate_io(
+                            self.inner.vp_info.base.vp_index,
+                            !io_qual.is_in(),
+                            io_qual.port(),
+                            &mut rax,
+                            len,
+                            dev,
+                        )
+                        .await;
+                        self.runner.tdx_enter_guest_gps_mut()[TdxGp::RAX] = rax;
+
+                        self.advance_to_next_instruction(intercepted_vtl);
+                    }
                 }
+
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.io
             }
             VmxExitBasic::MSR_READ => {
@@ -3469,6 +3497,7 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, TdxBacked> {
             hv1_hypercall::HvX64TranslateVirtualAddress,
             hv1_hypercall::HvSendSyntheticClusterIpi,
             hv1_hypercall::HvSendSyntheticClusterIpiEx,
+            hv1_hypercall::HvInstallIntercept,
         ]
     );
 
