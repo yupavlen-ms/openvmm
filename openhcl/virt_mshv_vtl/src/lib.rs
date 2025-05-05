@@ -1323,8 +1323,6 @@ pub struct UhPartitionNewParams<'a> {
     pub cvm_cpuid_info: Option<&'a [u8]>,
     /// The unparsed CVM secrets page.
     pub snp_secrets: Option<&'a [u8]>,
-    /// Whether underhill was configured to support guest vsm for CVMs
-    pub env_cvm_guest_vsm: bool,
     /// The virtual top of memory for hardware-isolated VMs.
     ///
     /// Must be a power of two.
@@ -1866,15 +1864,10 @@ impl UhProtoPartition<'_> {
             IsolationType::None | IsolationType::Vbs => {}
             #[cfg(guest_arch = "x86_64")]
             IsolationType::Tdx => {
-                if !params.env_cvm_guest_vsm {
-                    return Ok(false);
-                }
+                // No additional checks needed
             }
             #[cfg(guest_arch = "x86_64")]
             IsolationType::Snp => {
-                if !params.env_cvm_guest_vsm {
-                    return Ok(false);
-                }
                 // Require RMP Query
                 let rmp_query = x86defs::cpuid::ExtendedSevFeaturesEax::from(
                     safe_intrinsics::cpuid(x86defs::cpuid::CpuidFunction::ExtendedSevFeatures.0, 0)
@@ -1960,12 +1953,6 @@ impl UhProtoPartition<'_> {
             is_ref_time_backed_by_tsc: true,
             guest_memory,
         });
-
-        if guest_vsm_available {
-            tracing::warn!(
-                "Advertising guest vsm as being supported to the guest. This feature is in development, so the guest might crash."
-            );
-        }
 
         Ok(UhCvmPartitionState {
             vps_per_socket: params.topology.reserved_vps_per_socket(),
