@@ -3025,8 +3025,8 @@ impl Hcl {
     }
 
     /// Gets the PFN for the VTL 1 VMSA
-    pub fn vtl1_vmsa_pfn(&self, vp_index: u32) -> u64 {
-        let mut vp_pfn = vp_index as u64; // input vp, output pfn
+    pub fn vtl1_vmsa_pfn(&self, cpu_index: u32) -> u64 {
+        let mut vp_pfn = cpu_index as u64; // input vp, output pfn
 
         // SAFETY: The ioctl requires no prerequisites other than the VTL 1 VMSA
         // should be mapped. This ioctl should never fail as long as the vtl 1
