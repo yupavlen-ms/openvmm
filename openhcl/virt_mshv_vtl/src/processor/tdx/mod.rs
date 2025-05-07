@@ -760,6 +760,18 @@ impl BackingPrivate for TdxBacked {
         // TODO TDX: see ValInitializeVplc
         // TODO TDX: XCR_XFMEM setup?
 
+        // Turn on MBEC for just VTL 0.
+        params.runner.write_vmcs32(
+            GuestVtl::Vtl0,
+            VmcsField::VMX_VMCS_SECONDARY_PROCESSOR_CONTROLS,
+            SecondaryProcessorControls::new()
+                .with_mode_based_execute_control(true)
+                .into(),
+            SecondaryProcessorControls::new()
+                .with_mode_based_execute_control(true)
+                .into(),
+        );
+
         for vtl in [GuestVtl::Vtl0, GuestVtl::Vtl1] {
             let controls = TdxL2Ctls::new()
                 // Configure L2 controls to permit shared memory.
@@ -1994,6 +2006,24 @@ impl UhProcessor<'_, TdxBacked> {
                 &mut self.backing.vtls[intercepted_vtl].exit_stats.wbinvd
             }
             VmxExitBasic::EPT_VIOLATION => {
+                let gpa = exit_info.gpa();
+                let ept_info = VmxEptExitQualification::from(exit_info.qualification());
+                // If this was an EPT violation while handling an iret, and
+                // that iret cleared the NMI blocking state, restore it.
+                if !next_interruption.valid() && ept_info.nmi_unmasking_due_to_iret() {
+                    let mask = Interruptibility::new().with_blocked_by_nmi(true);
+                    let value = Interruptibility::new().with_blocked_by_nmi(true);
+                    let old_interruptibility: Interruptibility = self
+                        .runner
+                        .write_vmcs32(
+                            intercepted_vtl,
+                            VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY,
+                            mask.into(),
+                            value.into(),
+                        )
+                        .into();
+                    assert!(!old_interruptibility.blocked_by_nmi());
+                }
                 // TODO TDX: If this is an access to a shared gpa, we need to
                 // check the intercept page to see if this is a real exit or
                 // spurious. This exit is only real if the hypervisor has
@@ -2008,34 +2038,9 @@ impl UhProcessor<'_, TdxBacked> {
                 // sufficient, as it may be a write access where the page is
                 // protected, but we don't yet support MNF/guest VSM so this is
                 // okay enough.
-                let is_readable_ram =
-                    self.partition.gm[intercepted_vtl].check_gpa_readable(exit_info.gpa());
-                if is_readable_ram {
-                    tracelimit::warn_ratelimited!(
-                        gpa = exit_info.gpa(),
-                        "possible spurious EPT violation, ignoring"
-                    );
+                else if self.partition.gm[intercepted_vtl].check_gpa_readable(gpa) {
+                    tracelimit::warn_ratelimited!(gpa, "possible spurious EPT violation, ignoring");
                 } else {
-                    // If this was an EPT violation while handling an iret, and
-                    // that iret cleared the NMI blocking state, restore it.
-                    if !next_interruption.valid() {
-                        let ept_info = VmxEptExitQualification::from(exit_info.qualification());
-                        if ept_info.nmi_unmasking_due_to_iret() {
-                            let mask = Interruptibility::new().with_blocked_by_nmi(true);
-                            let value = Interruptibility::new().with_blocked_by_nmi(true);
-                            let old_interruptibility: Interruptibility = self
-                                .runner
-                                .write_vmcs32(
-                                    intercepted_vtl,
-                                    VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY,
-                                    mask.into(),
-                                    value.into(),
-                                )
-                                .into();
-                            assert!(!old_interruptibility.blocked_by_nmi());
-                        }
-                    }
-
                     // Emulate the access.
                     self.emulate(
                         dev,

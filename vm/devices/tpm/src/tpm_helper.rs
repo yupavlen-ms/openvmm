@@ -2501,6 +2501,34 @@ mod tests {
             .read_from_nv_index(TPM_NV_INDEX_AIK_CERT, &mut provisioned_ak_cert_after_call);
         assert!(matches!(result.unwrap(), NvIndexState::Available));
         assert_eq!(provisioned_ak_cert_after_call, provisioned_ak_cert);
+
+        // Test updating the provisioned nv index (with ownerwrite permission)
+        // Write a very short AKCert that will definitely fit in the already-provisioned space.
+        let ak_cert_input = [7u8; 10];
+        let result =
+            tpm_engine_helper.nv_write(TPM20_RH_OWNER, None, TPM_NV_INDEX_AIK_CERT, &ak_cert_input);
+        assert!(result.is_ok());
+
+        // Ensure the data is overwritten
+        let mut ak_cert_output = [0u8; MAX_NV_INDEX_SIZE as usize];
+        let result =
+            tpm_engine_helper.read_from_nv_index(TPM_NV_INDEX_AIK_CERT, &mut ak_cert_output);
+        assert!(matches!(result.unwrap(), NvIndexState::Available));
+
+        assert_ne!(&ak_cert_output, &provisioned_ak_cert);
+
+        // Ensure that write_to_nv_index fails because the nv index is not platform-defined
+        let ak_cert_input = [8u8; 10];
+        let result =
+            tpm_engine_helper.write_to_nv_index(AUTH_VALUE, TPM_NV_INDEX_AIK_CERT, &ak_cert_input);
+        assert!(result.is_err());
+        assert!(matches!(
+            result.unwrap_err(),
+            TpmHelperError::InvalidPermission {
+                platform_created: false,
+                ..
+            }
+        ));
     }
 
     #[test]
