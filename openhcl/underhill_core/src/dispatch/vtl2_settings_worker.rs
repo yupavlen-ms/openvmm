@@ -548,6 +548,7 @@ pub async fn disk_from_disk_type(
     read_only: bool,
     resolver: &ResourceResolver,
 ) -> Result<Disk, Vtl2SettingsErrorInfo> {
+    // tracing::info!("YSP: resolver 1");
     let disk = resolver
         .resolve(
             disk_type,

@@ -524,7 +524,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
     /// Saves the NVMe driver state during servicing.
     pub async fn save(&mut self) -> anyhow::Result<NvmeDriverSavedState> {
-        tracing::info!("YSP: NvmeDriver::save");
+        tracing::info!("YSP: NvmeDriver::save pci_id={}", self.device_id.to_owned());
         // Nothing to save if Identify Controller was never queried.
         if self.identify.is_none() {
             return Err(save_restore::Error::InvalidState.into());
@@ -537,7 +537,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .await?
         {
             Ok(s) => {
-                tracing::info!("YSP: namespace len={}", self.namespaces.len());
+                tracing::info!("YSP: namespaces len={}", self.namespaces.len());
                 Ok(NvmeDriverSavedState {
                     identify_ctrl: spec::IdentifyController::read_from_bytes(
                         self.identify.as_ref().unwrap().as_bytes(),
@@ -982,7 +982,7 @@ impl<T: DeviceBacking> DriverWorkerTask<T> {
         &mut self,
         worker_state: &mut WorkerState,
     ) -> anyhow::Result<NvmeDriverWorkerSavedState> {
-        tracing::info!("YSP: NvmeDriverWorkerTask::save");
+        tracing::info!("YSP: NvmeDriverWorkerTask::save pci_id={}", self.device.id().to_owned());
         let admin = match self.admin.as_ref() {
             Some(a) => Some(a.save().await?),
             None => None,

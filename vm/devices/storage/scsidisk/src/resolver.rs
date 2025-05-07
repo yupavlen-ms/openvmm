@@ -50,6 +50,7 @@ impl AsyncResolveResource<ScsiDeviceHandleKind, SimpleScsiDiskHandle> for Simple
         resource: SimpleScsiDiskHandle,
         _: ResolveScsiDeviceHandleParams<'_>,
     ) -> Result<Self::Output, Self::Error> {
+        tracing::info!("YSP: SimpleScsiResolver");
         let disk = resolver
             .resolve(
                 resource.disk,

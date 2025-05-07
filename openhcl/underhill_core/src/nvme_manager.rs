@@ -368,6 +368,7 @@ impl NvmeManagerWorker {
                     .await?,
             });
         }
+        tracing::info!("YSP: NvmeManagerWorker::saved {} disks", nvme_disks.len());
 
         Ok(NvmeManagerSavedState {
             cpu_count: self.vp_count,

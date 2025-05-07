@@ -243,6 +243,7 @@ async fn open_simple_disk(
     disk_type: Resource<DiskHandleKind>,
     read_only: bool,
 ) -> anyhow::Result<Disk> {
+    // tracing::info!("YSP: resolver 2");
     let disk = resolver
         .resolve(
             disk_type,
