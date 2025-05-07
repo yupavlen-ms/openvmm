@@ -41,6 +41,7 @@ pub async fn build_vpci_device(
 
     let mut msi_set = MsiInterruptSet::new();
 
+    tracing::info!("YSP: build_vpci_device");
     let device = {
         chipset_builder
             .arc_mutex_device(device_name)

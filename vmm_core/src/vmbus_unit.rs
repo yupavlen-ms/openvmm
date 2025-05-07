@@ -225,6 +225,7 @@ pub async fn offer_vmbus_device_handle_unit(
     resolver: &ResourceResolver,
     resource: Resource<VmbusDeviceHandleKind>,
 ) -> anyhow::Result<SpawnedUnit<ChannelUnit<dyn VmbusDevice>>> {
+    tracing::info!("YSP: offer_vmbus_device_handle_unit");
     let channel = resolver
         .resolve(resource, ResolveVmbusDeviceHandleParams { driver_source })
         .await?;

@@ -69,7 +69,7 @@ impl AsyncResolveResource<PciDeviceHandleKind, NvmeControllerHandle> for NvmeCon
             disk,
         } in resource.namespaces
         {
-            // tracing::info!("YSP: resolver 3");
+            // tracing::info!("-YSP: resolver 3");
             let disk = resolver
                 .resolve(
                     disk,

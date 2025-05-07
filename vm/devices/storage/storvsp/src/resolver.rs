@@ -71,6 +71,7 @@ impl AsyncResolveResource<VmbusDeviceHandleKind, ScsiControllerHandle> for Storv
         );
 
         for ScsiDeviceAndPath { path, device } in resource.devices {
+            tracing::info!("YSP: storvsp 1");
             let device = resolver
                 .resolve(
                     device,
@@ -80,6 +81,7 @@ impl AsyncResolveResource<VmbusDeviceHandleKind, ScsiControllerHandle> for Storv
                 )
                 .await
                 .map_err(|err| Error::Device { path, source: err })?;
+            tracing::info!("YSP: storvsp 2");
 
             controller
                 .attach(path, ScsiControllerDisk { disk: device.0 })
@@ -114,6 +116,7 @@ async fn handle_requests(
     while let Some(req) = requests.next().await {
         match req {
             ScsiControllerRequest::AddDevice(rpc) => {
+                tracing::info!("YSP: SCSI AddDevice");
                 rpc.handle_failable(async |ScsiDeviceAndPath { path, device }| {
                     let device = resolver
                         .resolve(

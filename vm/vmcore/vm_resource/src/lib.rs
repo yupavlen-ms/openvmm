@@ -224,6 +224,7 @@ where
                 source,
             })?;
 
+        tracing::info!("YSP: dyn_resolve 1");
         let resolved =
             self.resolver
                 .resolve(parsed, input)
@@ -260,6 +261,7 @@ where
                 source,
             })?;
 
+        tracing::info!("YSP: dyn_resolve 2");
         let resolved = self
             .resolver
             .resolve(resolver, parsed, input)
