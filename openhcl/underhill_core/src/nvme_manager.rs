@@ -24,7 +24,6 @@ use openhcl_dma_manager::DmaClientSpawner;
 use openhcl_dma_manager::LowerVtlPermissionPolicy;
 use pal_async::task::Spawn;
 use pal_async::task::Task;
-use parking_lot::Mutex;
 use std::collections::HashMap;
 use std::collections::hash_map;
 use std::sync::Arc;
@@ -103,7 +102,7 @@ impl NvmeManager {
         let driver = driver_source.simple();
         let mut worker = NvmeManagerWorker {
             driver_source: driver_source.clone(),
-            devices: Arc::new(Mutex::new(HashMap::new())),
+            devices: HashMap::new(),
             vp_count,
             save_restore_supported,
             is_isolated,
@@ -111,10 +110,11 @@ impl NvmeManager {
         };
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
+            // TODO: Can we move join_all into NvmeManagerWorker::restore?
             if saved_state.is_some() {
-                let _ = NvmeManager::restore(&mut worker, saved_state.as_ref().unwrap())
-                    .instrument(tracing::info_span!("nvme_manager_restore"))
-                    .await;
+                let mut state_vec = Vec::new();
+                state_vec.push(NvmeManager::restore(&mut worker, saved_state.as_ref().unwrap()));
+                join_all(state_vec).instrument(tracing::info_span!("nvme_manager_restore")).await;
             };
             worker.run(recv).await
         });
@@ -213,16 +213,12 @@ impl NvmeManagerClient {
     }
 }
 
-type NvmeDeviceList = HashMap<String, nvme_driver::NvmeDriver<VfioDevice>>;
-
 #[derive(Inspect)]
 struct NvmeManagerWorker {
     #[inspect(skip)]
     driver_source: VmTaskDriverSource,
-    //#[inspect(iter_by_key)]
-    #[inspect(flatten, with = "inspect_devices")]
-    // Can be updated in both init and restore path.
-    devices: Arc<Mutex<NvmeDeviceList>>,
+    #[inspect(iter_by_key)]
+    devices: HashMap<String, nvme_driver::NvmeDriver<VfioDevice>>,
     vp_count: u32,
     /// Running environment (memory layout) allows save/restore.
     save_restore_supported: bool,
@@ -232,18 +228,9 @@ struct NvmeManagerWorker {
     dma_client_spawner: DmaClientSpawner,
 }
 
-fn inspect_devices(devices: &Mutex<NvmeDeviceList>) -> impl '_ + Inspect {
-    inspect::adhoc(|req| {
-        let dev_list = &*devices.lock();
-        let mut resp = req.respond();
-        for device in dev_list {
-            resp.field(&device.0.to_string(), &device.1);
-        }
-    })
-}
-
 impl NvmeManagerWorker {
     async fn run(&mut self, mut recv: mesh::Receiver<Request>) {
+        tracing::info!("YSP: !!!");
         let (join_span, nvme_keepalive) = loop {
             let Some(req) = recv.next().await else {
                 break (tracing::Span::none(), false);
@@ -282,9 +269,8 @@ impl NvmeManagerWorker {
                     // nvme_keepalive is received from host but it is only valid
                     // when memory pool allocator supports save/restore.
                     let do_not_reset = nvme_keepalive && self.save_restore_supported;
-                    let mut dev_list = self.devices.lock();
                     // Update the flag for all connected devices.
-                    for (_s, dev) in dev_list.iter_mut() {
+                    for (_s, dev) in self.devices.iter_mut() {
                         // Prevent devices from originating controller reset in drop().
                         dev.update_servicing_flags(do_not_reset);
                     }
@@ -299,8 +285,7 @@ impl NvmeManagerWorker {
         // Tear down all the devices if nvme_keepalive is not set.
         if !nvme_keepalive || !self.save_restore_supported {
             async {
-                let mut dev_list = self.devices.lock();
-                join_all(dev_list.drain().map(|(pci_id, driver)| {
+                join_all(self.devices.drain().map(|(pci_id, driver)| {
                     driver
                         .shutdown()
                         .instrument(tracing::info_span!("shutdown_nvme_driver", pci_id))
@@ -315,14 +300,11 @@ impl NvmeManagerWorker {
         }
     }
 
-    // A lock to device list must be obtained prior calling this function.
     async fn get_driver(
         &mut self,
-        //dev_list: &'a mut NvmeDeviceList,
         pci_id: String,
     ) -> Result<&mut nvme_driver::NvmeDriver<VfioDevice>, InnerError> {
-        let mut dev_list = self.devices.lock();
-        let driver = match dev_list.entry(pci_id.to_owned()) {
+        let driver = match self.devices.entry(pci_id.to_owned()) {
             hash_map::Entry::Occupied(entry) => {
                 tracing::info!("YSP: existing entry {}", pci_id);
                 entry.into_mut()
@@ -364,7 +346,6 @@ impl NvmeManagerWorker {
 
     async fn get_namespace(
         &mut self,
-        // dev_list: &mut NvmeDeviceList,
         pci_id: String,
         nsid: u32,
     ) -> Result<Arc<nvme_driver::Namespace>, InnerError> {
@@ -379,9 +360,8 @@ impl NvmeManagerWorker {
     /// Saves NVMe device's states into buffer during servicing.
     pub async fn save(&mut self) -> anyhow::Result<NvmeManagerSavedState> {
         tracing::info!("YSP: NvmeManagerWorker::save (vp_count={})", self.vp_count);
-        let mut dev_list = self.devices.lock();
         let mut nvme_disks: Vec<NvmeSavedDiskConfig> = Vec::new();
-        for (pci_id, driver) in dev_list.iter_mut() {
+        for (pci_id, driver) in self.devices.iter_mut() {
             nvme_disks.push(NvmeSavedDiskConfig {
                 pci_id: pci_id.clone(),
                 driver_state: driver
@@ -401,11 +381,7 @@ impl NvmeManagerWorker {
     /// Restore NVMe manager and device states from the buffer after servicing.
     pub async fn restore(&mut self, saved_state: &NvmeManagerSavedState) -> anyhow::Result<()> {
         tracing::info!("YSP: NvmeManagerWorker::restore {} disks", &saved_state.nvme_disks.len());
-
-        let mut dev_list = self.devices.lock();
-        *dev_list = HashMap::new();
-
-        //self.devices = HashMap::new();
+        self.devices = HashMap::new();
         for disk in &saved_state.nvme_disks {
             let pci_id = disk.pci_id.clone();
             tracing::info!("YSP: restoring nvme disk {}", pci_id);
@@ -438,7 +414,7 @@ impl NvmeManagerWorker {
             .await?;
             tracing::info!("YSP: after NvmeDriver::restore");
 
-            dev_list.insert(disk.pci_id.clone(), nvme_driver);
+            self.devices.insert(disk.pci_id.clone(), nvme_driver);
         }
         tracing::info!("YSP: NvmeManagerWorker::restore - done");
         Ok(())
