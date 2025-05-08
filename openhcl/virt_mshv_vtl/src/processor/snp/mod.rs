@@ -1208,7 +1208,10 @@ impl UhProcessor<'_, SnpBacked> {
             //
             // TODO SNP: Handle ICEBP.
             let exit_int_info = SevEventInjectInfo::from(vmsa.exit_int_info());
-            debug_assert!(exit_int_info.valid());
+            debug_assert!(
+                exit_int_info.valid(),
+                "event inject info should be valid {exit_int_info:x?}"
+            );
 
             let inject = match exit_int_info.interruption_type() {
                 x86defs::snp::SEV_INTR_TYPE_EXCEPT => {
