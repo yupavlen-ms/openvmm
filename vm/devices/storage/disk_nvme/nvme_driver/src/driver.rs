@@ -486,29 +486,31 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
     /// Gets the namespace with namespace ID `nsid`.
     pub async fn namespace(&mut self, nsid: u32) -> Result<Arc<Namespace>, NamespaceError> {
-        Ok(match self.namespaces
-            .iter()
-            .position(|n| n.nsid().eq(&nsid)) {
-            Some(n) => {
-                // TODO: Check if we will process Namespace Change AEN instead.
-                tracing::info!("YSP: EXISTING namespace {} for {}", nsid, &self.device_id);
-                self.namespaces[n].clone()
+        Ok(
+            match self.namespaces.iter().position(|n| n.nsid().eq(&nsid)) {
+                Some(n) => {
+                    // TODO: Check if we will process Namespace Change AEN instead.
+                    tracing::info!("YSP: EXISTING namespace {} for {}", nsid, &self.device_id);
+                    self.namespaces[n].clone()
+                }
+                None => {
+                    tracing::info!("YSP: QUERY namespace {} for {}", nsid, &self.device_id);
+                    let ns = Arc::new(
+                        Namespace::new(
+                            &self.driver,
+                            self.admin.as_ref().unwrap().clone(),
+                            self.rescan_event.clone(),
+                            self.identify.clone().unwrap(),
+                            &self.io_issuers,
+                            nsid,
+                        )
+                        .await?,
+                    );
+                    self.namespaces.push(ns.clone());
+                    ns
+                }
             },
-            None => {
-                tracing::info!("YSP: QUERY namespace {} for {}", nsid, &self.device_id);
-                let ns = Arc::new(Namespace::new(
-                    &self.driver,
-                    self.admin.as_ref().unwrap().clone(),
-                    self.rescan_event.clone(),
-                    self.identify.clone().unwrap(),
-                    &self.io_issuers,
-                    nsid,
-                )
-                .await?);
-                self.namespaces.push(ns.clone());
-                ns
-            }
-        })
+        )
     }
 
     /// Returns the number of CPUs that are in fallback mode (that are using a
@@ -544,11 +546,10 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                     )
                     .unwrap(),
                     device_id: self.device_id.clone(),
-                    namespaces: self.namespaces
+                    namespaces: self
+                        .namespaces
                         .iter()
-                        .map(|n| -> SavedNamespaceData {
-                            n.save()
-                        })
+                        .map(|n| -> SavedNamespaceData { n.save() })
                         .collect::<Vec<SavedNamespaceData>>(),
                     worker_data: s,
                 })

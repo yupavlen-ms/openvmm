@@ -508,10 +508,11 @@ fn build_device_tree(
     let reserved_dma = None;
     if let Some(reserved_dma) = reserved_dma {
         // Provide a hint to OpenHCL about reserved DMA size.
-        openhcl = openhcl.start_node("device-dma")?
-        // Each page is HV_PAGE_SIZE size.
-        .add_u64(p_dma_total_pages, reserved_dma)?
-        .end_node()?;
+        openhcl = openhcl
+            .start_node("device-dma")?
+            // Each page is HV_PAGE_SIZE size.
+            .add_u64(p_dma_total_pages, reserved_dma)?
+            .end_node()?;
     }
 
     root = openhcl.end_node()?;

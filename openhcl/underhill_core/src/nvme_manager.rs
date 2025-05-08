@@ -110,11 +110,16 @@ impl NvmeManager {
         };
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
-            // TODO: Can we move join_all into NvmeManagerWorker::restore?
             if saved_state.is_some() {
                 let mut state_vec = Vec::new();
-                state_vec.push(NvmeManager::restore(&mut worker, saved_state.as_ref().unwrap()));
-                join_all(state_vec).instrument(tracing::info_span!("nvme_manager_restore")).await;
+                state_vec.push(NvmeManager::restore(
+                    &mut worker,
+                    saved_state.as_ref().unwrap(),
+                ));
+                // TODO: Move join_all into NvmeManagerWorker::restore instead?
+                join_all(state_vec)
+                    .instrument(tracing::info_span!("nvme_manager_restore"))
+                    .await;
             };
             worker.run(recv).await
         });
@@ -451,7 +456,10 @@ impl AsyncResolveResource<DiskHandleKind, NvmeDiskConfig> for NvmeDiskResolver {
             .context("could not open nvme namespace")?;
 
         // YSP: FIXME: This is why we need Arc<Namespace>, otherwise the object is gone.
-        Ok(ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone())).context("invalid disk")?)
+        Ok(
+            ResolvedDisk::new(disk_nvme::NvmeDisk::new(namespace.clone()))
+                .context("invalid disk")?,
+        )
     }
 }
 
