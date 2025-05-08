@@ -2424,6 +2424,7 @@ dependencies = [
  "mesh",
  "thiserror 2.0.12",
  "vm_resource",
+ "vmgs_resources",
 ]
 
 [[package]]
@@ -2576,6 +2577,7 @@ dependencies = [
  "vmbus_channel",
  "vmbus_ring",
  "vmcore",
+ "vmgs_resources",
  "zerocopy 0.8.24",
 ]
 
@@ -3013,6 +3015,7 @@ dependencies = [
  "vmcore",
  "vmgs",
  "vmgs_broker",
+ "vmgs_resources",
  "vmm_core",
  "vmm_core_defs",
  "vmotherboard",
@@ -3046,6 +3049,7 @@ dependencies = [
  "virt_whp",
  "vm_resource",
  "vmbus_proxy",
+ "vmgs_resources",
  "vmm_core_defs",
  "vmotherboard",
 ]
@@ -4901,7 +4905,6 @@ dependencies = [
  "dirs",
  "disk_backend_resources",
  "disk_crypt_resources",
- "disk_vhd1",
  "firmware_uefi_custom_vars",
  "floppy_resources",
  "framebuffer",
@@ -5413,6 +5416,7 @@ dependencies = [
  "vmbus_serial_resources",
  "vmcore",
  "vmgs_format",
+ "vmgs_resources",
  "vmm_core_defs",
  "vmotherboard",
  "vmsocket",

@@ -253,6 +253,7 @@ pub fn create_host_channel(
         secure_boot_template: SecureBootTemplateType::SECURE_BOOT_DISABLED,
         enable_battery: false,
         no_persistent_secrets: true,
+        guest_state_lifetime: Default::default(),
     };
 
     let halt_reason = Arc::new(Mutex::new(None));

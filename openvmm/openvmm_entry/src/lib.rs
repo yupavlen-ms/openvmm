@@ -30,9 +30,11 @@ use clap::Parser;
 use cli_args::DiskCliKind;
 use cli_args::EndpointConfigCli;
 use cli_args::NicConfigCli;
+use cli_args::ProvisionVmgs;
 use cli_args::SerialConfigCli;
 use cli_args::UefiConsoleModeCli;
 use cli_args::VirtioBusCli;
+use cli_args::VmgsCli;
 use crash_dump::spawn_dump_handler;
 use disk_backend_resources::DiskLayerDescription;
 use disk_backend_resources::layer::DiskLayerHandle;
@@ -76,6 +78,7 @@ use hvlite_defs::rpc::PulseSaveRestoreError;
 use hvlite_defs::rpc::VmRpc;
 use hvlite_defs::worker::VM_WORKER;
 use hvlite_defs::worker::VmWorkerParameters;
+use hvlite_helpers::disk::create_disk_type;
 use hvlite_helpers::disk::open_disk_type;
 use input_core::MultiplexedInputHandle;
 use inspect::InspectMut;
@@ -146,6 +149,7 @@ use vmbus_serial_resources::VmbusSerialDeviceHandle;
 use vmbus_serial_resources::VmbusSerialPort;
 use vmcore::non_volatile_store::resources::EphemeralNonVolatileStoreHandle;
 use vmgs_resources::VmgsFileHandle;
+use vmgs_resources::VmgsResource;
 use vmotherboard::ChipsetDeviceHandle;
 use vnc_worker_defs::VncParameters;
 
@@ -858,6 +862,17 @@ fn vm_config_from_command_line(
         };
     }
 
+    let mut vmgs = Some(if let Some(VmgsCli { kind, provision }) = &opt.vmgs {
+        let disk = disk_open(kind, false).context("failed to open vmgs disk")?;
+        match provision {
+            ProvisionVmgs::OnEmpty => VmgsResource::Disk(disk),
+            ProvisionVmgs::OnFailure => VmgsResource::ReprovisionOnFailure(disk),
+            ProvisionVmgs::True => VmgsResource::Reprovision(disk),
+        }
+    } else {
+        VmgsResource::Ephemeral
+    });
+
     if with_get && with_hv {
         let vtl2_settings = vtl2_settings_proto::Vtl2Settings {
             version: vtl2_settings_proto::vtl2_settings_base::Version::V1.into(),
@@ -871,14 +886,21 @@ fn vm_config_from_command_line(
 
         let (send, guest_request_recv) = mesh::channel();
         resources.ged_rpc = Some(send);
-        let vmgs_disk = if let Some(disk) = &opt.get_vmgs {
-            disk_open(disk, false).context("failed to open GET vmgs disk")?
+
+        let vmgs = vmgs.take().unwrap();
+        // OpenHCL doesn't support ephemeral guest state yet,
+        // so give it a memory-backed VMGS
+        let vmgs = if matches!(vmgs, VmgsResource::Ephemeral) {
+            VmgsResource::Disk(
+                disk_backend_resources::LayeredDiskHandle::single_layer(RamDiskLayerHandle {
+                    len: Some(vmgs_format::VMGS_DEFAULT_CAPACITY),
+                })
+                .into_resource(),
+            )
         } else {
-            disk_backend_resources::LayeredDiskHandle::single_layer(RamDiskLayerHandle {
-                len: Some(vmgs_format::VMGS_DEFAULT_CAPACITY),
-            })
-            .into_resource()
+            vmgs
         };
+
         vmbus_devices.extend([
             (
                 openhcl_vtl,
@@ -927,7 +949,7 @@ fn vm_config_from_command_line(
                     com2: with_vmbus_com2_serial,
                     vtl2_settings: Some(prost::Message::encode_to_vec(&vtl2_settings)),
                     vmbus_redirection: opt.vmbus_redirect,
-                    vmgs_disk: Some(vmgs_disk),
+                    vmgs,
                     framebuffer: opt
                         .vtl2_gfx
                         .then(|| SharedFramebufferHandle.into_resource()),
@@ -962,7 +984,7 @@ fn vm_config_from_command_line(
             TpmRegisterLayout::Mmio
         };
 
-        let (ppi_store, nvram_store) = if opt.vmgs_file.is_some() {
+        let (ppi_store, nvram_store) = if opt.vmgs.is_some() {
             (
                 VmgsFileHandle::new(vmgs_format::FileId::TPM_PPI, true).into_resource(),
                 VmgsFileHandle::new(vmgs_format::FileId::TPM_NVRAM, true).into_resource(),
@@ -1265,27 +1287,6 @@ fn vm_config_from_command_line(
         );
     }
 
-    let (vmgs_disk, format_vmgs) = if let Some(path) = &opt.vmgs_file {
-        let file = fs_err::OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(path)
-            .context("failed to create or open vmgs file")?;
-        let format_vmgs = file.metadata()?.len() == 0;
-        if format_vmgs {
-            file.set_len(vmgs_format::VMGS_DEFAULT_CAPACITY)?;
-            disk_vhd1::Vhd1Disk::make_fixed(file.file())
-                .context("failed to format VHD1 file for VMGS")?;
-        }
-        (
-            Some(disk_backend_resources::FixedVhd1DiskHandle(file.into()).into_resource()),
-            format_vmgs,
-        )
-    } else {
-        (None, false)
-    };
-
     let mut cfg = Config {
         chipset,
         load_mode,
@@ -1350,8 +1351,7 @@ fn vm_config_from_command_line(
         chipset_devices,
         #[cfg(windows)]
         vpci_resources,
-        vmgs_disk,
-        format_vmgs,
+        vmgs,
         secure_boot_enabled: opt.secure_boot,
         custom_uefi_vars,
         firmware_event_send: None,
@@ -1537,10 +1537,16 @@ fn disk_open_inner(
         &DiskCliKind::Memory(len) => {
             layers.push(layer(RamDiskLayerHandle { len: Some(len) }));
         }
-        DiskCliKind::File(path) => layers.push(LayerOrDisk::Disk(
+        DiskCliKind::File {
+            path,
+            create_with_len,
+        } => layers.push(LayerOrDisk::Disk(if let Some(size) = create_with_len {
+            create_disk_type(path, *size)
+                .with_context(|| format!("failed to create {}", path.display()))?
+        } else {
             open_disk_type(path, read_only)
-                .with_context(|| format!("failed to open {}", path.display()))?,
-        )),
+                .with_context(|| format!("failed to open {}", path.display()))?
+        })),
         DiskCliKind::Blob { kind, url } => {
             layers.push(disk(disk_backend_resources::BlobDiskHandle {
                 url: url.to_owned(),
