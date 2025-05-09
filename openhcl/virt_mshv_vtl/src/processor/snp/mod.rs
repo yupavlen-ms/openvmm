@@ -113,7 +113,6 @@ struct ExitStats {
     npf_no_intercept: Counter,
     npf_spurious: Counter,
     rdpmc: Counter,
-    unexpected: Counter,
     vmgexit: Counter,
     vmmcall: Counter,
     xsetbv: Counter,
@@ -1471,7 +1470,12 @@ impl UhProcessor<'_, SnpBacked> {
                 &mut self.backing.exit_stats[entered_from_vtl].vmgexit
             }
 
-            SevExitCode::NMI | SevExitCode::PAUSE | SevExitCode::SMI | SevExitCode::VMGEXIT => {
+            SevExitCode::NMI
+            | SevExitCode::PAUSE
+            | SevExitCode::SMI
+            | SevExitCode::VMGEXIT
+            | SevExitCode::BUSLOCK
+            | SevExitCode::IDLE_HLT => {
                 // Ignore intercept processing if the guest exited due to an automatic exit.
                 &mut self.backing.exit_stats[entered_from_vtl].automatic_exit
             }
@@ -1533,12 +1537,17 @@ impl UhProcessor<'_, SnpBacked> {
             }
 
             _ => {
-                debug_assert!(
-                    false,
-                    "Received unexpected exit code {}",
-                    vmsa.guest_error_code()
+                // Don't print too much of the register state, might have guest secrets
+                // parts thereof.
+                tracing::error!(
+                    "SEV exit code {sev_error_code:x?}, rip {:x?}, next rip {:x?}, sev features {:x?}, v_intr_control {:x?}, event inject {:x?}",
+                    vmsa.rip(),
+                    vmsa.next_rip(),
+                    vmsa.sev_features(),
+                    vmsa.v_intr_cntrl(),
+                    vmsa.event_inject(),
                 );
-                &mut self.backing.exit_stats[entered_from_vtl].unexpected
+                panic!("Received unexpected SEV exit code {sev_error_code:x?}");
             }
         };
         stat.increment();
