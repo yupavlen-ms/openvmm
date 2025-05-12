@@ -69,6 +69,7 @@ use futures_concurrency::future::Race;
 use get_protocol::EventLogId;
 use get_protocol::RegisterState;
 use get_protocol::TripleFaultType;
+use get_protocol::dps_json::GuestStateLifetime;
 use guest_emulation_transport::GuestEmulationTransportClient;
 use guest_emulation_transport::api::platform_settings::DevicePlatformSettings;
 use guest_emulation_transport::api::platform_settings::General;
@@ -263,15 +264,11 @@ pub struct UnderhillEnvCfg {
     pub force_load_vtl0_image: Option<String>,
     /// Use the user-mode NVMe driver.
     pub nvme_vfio: bool,
-
     // TODO MCR: support closed-source configuration logic for MCR device
     pub mcr: bool,
-
     /// Enable the shared visibility pool. This is enabled by default on
     /// hardware isolated platforms, but can be enabled for testing.
     pub enable_shared_visibility_pool: bool,
-    /// Enable support for guest vsm in CVMs. This is disabled by default.
-    pub cvm_guest_vsm: bool,
     /// Halt on a guest halt request instead of forwarding to the host.
     pub halt_on_guest_halt: bool,
     /// Leave sidecar VPs remote even if they hit exits.
@@ -282,10 +279,8 @@ pub struct UnderhillEnvCfg {
     pub hide_isolation: bool,
     /// Enable nvme keep alive.
     pub nvme_keep_alive: bool,
-
     /// test configuration
     pub test_configuration: Option<TestScenarioConfig>,
-
     /// Disable the UEFI front page.
     pub disable_uefi_frontpage: bool,
 }
@@ -1175,6 +1170,19 @@ async fn new_underhill_vm(
     let (runtime_params, measured_vtl2_info) =
         crate::loader::vtl2_config::read_vtl2_params().context("failed to read load parameters")?;
 
+    // Log information about VTL2 memory
+    let memory_allocation_mode = runtime_params.parsed_openhcl_boot().memory_allocation_mode;
+    tracing::info!(?memory_allocation_mode, "memory allocation mode");
+    tracing::info!(
+        vtl2_ram = runtime_params
+            .vtl2_memory_map()
+            .iter()
+            .map(|r| r.range.to_string())
+            .collect::<Vec<String>>()
+            .join(", "),
+        "vtl2 ram"
+    );
+
     let isolation = match runtime_params.parsed_openhcl_boot().isolation {
         bootloader_fdt_parser::IsolationType::None => virt::IsolationType::None,
         bootloader_fdt_parser::IsolationType::Vbs => virt::IsolationType::Vbs,
@@ -1335,6 +1343,13 @@ async fn new_underhill_vm(
         with_vmbus_relay = !hide_isolation;
     }
 
+    if matches!(
+        dps.general.guest_state_lifetime,
+        GuestStateLifetime::Ephemeral
+    ) {
+        todo!("OpenHCL ephemeral guest state")
+    }
+
     // also construct the VMGS nice and early, as much like the GET, it also
     // plays an important role during initial bringup
     let (vmgs_disk_metadata, mut vmgs) = match servicing_state.vmgs {
@@ -1362,47 +1377,33 @@ async fn new_underhill_vm(
 
             let meta = disk.save_meta();
             let disk = Disk::new(disk).context("invalid vmgs disk")?;
+            let logger = Arc::new(GetVmgsLogger::new(get_client.clone()));
 
-            let vmgs = if !env_cfg.reformat_vmgs {
-                match Vmgs::open(
-                    disk.clone(),
-                    Some(Arc::new(GetVmgsLogger::new(get_client.clone()))),
-                )
-                .instrument(tracing::info_span!("vmgs_open"))
-                .await
-                {
-                    Ok(vmgs) => Some(vmgs),
-                    Err(vmgs::Error::EmptyFile) if !is_restoring => {
-                        tracing::info!("empty vmgs file, formatting");
-                        None
-                    }
-                    Err(err) => {
-                        let event_log_id = match err {
-                            // The data store format is invalid or not supported.
-                            vmgs::Error::InvalidFormat(_) => EventLogId::VMGS_INVALID_FORMAT,
-                            // The data store is corrupted.
-                            vmgs::Error::CorruptFormat(_) => EventLogId::VMGS_CORRUPT_FORMAT,
-                            // All other errors
-                            _ => EventLogId::VMGS_INIT_FAILED,
-                        };
-
-                        get_client.event_log_fatal(event_log_id).await;
-                        return Err(err).context("fatal VMGS initialization error")?;
-                    }
-                }
-            } else {
+            let vmgs = if env_cfg.reformat_vmgs
+                || matches!(
+                    dps.general.guest_state_lifetime,
+                    GuestStateLifetime::Reprovision
+                ) {
                 tracing::info!("formatting vmgs file on request");
-                None
-            };
-
-            let vmgs = if let Some(vmgs) = vmgs {
-                vmgs
-            } else {
-                Vmgs::format_new(disk, Some(Arc::new(GetVmgsLogger::new(get_client.clone()))))
+                Vmgs::format_new(disk, Some(logger))
                     .instrument(tracing::info_span!("vmgs_format"))
                     .await
                     .context("failed to format vmgs")?
+            } else {
+                Vmgs::try_open(
+                    disk,
+                    Some(logger),
+                    !is_restoring,
+                    matches!(
+                        dps.general.guest_state_lifetime,
+                        GuestStateLifetime::ReprovisionOnFailure
+                    ),
+                )
+                .instrument(tracing::info_span!("vmgs_open"))
+                .await
+                .context("failed to open vmgs")?
             };
+
             (meta, vmgs)
         }
     };
@@ -1443,7 +1444,6 @@ async fn new_underhill_vm(
         topology: &processor_topology,
         cvm_cpuid_info: runtime_params.cvm_cpuid_info(),
         snp_secrets: runtime_params.snp_secrets(),
-        env_cvm_guest_vsm: env_cfg.cvm_guest_vsm,
         vtom,
         handle_synic: with_vmbus,
         no_sidecar_hotplug: env_cfg.no_sidecar_hotplug,
@@ -1753,6 +1753,7 @@ async fn new_underhill_vm(
         crash_notification_send,
         vmtime: &vmtime_source,
         cvm_params,
+        vmbus_relay: with_vmbus_relay,
     };
 
     let (partition, vps) = proto_partition
@@ -3070,6 +3071,7 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
         watchdog_enabled: _,
         vtl2_settings: _,
         cxl_memory_enabled: _,
+        guest_state_lifetime: _,
     } = &dps.general;
 
     if *hibernation_enabled {
