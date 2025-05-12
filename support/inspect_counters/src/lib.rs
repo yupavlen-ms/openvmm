@@ -4,7 +4,6 @@
 //! Inspectable types for implementing performance counters.
 
 use inspect::Inspect;
-use inspect::Value;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
@@ -36,7 +35,7 @@ impl Counter {
 
 impl Inspect for Counter {
     fn inspect(&self, req: inspect::Request<'_>) {
-        req.value(Value::counter(self.0))
+        req.with_counter_format().value(self.0)
     }
 }
 
@@ -70,7 +69,8 @@ impl SharedCounter {
 
 impl Inspect for SharedCounter {
     fn inspect(&self, req: inspect::Request<'_>) {
-        req.value(Value::counter(self.0.load(Ordering::Relaxed)))
+        req.with_counter_format()
+            .value(self.0.load(Ordering::Relaxed))
     }
 }
 
