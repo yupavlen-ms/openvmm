@@ -720,7 +720,7 @@ pub fn tdcall_wait_for_request(
     // Shared bit mask spec: TDX Module v1.5 ABI spec section 'TDVPS(excluding TD VMCS)'.
     // Should be either 1 << 47 or 1 << 51 (1 bit less than physical address width).
     // Should be in range 0x8000000 - 0x30000000? That's default VTL2 for this config.
-    let shared_mask = 1u64 << 47;
+    // let shared_mask = 1u64 << 47;
     // TODO: Check for page alignment.
     let length = end_gpa - start_gpa;
     // Looks like we don't need to extract GPN from linear address
