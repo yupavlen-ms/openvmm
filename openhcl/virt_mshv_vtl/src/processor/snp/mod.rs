@@ -1535,15 +1535,26 @@ impl UhProcessor<'_, SnpBacked> {
             }
 
             _ => {
-                // Don't print too much of the register state, might have guest secrets
-                // parts thereof.
                 tracing::error!(
-                    "SEV exit code {sev_error_code:x?}, rip {:x?}, next rip {:x?}, sev features {:x?}, v_intr_control {:x?}, event inject {:x?}",
-                    vmsa.rip(),
-                    vmsa.next_rip(),
+                    "SEV exit code {sev_error_code:x?} sev features {:x?} v_intr_control {:x?} event inject {:x?} \
+                    vmpl {:x?} cpl {:x?} exit_info1 {:x?} exit_info2 {:x?} exit_int_info {:x?} virtual_tom {:x?} \
+                    efer {:x?} cr4 {:x?} cr3 {:x?} cr0 {:x?} rflag {:x?} rip {:x?} next rip {:x?}",
                     vmsa.sev_features(),
                     vmsa.v_intr_cntrl(),
                     vmsa.event_inject(),
+                    vmsa.vmpl(),
+                    vmsa.cpl(),
+                    vmsa.exit_info1(),
+                    vmsa.exit_info2(),
+                    vmsa.exit_int_info(),
+                    vmsa.virtual_tom(),
+                    vmsa.efer(),
+                    vmsa.cr4(),
+                    vmsa.cr3(),
+                    vmsa.cr0(),
+                    vmsa.rflags(),
+                    vmsa.rip(),
+                    vmsa.next_rip(),
                 );
                 panic!("Received unexpected SEV exit code {sev_error_code:x?}");
             }
