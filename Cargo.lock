@@ -56,6 +56,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "address_filter"
+version = "0.0.0"
+dependencies = [
+ "inspect",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1833,6 +1841,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]
@@ -2425,6 +2434,7 @@ dependencies = [
  "mesh",
  "thiserror 2.0.12",
  "vm_resource",
+ "vmgs_resources",
 ]
 
 [[package]]
@@ -2577,6 +2587,7 @@ dependencies = [
  "vmbus_channel",
  "vmbus_ring",
  "vmcore",
+ "vmgs_resources",
  "zerocopy 0.8.24",
 ]
 
@@ -2735,6 +2746,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bitfield-struct 0.10.1",
+ "bitvec",
  "build_rs_guest_arch",
  "fs-err",
  "getrandom 0.3.2",
@@ -3014,6 +3026,7 @@ dependencies = [
  "vmcore",
  "vmgs",
  "vmgs_broker",
+ "vmgs_resources",
  "vmm_core",
  "vmm_core_defs",
  "vmotherboard",
@@ -3047,6 +3060,7 @@ dependencies = [
  "virt_whp",
  "vm_resource",
  "vmbus_proxy",
+ "vmgs_resources",
  "vmm_core_defs",
  "vmotherboard",
 ]
@@ -4089,6 +4103,7 @@ dependencies = [
 name = "mesh_remote"
 version = "0.0.0"
 dependencies = [
+ "event-listener",
  "futures",
  "futures-concurrency",
  "libc",
@@ -4902,7 +4917,6 @@ dependencies = [
  "dirs",
  "disk_backend_resources",
  "disk_crypt_resources",
- "disk_vhd1",
  "firmware_uefi_custom_vars",
  "floppy_resources",
  "framebuffer",
@@ -5414,6 +5428,7 @@ dependencies = [
  "vmbus_serial_resources",
  "vmcore",
  "vmgs_format",
+ "vmgs_resources",
  "vmm_core_defs",
  "vmotherboard",
  "vmsocket",
@@ -6687,6 +6702,7 @@ version = "0.0.0"
 dependencies = [
  "hvdef",
  "memory_range",
+ "thiserror 2.0.12",
  "tracing",
  "x86defs",
 ]
@@ -7393,6 +7409,7 @@ dependencies = [
  "guest_emulation_transport",
  "guestmem",
  "guid",
+ "hcl",
  "hcl_compat_uefi_nvram_storage",
  "hvdef",
  "hyperv_ic_guest",
@@ -7992,6 +8009,7 @@ dependencies = [
 name = "virt_support_apic"
 version = "0.0.0"
 dependencies = [
+ "address_filter",
  "bitfield-struct 0.10.1",
  "hvdef",
  "inspect",
@@ -8856,6 +8874,7 @@ dependencies = [
 name = "vmotherboard"
 version = "0.0.0"
 dependencies = [
+ "address_filter",
  "anyhow",
  "arc_cyclic_builder",
  "async-trait",
@@ -8974,7 +8993,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "bitfield-struct 0.10.1",
  "chipset_arc_mutex_device",
  "chipset_device",
  "closeable_mutex",
@@ -8984,7 +9002,6 @@ dependencies = [
  "hvdef",
  "inspect",
  "mesh",
- "open_enum",
  "pal_async",
  "parking_lot",
  "pci_core",
@@ -8997,6 +9014,17 @@ dependencies = [
  "vmbus_channel",
  "vmbus_ring",
  "vmcore",
+ "vpci_protocol",
+ "zerocopy 0.8.24",
+]
+
+[[package]]
+name = "vpci_protocol"
+version = "0.0.0"
+dependencies = [
+ "bitfield-struct 0.10.1",
+ "guid",
+ "open_enum",
  "zerocopy 0.8.24",
 ]
 

@@ -69,6 +69,7 @@ use futures_concurrency::future::Race;
 use get_protocol::EventLogId;
 use get_protocol::RegisterState;
 use get_protocol::TripleFaultType;
+use get_protocol::dps_json::GuestStateLifetime;
 use guest_emulation_transport::GuestEmulationTransportClient;
 use guest_emulation_transport::api::platform_settings::DevicePlatformSettings;
 use guest_emulation_transport::api::platform_settings::General;
@@ -1341,6 +1342,13 @@ async fn new_underhill_vm(
         with_vmbus_relay = !hide_isolation;
     }
 
+    if matches!(
+        dps.general.guest_state_lifetime,
+        GuestStateLifetime::Ephemeral
+    ) {
+        todo!("OpenHCL ephemeral guest state")
+    }
+
     // also construct the VMGS nice and early, as much like the GET, it also
     // plays an important role during initial bringup
     let (vmgs_disk_metadata, mut vmgs) = match servicing_state.vmgs {
@@ -1368,47 +1376,33 @@ async fn new_underhill_vm(
 
             let meta = disk.save_meta();
             let disk = Disk::new(disk).context("invalid vmgs disk")?;
+            let logger = Arc::new(GetVmgsLogger::new(get_client.clone()));
 
-            let vmgs = if !env_cfg.reformat_vmgs {
-                match Vmgs::open(
-                    disk.clone(),
-                    Some(Arc::new(GetVmgsLogger::new(get_client.clone()))),
-                )
-                .instrument(tracing::info_span!("vmgs_open"))
-                .await
-                {
-                    Ok(vmgs) => Some(vmgs),
-                    Err(vmgs::Error::EmptyFile) if !is_restoring => {
-                        tracing::info!("empty vmgs file, formatting");
-                        None
-                    }
-                    Err(err) => {
-                        let event_log_id = match err {
-                            // The data store format is invalid or not supported.
-                            vmgs::Error::InvalidFormat(_) => EventLogId::VMGS_INVALID_FORMAT,
-                            // The data store is corrupted.
-                            vmgs::Error::CorruptFormat(_) => EventLogId::VMGS_CORRUPT_FORMAT,
-                            // All other errors
-                            _ => EventLogId::VMGS_INIT_FAILED,
-                        };
-
-                        get_client.event_log_fatal(event_log_id).await;
-                        return Err(err).context("fatal VMGS initialization error")?;
-                    }
-                }
-            } else {
+            let vmgs = if env_cfg.reformat_vmgs
+                || matches!(
+                    dps.general.guest_state_lifetime,
+                    GuestStateLifetime::Reprovision
+                ) {
                 tracing::info!("formatting vmgs file on request");
-                None
-            };
-
-            let vmgs = if let Some(vmgs) = vmgs {
-                vmgs
-            } else {
-                Vmgs::format_new(disk, Some(Arc::new(GetVmgsLogger::new(get_client.clone()))))
+                Vmgs::format_new(disk, Some(logger))
                     .instrument(tracing::info_span!("vmgs_format"))
                     .await
                     .context("failed to format vmgs")?
+            } else {
+                Vmgs::try_open(
+                    disk,
+                    Some(logger),
+                    !is_restoring,
+                    matches!(
+                        dps.general.guest_state_lifetime,
+                        GuestStateLifetime::ReprovisionOnFailure
+                    ),
+                )
+                .instrument(tracing::info_span!("vmgs_open"))
+                .await
+                .context("failed to open vmgs")?
             };
+
             (meta, vmgs)
         }
     };
@@ -2502,7 +2496,14 @@ async fn new_underhill_vm(
         deps_winbond_super_io_and_floppy_full: None,
     };
 
-    let fallback_mmio_device = use_mmio_hypercalls.then(|| {
+    let fallback_mmio_device = if use_mmio_hypercalls {
+        let mshv_hvcall =
+            hcl::ioctl::MshvHvcall::new().context("failed to open mshv_hvcall device")?;
+        mshv_hvcall.set_allowed_hypercalls(&[
+            hvdef::HypercallCode::HvCallMemoryMappedIoRead,
+            hvdef::HypercallCode::HvCallMemoryMappedIoWrite,
+        ]);
+
         // If VTOM is present (CVM scenario), accesses to physical device and PCI config space may
         // occur below or above vTOM, but only within MMIO regions. Forward both to the host.
         let vtom = vtom.unwrap_or(0);
@@ -2520,11 +2521,13 @@ async fn new_underhill_vm(
                 Some(untrusted_mmio_ranges)
             };
 
-        Arc::new(CloseableMutex::new(FallbackMmioDevice {
-            partition: Arc::downgrade(&partition),
+        Some(Arc::new(CloseableMutex::new(FallbackMmioDevice {
             mmio_ranges: untrusted_mmio_ranges,
-        })) as Arc<CloseableMutex<dyn ChipsetDevice>>
-    });
+            mshv_hvcall,
+        })) as _)
+    } else {
+        None
+    };
 
     let BaseChipsetBuilderOutput {
         mut chipset_builder,
@@ -2744,6 +2747,7 @@ async fn new_underhill_vm(
     #[cfg(feature = "vpci")]
     {
         use virt::Hv1;
+        use vmcore::vpci_msi::VpciInterruptMapper;
 
         for crate::dispatch::vtl2_settings_worker::UhVpciDeviceConfig {
             instance_id,
@@ -2770,7 +2774,7 @@ async fn new_underhill_vm(
                         .context("vpci is not supported by this hypervisor")?
                         .build(Vtl::Vtl0, device_id)?;
                     let device = Arc::new(device);
-                    Ok((device.clone(), device))
+                    Ok((device.clone(), VpciInterruptMapper::new(device)))
                 },
             )
             .await?;
@@ -3071,6 +3075,7 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
         watchdog_enabled: _,
         vtl2_settings: _,
         cxl_memory_enabled: _,
+        guest_state_lifetime: _,
     } = &dps.general;
 
     if *hibernation_enabled {
@@ -3336,43 +3341,43 @@ impl chipset::pm::PmTimerAssist for UnderhillPmTimerAssist {
 // forwarding them to the host. It needs to implement the ChipsetDevice and
 // MmioIntercept traits.
 struct FallbackMmioDevice {
-    partition: std::sync::Weak<UhPartition>,
     mmio_ranges: Option<Vec<MemoryRange>>,
+    mshv_hvcall: hcl::ioctl::MshvHvcall,
+}
+
+impl FallbackMmioDevice {
+    fn is_allowed(&self, addr: u64, data_len: usize) -> bool {
+        self.mmio_ranges.as_ref().is_none_or(|v| {
+            v.iter().any(|range| {
+                range.contains_addr(addr) && range.contains_addr(addr + data_len as u64 - 1)
+            })
+        })
+    }
 }
 
 impl chipset_device::mmio::MmioIntercept for FallbackMmioDevice {
     fn mmio_read(&mut self, addr: u64, data: &mut [u8]) -> chipset_device::io::IoResult {
-        let Some(partition) = self.partition.upgrade() else {
-            return chipset_device::io::IoResult::Ok;
-        };
-
-        if let Some(mmio_ranges) = &self.mmio_ranges {
-            data.fill(!0);
-            if mmio_ranges.iter().any(|range| {
-                range.contains_addr(addr) && range.contains_addr(addr + data.len() as u64 - 1)
-            }) {
-                partition.host_mmio_read(addr, data);
+        data.fill(!0);
+        if self.is_allowed(addr, data.len()) {
+            if let Err(err) = self.mshv_hvcall.mmio_read(addr, data) {
+                tracelimit::error_ratelimited!(
+                    error = &err as &dyn std::error::Error,
+                    "failed host MMIO read"
+                );
             }
-        } else {
-            partition.host_mmio_read(addr, data);
         }
 
         chipset_device::io::IoResult::Ok
     }
 
     fn mmio_write(&mut self, addr: u64, data: &[u8]) -> chipset_device::io::IoResult {
-        let Some(partition) = self.partition.upgrade() else {
-            return chipset_device::io::IoResult::Ok;
-        };
-
-        if let Some(mmio_ranges) = &self.mmio_ranges {
-            if mmio_ranges.iter().any(|range| {
-                range.contains_addr(addr) && range.contains_addr(addr + data.len() as u64 - 1)
-            }) {
-                partition.host_mmio_write(addr, data);
+        if self.is_allowed(addr, data.len()) {
+            if let Err(err) = self.mshv_hvcall.mmio_write(addr, data) {
+                tracelimit::error_ratelimited!(
+                    error = &err as &dyn std::error::Error,
+                    "failed host MMIO write"
+                );
             }
-        } else {
-            partition.host_mmio_write(addr, data);
         }
 
         chipset_device::io::IoResult::Ok

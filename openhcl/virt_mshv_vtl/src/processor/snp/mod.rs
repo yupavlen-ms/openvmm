@@ -113,7 +113,6 @@ struct ExitStats {
     npf_no_intercept: Counter,
     npf_spurious: Counter,
     rdpmc: Counter,
-    unexpected: Counter,
     vmgexit: Counter,
     vmmcall: Counter,
     xsetbv: Counter,
@@ -320,6 +319,46 @@ impl HardwareIsolatedBacking for SnpBacked {
             )
             .expect("setting intercept control succeeds");
     }
+
+    fn handle_cross_vtl_interrupts(
+        this: &mut UhProcessor<'_, Self>,
+        dev: &impl CpuIo,
+    ) -> Result<bool, UhRunVpError> {
+        this.cvm_handle_cross_vtl_interrupts(|this, vtl, check_rflags| {
+            let vmsa = this.runner.vmsa_mut(vtl);
+            if vmsa.event_inject().valid()
+                && vmsa.event_inject().interruption_type() == x86defs::snp::SEV_INTR_TYPE_NMI
+            {
+                return true;
+            }
+
+            let vmsa_priority = vmsa.v_intr_cntrl().priority() as u32;
+            let lapic = &mut this.backing.cvm.lapics[vtl].lapic;
+            let ppr = lapic
+                .access(&mut SnpApicClient {
+                    partition: this.partition,
+                    vmsa,
+                    dev,
+                    vmtime: &this.vmtime,
+                    vtl,
+                })
+                .get_ppr();
+            let ppr_priority = ppr >> 4;
+            if vmsa_priority <= ppr_priority {
+                return false;
+            }
+
+            let vmsa = this.runner.vmsa_mut(vtl);
+            if (check_rflags && !RFlags::from_bits(vmsa.rflags()).interrupt_enable())
+                || vmsa.v_intr_cntrl().intr_shadow()
+                || !vmsa.v_intr_cntrl().irq()
+            {
+                return false;
+            }
+
+            true
+        })
+    }
 }
 
 /// Partition-wide shared data for SNP VPs.
@@ -503,50 +542,6 @@ impl BackingPrivate for SnpBacked {
         this.backing.hv_sint_notifications = sints;
     }
 
-    fn handle_cross_vtl_interrupts(
-        this: &mut UhProcessor<'_, Self>,
-        dev: &impl CpuIo,
-    ) -> Result<bool, UhRunVpError> {
-        this.cvm_handle_cross_vtl_interrupts(|this, vtl, check_rflags| {
-            let vmsa = this.runner.vmsa_mut(vtl);
-            if vmsa.event_inject().valid()
-                && vmsa.event_inject().interruption_type() == x86defs::snp::SEV_INTR_TYPE_NMI
-            {
-                return true;
-            }
-
-            let vmsa_priority = vmsa.v_intr_cntrl().priority() as u32;
-            let lapic = &mut this.backing.cvm.lapics[vtl].lapic;
-            let ppr = lapic
-                .access(&mut SnpApicClient {
-                    partition: this.partition,
-                    vmsa,
-                    dev,
-                    vmtime: &this.vmtime,
-                    vtl,
-                })
-                .get_ppr();
-            let ppr_priority = ppr >> 4;
-            if vmsa_priority <= ppr_priority {
-                return false;
-            }
-
-            let vmsa = this.runner.vmsa_mut(vtl);
-            if (check_rflags && !RFlags::from_bits(vmsa.rflags()).interrupt_enable())
-                || vmsa.v_intr_cntrl().intr_shadow()
-                || !vmsa.v_intr_cntrl().irq()
-            {
-                return false;
-            }
-
-            true
-        })
-    }
-
-    fn handle_exit_activity(this: &mut UhProcessor<'_, Self>) {
-        this.cvm_handle_exit_activity();
-    }
-
     fn inspect_extra(this: &mut UhProcessor<'_, Self>, resp: &mut inspect::Response<'_>) {
         let vtl0_vmsa = this.runner.vmsa(GuestVtl::Vtl0);
         let vtl1_vmsa = if this.backing.cvm_state().vtl1.is_some() {
@@ -557,13 +552,10 @@ impl BackingPrivate for SnpBacked {
 
         let add_vmsa_inspect = |req: inspect::Request<'_>, vmsa: VmsaWrapper<'_, &SevVmsa>| {
             req.respond()
-                .field("guest_error_code", inspect::AsHex(vmsa.guest_error_code()))
-                .field("exit_info1", inspect::AsHex(vmsa.exit_info1()))
-                .field("exit_info2", inspect::AsHex(vmsa.exit_info2()))
-                .field(
-                    "v_intr_cntrl",
-                    inspect::AsHex(u64::from(vmsa.v_intr_cntrl())),
-                );
+                .hex("guest_error_code", vmsa.guest_error_code())
+                .hex("exit_info1", vmsa.exit_info1())
+                .hex("exit_info2", vmsa.exit_info2())
+                .hex("v_intr_cntrl", u64::from(vmsa.v_intr_cntrl()));
         };
 
         resp.child("vmsa_additional", |req| {
@@ -585,10 +577,6 @@ impl BackingPrivate for SnpBacked {
         Some(&mut self.cvm.hv[vtl])
     }
 
-    fn untrusted_synic(&self) -> Option<&ProcessorSynic> {
-        None
-    }
-
     fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic> {
         None
     }
@@ -602,6 +590,15 @@ impl BackingPrivate for SnpBacked {
 
     fn vtl1_inspectable(this: &UhProcessor<'_, Self>) -> bool {
         this.hcvm_vtl1_inspectable()
+    }
+
+    fn process_interrupts(
+        this: &mut UhProcessor<'_, Self>,
+        scan_irr: VtlArray<bool, 2>,
+        first_scan_irr: &mut bool,
+        dev: &impl CpuIo,
+    ) -> Result<bool, VpHaltReason<UhRunVpError>> {
+        this.cvm_process_interrupts(scan_irr, first_scan_irr, dev)
     }
 }
 
@@ -643,7 +640,6 @@ fn init_vmsa(vmsa: &mut VmsaWrapper<'_, &mut SevVmsa>, vtl: GuestVtl, vtom: Opti
     // and use that to set btb_isolation, prevent_host_ibs, and VMSA register protection.
     let msr = devmsr::MsrDevice::new(0).expect("open msr");
     let sev_status = SevStatusMsr::from(msr.read_msr(x86defs::X86X_AMD_MSR_SEV).expect("read msr"));
-    tracing::info!("VMSA creation {:?} {:?}", vtl, sev_status);
 
     // BUGBUG: this isn't fully accurate--the hypervisor can try running
     // from this at any time, so we need to be careful to set the field
@@ -679,6 +675,9 @@ fn init_vmsa(vmsa: &mut VmsaWrapper<'_, &mut SevVmsa>, vtl: GuestVtl, vtom: Opti
     // Efer has a value that is different than the architectural default (for SNP, efer
     // must always have the SVME bit set).
     vmsa.set_efer(x86defs::X64_EFER_SVME);
+
+    let sev_features = vmsa.sev_features();
+    tracing::info!(?vtl, ?sev_status, ?sev_features, "VMSA features");
 }
 
 struct SnpApicClient<'a, T> {
@@ -748,6 +747,7 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, SnpBacked> {
             hv1_hypercall::HvSendSyntheticClusterIpi,
             hv1_hypercall::HvSendSyntheticClusterIpiEx,
             hv1_hypercall::HvInstallIntercept,
+            hv1_hypercall::HvAssertVirtualInterrupt,
         ],
     );
 
@@ -1017,7 +1017,6 @@ impl UhProcessor<'_, SnpBacked> {
                 })
                 .msr_write(msr, value)
                 .or_else_if_unknown(|| self.write_msr_cvm(msr, value, entered_from_vtl))
-                .or_else_if_unknown(|| self.write_msr(msr, value, entered_from_vtl))
                 .or_else_if_unknown(|| self.write_msr_snp(dev, msr, value, entered_from_vtl));
 
             match r {
@@ -1039,7 +1038,7 @@ impl UhProcessor<'_, SnpBacked> {
                     vtl: entered_from_vtl,
                 })
                 .msr_read(msr)
-                .or_else_if_unknown(|| self.read_msr(msr, entered_from_vtl))
+                .or_else_if_unknown(|| self.read_msr_cvm(msr, entered_from_vtl))
                 .or_else_if_unknown(|| self.read_msr_snp(dev, msr, entered_from_vtl));
 
             let value = match r {
@@ -1209,7 +1208,10 @@ impl UhProcessor<'_, SnpBacked> {
             //
             // TODO SNP: Handle ICEBP.
             let exit_int_info = SevEventInjectInfo::from(vmsa.exit_int_info());
-            debug_assert!(exit_int_info.valid());
+            debug_assert!(
+                exit_int_info.valid(),
+                "event inject info should be valid {exit_int_info:x?}"
+            );
 
             let inject = match exit_int_info.interruption_type() {
                 x86defs::snp::SEV_INTR_TYPE_EXCEPT => {
@@ -1469,7 +1471,12 @@ impl UhProcessor<'_, SnpBacked> {
                 &mut self.backing.exit_stats[entered_from_vtl].vmgexit
             }
 
-            SevExitCode::NMI | SevExitCode::PAUSE | SevExitCode::SMI | SevExitCode::VMGEXIT => {
+            SevExitCode::NMI
+            | SevExitCode::PAUSE
+            | SevExitCode::SMI
+            | SevExitCode::VMGEXIT
+            | SevExitCode::BUSLOCK
+            | SevExitCode::IDLE_HLT => {
                 // Ignore intercept processing if the guest exited due to an automatic exit.
                 &mut self.backing.exit_stats[entered_from_vtl].automatic_exit
             }
@@ -1531,12 +1538,28 @@ impl UhProcessor<'_, SnpBacked> {
             }
 
             _ => {
-                debug_assert!(
-                    false,
-                    "Received unexpected exit code {}",
-                    vmsa.guest_error_code()
+                tracing::error!(
+                    "SEV exit code {sev_error_code:x?} sev features {:x?} v_intr_control {:x?} event inject {:x?} \
+                    vmpl {:x?} cpl {:x?} exit_info1 {:x?} exit_info2 {:x?} exit_int_info {:x?} virtual_tom {:x?} \
+                    efer {:x?} cr4 {:x?} cr3 {:x?} cr0 {:x?} rflag {:x?} rip {:x?} next rip {:x?}",
+                    vmsa.sev_features(),
+                    vmsa.v_intr_cntrl(),
+                    vmsa.event_inject(),
+                    vmsa.vmpl(),
+                    vmsa.cpl(),
+                    vmsa.exit_info1(),
+                    vmsa.exit_info2(),
+                    vmsa.exit_int_info(),
+                    vmsa.virtual_tom(),
+                    vmsa.efer(),
+                    vmsa.cr4(),
+                    vmsa.cr3(),
+                    vmsa.cr0(),
+                    vmsa.rflags(),
+                    vmsa.rip(),
+                    vmsa.next_rip(),
                 );
-                &mut self.backing.exit_stats[entered_from_vtl].unexpected
+                panic!("Received unexpected SEV exit code {sev_error_code:x?}");
             }
         };
         stat.increment();

@@ -168,11 +168,18 @@ impl PendingCommands {
 }
 
 impl QueuePair {
-    pub const MAX_SQ_ENTRIES: u16 = (PAGE_SIZE / 64) as u16; // Maximum SQ size in entries.
-    pub const MAX_CQ_ENTRIES: u16 = (PAGE_SIZE / 16) as u16; // Maximum CQ size in entries.
-    const SQ_SIZE: usize = PAGE_SIZE; // Submission Queue size in bytes.
-    const CQ_SIZE: usize = PAGE_SIZE; // Completion Queue size in bytes.
-    const PER_QUEUE_PAGES: usize = 128;
+    /// Maximum SQ size in entries.
+    pub const MAX_SQ_ENTRIES: u16 = (PAGE_SIZE / 64) as u16;
+    /// Maximum CQ size in entries.
+    pub const MAX_CQ_ENTRIES: u16 = (PAGE_SIZE / 16) as u16;
+    /// Submission Queue size in bytes.
+    const SQ_SIZE: usize = PAGE_SIZE;
+    /// Completion Queue size in bytes.
+    const CQ_SIZE: usize = PAGE_SIZE;
+    /// Number of pages per queue if bounce buffering.
+    const PER_QUEUE_PAGES_BOUNCE_BUFFER: usize = 128;
+    /// Number of pages per queue if not bounce buffering.
+    const PER_QUEUE_PAGES_NO_BOUNCE_BUFFER: usize = 64;
 
     pub fn new(
         spawner: impl SpawnDriver,
@@ -182,10 +189,16 @@ impl QueuePair {
         cq_entries: u16, // Requested CQ size in entries.
         interrupt: DeviceInterrupt,
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
+        bounce_buffer: bool,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::new qid={}", qid);
-        let total_size =
-            QueuePair::SQ_SIZE + QueuePair::CQ_SIZE + QueuePair::PER_QUEUE_PAGES * PAGE_SIZE;
+        let total_size = QueuePair::SQ_SIZE
+            + QueuePair::CQ_SIZE
+            + if bounce_buffer {
+                QueuePair::PER_QUEUE_PAGES_BOUNCE_BUFFER * PAGE_SIZE
+            } else {
+                QueuePair::PER_QUEUE_PAGES_NO_BOUNCE_BUFFER * PAGE_SIZE
+            };
         let dma_client = device.dma_client();
         let mem = dma_client
             .allocate_dma_buffer(total_size)
@@ -195,7 +208,15 @@ impl QueuePair {
         assert!(cq_entries <= Self::MAX_CQ_ENTRIES);
 
         QueuePair::new_or_restore(
-            spawner, qid, sq_entries, cq_entries, interrupt, registers, mem, None,
+            spawner,
+            qid,
+            sq_entries,
+            cq_entries,
+            interrupt,
+            registers,
+            mem,
+            None,
+            bounce_buffer,
         )
     }
 
@@ -209,6 +230,7 @@ impl QueuePair {
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         mem: MemoryBlock,
         saved_state: Option<&QueueHandlerSavedState>,
+        bounce_buffer: bool,
     ) -> anyhow::Result<Self> {
         // MemoryBlock is either allocated or restored prior calling here.
         let sq_mem_block = mem.subblock(0, QueuePair::SQ_SIZE);
@@ -242,16 +264,35 @@ impl QueuePair {
             }
         });
 
-        // Page allocator uses remaining part of the buffer for dynamic allocation.
-        const _: () = assert!(
-            QueuePair::PER_QUEUE_PAGES * PAGE_SIZE >= 128 * 1024 + PAGE_SIZE,
-            "not enough room for an ATAPI IO plus a PRP list"
-        );
-        let alloc: PageAllocator =
-            PageAllocator::new(mem.subblock(data_offset, QueuePair::PER_QUEUE_PAGES * PAGE_SIZE));
+        // Convert the queue pages to bytes, and assert that queue size is large
+        // enough.
+        const fn pages_to_size_bytes(pages: usize) -> usize {
+            let size = pages * PAGE_SIZE;
+            assert!(
+                size >= 128 * 1024 + PAGE_SIZE,
+                "not enough room for an ATAPI IO plus a PRP list"
+            );
+            size
+        }
+
+        // Page allocator uses remaining part of the buffer for dynamic
+        // allocation. The length of the page allocator depends on if bounce
+        // buffering / double buffering is needed.
+        //
+        // NOTE: Do not remove the `const` blocks below. This is to force
+        // compile time evaluation of the assertion described above.
+        let alloc_len = if bounce_buffer {
+            const { pages_to_size_bytes(QueuePair::PER_QUEUE_PAGES_BOUNCE_BUFFER) }
+        } else {
+            const { pages_to_size_bytes(QueuePair::PER_QUEUE_PAGES_NO_BOUNCE_BUFFER) }
+        };
+
+        let alloc = PageAllocator::new(mem.subblock(data_offset, alloc_len));
+
         // YSP: FIXME: Debug code
         let mut checker: [u8; 8] = [0; 8];
         mem.read_at(0, checker.as_mut_slice());
+        // Reads SQ memory.
         tracing::info!(
             "YSP: read [{} {} {} {} {} {} {} {}]",
             checker[0],
@@ -320,6 +361,7 @@ impl QueuePair {
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         mem: MemoryBlock,
         saved_state: &QueuePairSavedState,
+        bounce_buffer: bool,
     ) -> anyhow::Result<Self> {
         tracing::info!("YSP: QueuePair::restore qid={}", saved_state.qid);
         let QueuePairSavedState {
@@ -340,6 +382,7 @@ impl QueuePair {
             registers,
             mem,
             Some(handler_data),
+            bounce_buffer,
         )
     }
 }

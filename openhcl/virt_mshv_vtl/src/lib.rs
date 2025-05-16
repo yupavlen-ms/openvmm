@@ -223,7 +223,7 @@ struct UhPartitionInner {
     intercept_debug_exceptions: bool,
     #[cfg(guest_arch = "x86_64")]
     // N.B For now, only one device vector table i.e. for VTL0 only
-    #[inspect(with = "|x| inspect::iter_by_index(x.read().into_inner().map(inspect::AsHex))")]
+    #[inspect(hex, with = "|x| inspect::iter_by_index(x.read().into_inner())")]
     device_vector_table: RwLock<IrrBitmap>,
     vmbus_relay: bool,
 }
@@ -426,9 +426,10 @@ impl UhCvmVpState {
 
 #[cfg(guest_arch = "x86_64")]
 #[derive(Inspect, Default)]
+#[inspect(hex)]
 /// Configuration of VTL 1 registration for intercepts on certain registers
 pub struct SecureRegisterInterceptState {
-    #[inspect(with = "|x| inspect::AsHex(u64::from(*x))")]
+    #[inspect(with = "|&x| u64::from(x)")]
     intercept_control: hvdef::HvRegisterCrInterceptControl,
     cr0_mask: u64,
     cr4_mask: u64,
@@ -2062,34 +2063,6 @@ impl UhPartition {
         }
 
         caps
-    }
-
-    /// Forward a (virtual) MMIO read to the host for handling.
-    pub fn host_mmio_read(&self, addr: u64, data: &mut [u8]) {
-        if !self.inner.use_mmio_hypercalls {
-            return;
-        }
-        // There isn't anything reasonable that can be done in the face of errors from the host.
-        if let Err(err) = self.inner.hcl.memory_mapped_io_read(addr, data) {
-            tracelimit::error_ratelimited!(
-                error = &err as &dyn std::error::Error,
-                "Failed host MMIO read"
-            );
-        }
-    }
-
-    /// Forward a (virtual) MMIO write to the host for handling.
-    pub fn host_mmio_write(&self, addr: u64, data: &[u8]) {
-        if !self.inner.use_mmio_hypercalls {
-            return;
-        }
-        // There isn't anything reasonable that can be done in the face of errors from the host.
-        if let Err(err) = self.inner.hcl.memory_mapped_io_write(addr, data) {
-            tracelimit::error_ratelimited!(
-                error = &err as &dyn std::error::Error,
-                "Failed host MMIO write"
-            );
-        }
     }
 }
 
