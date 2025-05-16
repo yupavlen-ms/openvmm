@@ -110,15 +110,12 @@ impl NvmeManager {
         };
         let task = driver.spawn("nvme-manager", async move {
             // Restore saved data (if present) before async worker thread runs.
-            if saved_state.is_some() {
-                let restore_stataus = NvmeManager::restore(
-                    &mut worker,
-                    saved_state.as_ref().unwrap(),
-                )
-                .instrument(tracing::info_span!("nvme_manager_restore"))
-                .await;
-                if let Err(e) = restore_stataus {
-                    tracing::error!("YSP: failed to restore nvme manager state: {}", e);
+            if let Some(s) = saved_state.as_ref() {
+                if let Err(e) = NvmeManager::restore(&mut worker, s)
+                    .instrument(tracing::info_span!("nvme_manager_restore"))
+                    .await
+                {
+                    tracing::error!("failed to restore nvme manager: {}", e);
                 }
             };
             worker.run(recv).await
