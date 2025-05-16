@@ -8431,6 +8431,7 @@ dependencies = [
  "vmbus_core",
  "widestring",
  "windows 0.59.0",
+ "windows-sys 0.59.0",
  "zerocopy 0.8.24",
 ]
 
