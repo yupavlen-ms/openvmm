@@ -47,7 +47,6 @@ use hvdef::hypercall::HvGvaRange;
 use inspect::Inspect;
 use inspect::InspectMut;
 use inspect_counters::Counter;
-use parking_lot::RwLock;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering;
 use tlb_flush::FLUSH_GVA_LIST_SIZE;
@@ -129,6 +128,7 @@ use x86emu::Segment;
 /// MSRs that are allowed to be read by the guest without interception.
 const MSR_ALLOWED_READ: &[u32] = &[
     x86defs::X86X_MSR_TSC,
+    x86defs::X86X_MSR_TSC_AUX,
     X86X_MSR_EFER,
     x86defs::X86X_MSR_STAR,
     x86defs::X86X_MSR_LSTAR,
@@ -150,7 +150,6 @@ const MSR_ALLOWED_READ_WRITE: &[u32] = &[
     x86defs::X86X_MSR_PL1_SSP,
     x86defs::X86X_MSR_PL2_SSP,
     x86defs::X86X_MSR_PL3_SSP,
-    x86defs::X86X_MSR_TSC_AUX,
     x86defs::X86X_MSR_INTERRUPT_SSP_TABLE_ADDR,
     x86defs::X86X_IA32_MSR_XFD,
     x86defs::X86X_IA32_MSR_XFD_ERR,
@@ -355,7 +354,7 @@ pub struct TdxBacked {
     vtls: VtlArray<TdxVtl, 2>,
 
     untrusted_synic: Option<ProcessorSynic>,
-    #[inspect(with = "|x| inspect::iter_by_index(x).map_value(inspect::AsHex)")]
+    #[inspect(hex, iter_by_index)]
     eoi_exit_bitmap: [u64; 4],
 
     /// A mapped page used for issuing INVGLA hypercalls.
@@ -622,12 +621,6 @@ impl HardwareIsolatedBacking for TdxBacked {
         // See [`MSR_ALLOWED_READ_WRITE`].
         this.runner.set_msr_bit(
             vtl,
-            x86defs::X86X_MSR_TSC_AUX,
-            true,
-            intercept_control.msr_tsc_aux_write(),
-        );
-        this.runner.set_msr_bit(
-            vtl,
             x86defs::X86X_MSR_S_CET,
             true,
             intercept_control.msr_scet_write(),
@@ -663,6 +656,65 @@ impl HardwareIsolatedBacking for TdxBacked {
             intercept_control.msr_pls_ssp_write(),
         );
     }
+
+    fn handle_cross_vtl_interrupts(
+        this: &mut UhProcessor<'_, Self>,
+        dev: &impl CpuIo,
+    ) -> Result<bool, UhRunVpError> {
+        this.cvm_handle_cross_vtl_interrupts(|this, vtl, check_rflags| {
+            let backing_vtl = &this.backing.vtls[vtl];
+            if backing_vtl.interruption_information.valid()
+                && backing_vtl.interruption_information.interruption_type() == INTERRUPT_TYPE_NMI
+            {
+                return true;
+            }
+
+            let (vector, ppr) = if this.backing.cvm.lapics[vtl].lapic.is_offloaded() {
+                let vector = backing_vtl.private_regs.rvi;
+                let ppr = std::cmp::max(
+                    backing_vtl.private_regs.svi.into(),
+                    this.runner.tdx_apic_page(vtl).tpr.value,
+                );
+                (vector, ppr)
+            } else {
+                let lapic = &mut this.backing.cvm.lapics[vtl].lapic;
+                let vector = lapic.next_irr().unwrap_or(0);
+                let ppr = lapic
+                    .access(&mut TdxApicClient {
+                        partition: this.partition,
+                        apic_page: this.runner.tdx_apic_page_mut(vtl),
+                        dev,
+                        vmtime: &this.vmtime,
+                        vtl,
+                    })
+                    .get_ppr();
+                (vector, ppr)
+            };
+            let vector_priority = (vector as u32) >> 4;
+            let ppr_priority = ppr >> 4;
+
+            if vector_priority <= ppr_priority {
+                return false;
+            }
+
+            if check_rflags
+                && !RFlags::from_bits(backing_vtl.private_regs.rflags).interrupt_enable()
+            {
+                return false;
+            }
+
+            let interruptibility: Interruptibility = this
+                .runner
+                .read_vmcs32(vtl, VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY)
+                .into();
+
+            if interruptibility.blocked_by_sti() || interruptibility.blocked_by_movss() {
+                return false;
+            }
+
+            true
+        })
+    }
 }
 
 /// Partition-wide shared data for TDX VPs.
@@ -674,7 +726,7 @@ pub struct TdxBackedShared {
     /// the guest thinks it is interacting directly with the untrusted
     /// hypervisor via an architecture-specific interface.
     pub(crate) untrusted_synic: Option<GlobalSynic>,
-    flush_state: VtlArray<RwLock<TdxPartitionFlushState>, 2>,
+    flush_state: VtlArray<TdxPartitionFlushState, 2>,
     #[inspect(iter_by_index)]
     active_vtl: Vec<AtomicU8>,
     /// CR4 bits that the guest is allowed to set to 1.
@@ -706,7 +758,7 @@ impl TdxBackedShared {
 
         Ok(Self {
             untrusted_synic,
-            flush_state: VtlArray::from_fn(|_| RwLock::new(TdxPartitionFlushState::new())),
+            flush_state: VtlArray::from_fn(|_| TdxPartitionFlushState::new()),
             cvm: params.cvm_state.unwrap(),
             // VPs start in VTL 2.
             active_vtl: std::iter::repeat_n(2, partition_params.topology.vp_count() as usize)
@@ -1043,75 +1095,12 @@ impl BackingPrivate for TdxBacked {
         }
     }
 
-    fn handle_cross_vtl_interrupts(
-        this: &mut UhProcessor<'_, Self>,
-        dev: &impl CpuIo,
-    ) -> Result<bool, UhRunVpError> {
-        this.cvm_handle_cross_vtl_interrupts(|this, vtl, check_rflags| {
-            let backing_vtl = &this.backing.vtls[vtl];
-            if backing_vtl.interruption_information.valid()
-                && backing_vtl.interruption_information.interruption_type() == INTERRUPT_TYPE_NMI
-            {
-                return true;
-            }
-
-            let (vector, ppr) = if this.backing.cvm.lapics[vtl].lapic.is_offloaded() {
-                let vector = backing_vtl.private_regs.rvi;
-                let ppr = std::cmp::max(
-                    backing_vtl.private_regs.svi.into(),
-                    this.runner.tdx_apic_page(vtl).tpr.value,
-                );
-                (vector, ppr)
-            } else {
-                let lapic = &mut this.backing.cvm.lapics[vtl].lapic;
-                let vector = lapic.next_irr().unwrap_or(0);
-                let ppr = lapic
-                    .access(&mut TdxApicClient {
-                        partition: this.partition,
-                        apic_page: this.runner.tdx_apic_page_mut(vtl),
-                        dev,
-                        vmtime: &this.vmtime,
-                        vtl,
-                    })
-                    .get_ppr();
-                (vector, ppr)
-            };
-            let vector_priority = (vector as u32) >> 4;
-            let ppr_priority = ppr >> 4;
-
-            if vector_priority <= ppr_priority {
-                return false;
-            }
-
-            if check_rflags
-                && !RFlags::from_bits(backing_vtl.private_regs.rflags).interrupt_enable()
-            {
-                return false;
-            }
-
-            let interruptibility: Interruptibility = this
-                .runner
-                .read_vmcs32(vtl, VmcsField::VMX_VMCS_GUEST_INTERRUPTIBILITY)
-                .into();
-
-            if interruptibility.blocked_by_sti() || interruptibility.blocked_by_movss() {
-                return false;
-            }
-
-            true
-        })
-    }
-
     fn hv(&self, vtl: GuestVtl) -> Option<&ProcessorVtlHv> {
         Some(&self.cvm.hv[vtl])
     }
 
     fn hv_mut(&mut self, vtl: GuestVtl) -> Option<&mut ProcessorVtlHv> {
         Some(&mut self.cvm.hv[vtl])
-    }
-
-    fn untrusted_synic(&self) -> Option<&ProcessorSynic> {
-        self.untrusted_synic.as_ref()
     }
 
     fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic> {
@@ -1129,8 +1118,13 @@ impl BackingPrivate for TdxBacked {
         this.hcvm_vtl1_inspectable()
     }
 
-    fn handle_exit_activity(this: &mut UhProcessor<'_, Self>) {
-        this.cvm_handle_exit_activity();
+    fn process_interrupts(
+        this: &mut UhProcessor<'_, Self>,
+        scan_irr: VtlArray<bool, 2>,
+        first_scan_irr: &mut bool,
+        dev: &impl CpuIo,
+    ) -> Result<bool, VpHaltReason<UhRunVpError>> {
+        this.cvm_process_interrupts(scan_irr, first_scan_irr, dev)
     }
 }
 
@@ -2600,6 +2594,7 @@ impl UhProcessor<'_, TdxBacked> {
             x86defs::X86X_MSR_CSTAR => self.backing.vtls[vtl].msr_cstar = value,
             x86defs::X86X_MSR_LSTAR => state.msr_lstar = value,
             x86defs::X86X_MSR_SFMASK => state.msr_sfmask = value,
+            x86defs::X86X_MSR_TSC_AUX => state.msr_tsc_aux = value,
             x86defs::X86X_MSR_SYSENTER_CS => {
                 self.runner.write_vmcs32(
                     vtl,
@@ -3500,6 +3495,7 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, TdxBacked> {
             hv1_hypercall::HvSendSyntheticClusterIpi,
             hv1_hypercall::HvSendSyntheticClusterIpiEx,
             hv1_hypercall::HvInstallIntercept,
+            hv1_hypercall::HvAssertVirtualInterrupt,
         ]
     );
 
@@ -4159,20 +4155,22 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressListEx
             .map_err(|e| (e, 0))?;
 
         let vtl = self.intercepted_vtl;
-        {
-            let mut flush_state = self.vp.shared.flush_state[vtl].write();
+        let flush_state = &self.vp.shared.flush_state[vtl];
 
-            // If we fail to add ranges to the list for any reason then promote this request to a flush entire.
-            if let Err(()) = Self::add_ranges_to_tlb_flush_list(
-                &mut flush_state,
-                gva_ranges,
-                flags.use_extended_range_format(),
-            ) {
-                if flags.non_global_mappings_only() {
-                    flush_state.s.flush_entire_non_global_counter += 1;
-                } else {
-                    flush_state.s.flush_entire_counter += 1;
-                }
+        // If we fail to add ranges to the list for any reason then promote this request to a flush entire.
+        if let Err(()) = Self::add_ranges_to_tlb_flush_list(
+            flush_state,
+            gva_ranges,
+            flags.use_extended_range_format(),
+        ) {
+            if flags.non_global_mappings_only() {
+                flush_state
+                    .flush_entire_non_global_counter
+                    .fetch_add(1, Ordering::Relaxed);
+            } else {
+                flush_state
+                    .flush_entire_counter
+                    .fetch_add(1, Ordering::Relaxed);
             }
         }
 
@@ -4218,15 +4216,17 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpaceEx
         self.hcvm_validate_flush_inputs(processor_set, flags, false)?;
         let vtl = self.intercepted_vtl;
 
-        {
-            let mut flush_state = self.vp.shared.flush_state[vtl].write();
+        let flush_state = &self.vp.shared.flush_state[vtl];
 
-            // Set flush entire.
-            if flags.non_global_mappings_only() {
-                flush_state.s.flush_entire_non_global_counter += 1;
-            } else {
-                flush_state.s.flush_entire_counter += 1;
-            }
+        // Set flush entire.
+        if flags.non_global_mappings_only() {
+            flush_state
+                .flush_entire_non_global_counter
+                .fetch_add(1, Ordering::Relaxed);
+        } else {
+            flush_state
+                .flush_entire_counter
+                .fetch_add(1, Ordering::Relaxed);
         }
 
         // Send flush IPIs to the specified VPs.
@@ -4246,7 +4246,7 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpaceEx
 
 impl<T: CpuIo> UhHypercallHandler<'_, '_, T, TdxBacked> {
     fn add_ranges_to_tlb_flush_list(
-        flush_state: &mut TdxPartitionFlushState,
+        flush_state: &TdxPartitionFlushState,
         gva_ranges: &[HvGvaRange],
         use_extended_range_format: bool,
     ) -> Result<(), ()> {
@@ -4255,18 +4255,20 @@ impl<T: CpuIo> UhHypercallHandler<'_, '_, T, TdxBacked> {
             return Err(());
         }
 
-        for range in gva_ranges {
-            if use_extended_range_format && range.as_extended().large_page() {
-                // TDX does not provide a way to flush large page ranges,
-                // we have to promote this request to a flush entire.
-                return Err(());
-            }
-            if flush_state.gva_list.len() == FLUSH_GVA_LIST_SIZE {
-                flush_state.gva_list.pop_front();
-            }
-            flush_state.gva_list.push_back(*range);
-            flush_state.s.gva_list_count += 1;
+        if use_extended_range_format
+            && gva_ranges
+                .iter()
+                .any(|range| range.as_extended().large_page())
+        {
+            // TDX does not provide a way to flush large page ranges,
+            // we have to promote this request to a flush entire.
+            return Err(());
         }
+
+        flush_state
+            .gva_list
+            .write()
+            .extend(gva_ranges.iter().copied());
 
         Ok(())
     }
@@ -4280,21 +4282,19 @@ impl TdxTlbLockFlushAccess<'_> {
     ) {
         match processor_set {
             Some(processors) => {
-                self.wake_processors_for_tlb_flush_inner(
-                    target_vtl,
-                    processors.iter().map(|x| x as usize),
-                );
+                self.wake_processors_for_tlb_flush_inner(target_vtl, processors);
             }
-            None => {
-                self.wake_processors_for_tlb_flush_inner(target_vtl, 0..self.partition.vps.len())
-            }
+            None => self.wake_processors_for_tlb_flush_inner(
+                target_vtl,
+                0..(self.partition.vps.len() as u32),
+            ),
         }
     }
 
     fn wake_processors_for_tlb_flush_inner(
         &mut self,
         target_vtl: GuestVtl,
-        processors: impl Iterator<Item = usize>,
+        processors: impl IntoIterator<Item = u32>,
     ) {
         // Use SeqCst ordering to ensure that we are observing the most
         // up-to-date value from other VPs. Otherwise we might not send a
@@ -4304,15 +4304,15 @@ impl TdxTlbLockFlushAccess<'_> {
         // We use a single fence to avoid having to take a SeqCst load
         // for each VP.
         std::sync::atomic::fence(Ordering::SeqCst);
-        for target_vp in processors {
-            if self.vp_index.index() as usize != target_vp
-                && self.shared.active_vtl[target_vp].load(Ordering::Relaxed) == target_vtl as u8
-            {
-                self.partition.vps[target_vp].wake_vtl2();
-            }
-        }
-
-        // TODO TDX GUEST VSM: We need to wait here until all woken VPs actually enter VTL 2.
+        self.partition.hcl.kick_cpus(
+            processors.into_iter().filter(|&vp| {
+                vp != self.vp_index.index()
+                    && self.shared.active_vtl[vp as usize].load(Ordering::Relaxed)
+                        == target_vtl as u8
+            }),
+            true,
+            true,
+        );
     }
 }
 
@@ -4324,16 +4324,19 @@ struct TdxTlbLockFlushAccess<'a> {
 
 impl TlbFlushLockAccess for TdxTlbLockFlushAccess<'_> {
     fn flush(&mut self, vtl: GuestVtl) {
-        {
-            self.shared.flush_state[vtl].write().s.flush_entire_counter += 1;
-        }
+        self.shared.flush_state[vtl]
+            .flush_entire_counter
+            .fetch_add(1, Ordering::Relaxed);
+
         self.wake_processors_for_tlb_flush(vtl, None);
         self.set_wait_for_tlb_locks(vtl);
     }
 
     fn flush_entire(&mut self) {
         for vtl in [GuestVtl::Vtl0, GuestVtl::Vtl1] {
-            self.shared.flush_state[vtl].write().s.flush_entire_counter += 1;
+            self.shared.flush_state[vtl]
+                .flush_entire_counter
+                .fetch_add(1, Ordering::Relaxed);
         }
         for vtl in [GuestVtl::Vtl0, GuestVtl::Vtl1] {
             self.wake_processors_for_tlb_flush(vtl, None);

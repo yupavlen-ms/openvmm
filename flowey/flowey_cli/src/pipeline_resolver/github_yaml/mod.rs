@@ -444,6 +444,7 @@ EOF
                         with:
                             name: {name}
                             path: {RUNNER_TEMP}/publish_artifacts/{name}/
+                            include-hidden-files: true
                     "#
                 ))
                 .unwrap();
@@ -605,7 +606,7 @@ EOF
                                     description: Some(description.clone()),
                                     default: default
                                         .as_ref()
-                                        .map(|s| github_yaml_defs::Default::String(s.to_string())),
+                                        .map(|s| github_yaml_defs::Default::String(s.clone())),
                                     required: default.is_none(),
                                     ty: github_yaml_defs::InputType::String,
                                 },

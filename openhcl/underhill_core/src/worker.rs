@@ -2501,7 +2501,14 @@ async fn new_underhill_vm(
         deps_winbond_super_io_and_floppy_full: None,
     };
 
-    let fallback_mmio_device = use_mmio_hypercalls.then(|| {
+    let fallback_mmio_device = if use_mmio_hypercalls {
+        let mshv_hvcall =
+            hcl::ioctl::MshvHvcall::new().context("failed to open mshv_hvcall device")?;
+        mshv_hvcall.set_allowed_hypercalls(&[
+            hvdef::HypercallCode::HvCallMemoryMappedIoRead,
+            hvdef::HypercallCode::HvCallMemoryMappedIoWrite,
+        ]);
+
         // If VTOM is present (CVM scenario), accesses to physical device and PCI config space may
         // occur below or above vTOM, but only within MMIO regions. Forward both to the host.
         let vtom = vtom.unwrap_or(0);
@@ -2519,11 +2526,13 @@ async fn new_underhill_vm(
                 Some(untrusted_mmio_ranges)
             };
 
-        Arc::new(CloseableMutex::new(FallbackMmioDevice {
-            partition: Arc::downgrade(&partition),
+        Some(Arc::new(CloseableMutex::new(FallbackMmioDevice {
             mmio_ranges: untrusted_mmio_ranges,
-        })) as Arc<CloseableMutex<dyn ChipsetDevice>>
-    });
+            mshv_hvcall,
+        })) as _)
+    } else {
+        None
+    };
 
     let BaseChipsetBuilderOutput {
         mut chipset_builder,
@@ -2743,6 +2752,7 @@ async fn new_underhill_vm(
     #[cfg(feature = "vpci")]
     {
         use virt::Hv1;
+        use vmcore::vpci_msi::VpciInterruptMapper;
 
         for crate::dispatch::vtl2_settings_worker::UhVpciDeviceConfig {
             instance_id,
@@ -2769,7 +2779,7 @@ async fn new_underhill_vm(
                         .context("vpci is not supported by this hypervisor")?
                         .build(Vtl::Vtl0, device_id)?;
                     let device = Arc::new(device);
-                    Ok((device.clone(), device))
+                    Ok((device.clone(), VpciInterruptMapper::new(device)))
                 },
             )
             .await?;
@@ -3337,43 +3347,43 @@ impl chipset::pm::PmTimerAssist for UnderhillPmTimerAssist {
 // forwarding them to the host. It needs to implement the ChipsetDevice and
 // MmioIntercept traits.
 struct FallbackMmioDevice {
-    partition: std::sync::Weak<UhPartition>,
     mmio_ranges: Option<Vec<MemoryRange>>,
+    mshv_hvcall: hcl::ioctl::MshvHvcall,
+}
+
+impl FallbackMmioDevice {
+    fn is_allowed(&self, addr: u64, data_len: usize) -> bool {
+        self.mmio_ranges.as_ref().is_none_or(|v| {
+            v.iter().any(|range| {
+                range.contains_addr(addr) && range.contains_addr(addr + data_len as u64 - 1)
+            })
+        })
+    }
 }
 
 impl chipset_device::mmio::MmioIntercept for FallbackMmioDevice {
     fn mmio_read(&mut self, addr: u64, data: &mut [u8]) -> chipset_device::io::IoResult {
-        let Some(partition) = self.partition.upgrade() else {
-            return chipset_device::io::IoResult::Ok;
-        };
-
-        if let Some(mmio_ranges) = &self.mmio_ranges {
-            data.fill(!0);
-            if mmio_ranges.iter().any(|range| {
-                range.contains_addr(addr) && range.contains_addr(addr + data.len() as u64 - 1)
-            }) {
-                partition.host_mmio_read(addr, data);
+        data.fill(!0);
+        if self.is_allowed(addr, data.len()) {
+            if let Err(err) = self.mshv_hvcall.mmio_read(addr, data) {
+                tracelimit::error_ratelimited!(
+                    error = &err as &dyn std::error::Error,
+                    "failed host MMIO read"
+                );
             }
-        } else {
-            partition.host_mmio_read(addr, data);
         }
 
         chipset_device::io::IoResult::Ok
     }
 
     fn mmio_write(&mut self, addr: u64, data: &[u8]) -> chipset_device::io::IoResult {
-        let Some(partition) = self.partition.upgrade() else {
-            return chipset_device::io::IoResult::Ok;
-        };
-
-        if let Some(mmio_ranges) = &self.mmio_ranges {
-            if mmio_ranges.iter().any(|range| {
-                range.contains_addr(addr) && range.contains_addr(addr + data.len() as u64 - 1)
-            }) {
-                partition.host_mmio_write(addr, data);
+        if self.is_allowed(addr, data.len()) {
+            if let Err(err) = self.mshv_hvcall.mmio_write(addr, data) {
+                tracelimit::error_ratelimited!(
+                    error = &err as &dyn std::error::Error,
+                    "failed host MMIO write"
+                );
             }
-        } else {
-            partition.host_mmio_write(addr, data);
         }
 
         chipset_device::io::IoResult::Ok

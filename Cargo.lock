@@ -56,6 +56,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "address_filter"
+version = "0.0.0"
+dependencies = [
+ "inspect",
+ "thiserror 2.0.12",
+]
+
+[[package]]
 name = "adler2"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1832,6 +1840,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_yaml",
+ "tempfile",
 ]
 
 [[package]]
@@ -2736,6 +2745,7 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "bitfield-struct 0.10.1",
+ "bitvec",
  "build_rs_guest_arch",
  "fs-err",
  "getrandom 0.3.2",
@@ -4092,6 +4102,7 @@ dependencies = [
 name = "mesh_remote"
 version = "0.0.0"
 dependencies = [
+ "event-listener",
  "futures",
  "futures-concurrency",
  "libc",
@@ -6690,6 +6701,7 @@ version = "0.0.0"
 dependencies = [
  "hvdef",
  "memory_range",
+ "thiserror 2.0.12",
  "tracing",
  "x86defs",
 ]
@@ -7396,6 +7408,7 @@ dependencies = [
  "guest_emulation_transport",
  "guestmem",
  "guid",
+ "hcl",
  "hcl_compat_uefi_nvram_storage",
  "hvdef",
  "hyperv_ic_guest",
@@ -7995,6 +8008,7 @@ dependencies = [
 name = "virt_support_apic"
 version = "0.0.0"
 dependencies = [
+ "address_filter",
  "bitfield-struct 0.10.1",
  "hvdef",
  "inspect",
@@ -8858,6 +8872,7 @@ dependencies = [
 name = "vmotherboard"
 version = "0.0.0"
 dependencies = [
+ "address_filter",
  "anyhow",
  "arc_cyclic_builder",
  "async-trait",
