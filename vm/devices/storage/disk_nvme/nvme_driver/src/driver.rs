@@ -218,7 +218,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         let cc = bar0.cc();
         if cc.en() || bar0.csts().rdy() {
-            if !bar0
+            if let Err(e) = bar0
                 .reset(&driver)
                 .instrument(tracing::info_span!(
                     "nvme_already_enabled",
@@ -226,7 +226,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 ))
                 .await
             {
-                anyhow::bail!("device is gone, csts: {:x}", u32::from(bar0.csts()));
+                anyhow::bail!("device is gone, csts: {:#x}", e);
             }
         }
 
@@ -330,11 +330,20 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             let csts = worker.registers.bar0.csts();
             let csts_val: u32 = csts.into();
             if csts_val == !0 {
-                anyhow::bail!("device is gone, csts: {:x}", csts_val);
+                anyhow::bail!("device is gone, csts: {:#x}", csts_val);
             }
             if csts.cfs() {
-                worker.registers.bar0.reset(&self.driver).await;
-                anyhow::bail!("device had fatal error, csts: {:x}", csts_val);
+                // Attempt to leave the device in reset state CC.EN 1 -> 0.
+                let after_reset = if let Err(e) = worker.registers.bar0.reset(&self.driver).await {
+                    e
+                } else {
+                    0
+                };
+                anyhow::bail!(
+                    "device had fatal error, csts: {:#x}, after reset: {:#}",
+                    csts_val,
+                    after_reset
+                );
             }
             if csts.rdy() {
                 break;
@@ -486,7 +495,9 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             if let Some(admin) = worker.admin {
                 _admin_responses = admin.shutdown().await;
             }
-            worker.registers.bar0.reset(&driver).await;
+            if let Err(e) = worker.registers.bar0.reset(&driver).await {
+                tracing::info!("device reset failed, csts: {:#x}", e);
+            }
         }
     }
 
@@ -564,9 +575,13 @@ impl<T: DeviceBacking> NvmeDriver<T> {
             .context("failed to map device registers")?;
         let bar0 = Bar0(bar0_mapping);
 
-        // It is expected the device to be alive when restoring.
-        if !bar0.csts().rdy() {
-            anyhow::bail!("device is gone, csts: {:x}", u32::from(bar0.csts()));
+        // It is expected for the device to be alive when restoring.
+        let csts = bar0.csts();
+        if !csts.rdy() {
+            anyhow::bail!(
+                "device is not ready during restore, csts: {:#x}",
+                u32::from(csts)
+            );
         }
 
         let registers = Arc::new(DeviceRegisters::new(bar0));
