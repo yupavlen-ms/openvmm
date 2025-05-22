@@ -1734,9 +1734,9 @@ impl InitializedVm {
                     vmbus_server::ProxyIntegration::start(
                         &vmbus_driver,
                         proxy_handle,
-                        vmbus_server::ProxyServerInfo::new(vmbus.control(), None),
+                        vmbus_server::ProxyServerInfo::new(vmbus.control(), None, None),
                         vtl2_vmbus.as_ref().map(|server| {
-                            vmbus_server::ProxyServerInfo::new(server.control().clone(), None)
+                            vmbus_server::ProxyServerInfo::new(server.control().clone(), None, None)
                         }),
                         Some(&gm),
                     )

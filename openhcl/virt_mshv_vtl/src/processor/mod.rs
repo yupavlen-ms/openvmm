@@ -18,6 +18,7 @@ cfg_if::cfg_if! {
         use crate::VtlCrash;
         use bitvec::prelude::BitArray;
         use bitvec::prelude::Lsb0;
+        use hv1_emulator::synic::ProcessorSynic;
         use hvdef::HvX64RegisterName;
         use virt::vp::MpState;
         use virt::x86::MsrError;
@@ -186,7 +187,6 @@ mod private {
     use crate::GuestVtl;
     use crate::processor::UhProcessor;
     use hv1_emulator::hv::ProcessorVtlHv;
-    use hv1_emulator::synic::ProcessorSynic;
     use hv1_structs::VtlArray;
     use inspect::InspectMut;
     use std::future::Future;
@@ -259,8 +259,6 @@ mod private {
 
         fn hv(&self, vtl: GuestVtl) -> Option<&ProcessorVtlHv>;
         fn hv_mut(&mut self, vtl: GuestVtl) -> Option<&mut ProcessorVtlHv>;
-
-        fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic>;
 
         fn vtl1_inspectable(this: &UhProcessor<'_, Self>) -> bool;
     }
@@ -446,12 +444,14 @@ trait HardwareIsolatedBacking: Backing {
     /// Vector of the event that is pending injection into the guest state, if
     /// valid.
     fn pending_event_vector(this: &UhProcessor<'_, Self>, vtl: GuestVtl) -> Option<u8>;
-    /// Checks interrupt status for all VTLs, and handles cross VTL interrupt preemption and VINA.
-    /// Returns whether interrupt reprocessing is required.
-    fn handle_cross_vtl_interrupts(
+    /// Check if an interrupt of appropriate priority, or an NMI, is pending for
+    /// the given VTL. `check_rflags` specifies whether RFLAGS.IF should be checked.
+    fn is_interrupt_pending(
         this: &mut UhProcessor<'_, Self>,
+        vtl: GuestVtl,
+        check_rflags: bool,
         dev: &impl CpuIo,
-    ) -> Result<bool, UhRunVpError>;
+    ) -> bool;
     /// Sets the pending exception for the guest state.
     ///
     /// Note that this will overwrite any existing pending exception. It will
@@ -477,6 +477,8 @@ trait HardwareIsolatedBacking: Backing {
         this: &mut UhProcessor<'_, Self>,
         intercept_control: HvRegisterCrInterceptControl,
     );
+
+    fn untrusted_synic_mut(&mut self) -> Option<&mut ProcessorSynic>;
 }
 
 #[cfg_attr(guest_arch = "aarch64", expect(dead_code))]
@@ -860,6 +862,10 @@ impl<'p, T: Backing> Processor for UhProcessor<'p, T> {
                     .into();
             }
 
+            // Quiesce RCU before running the VP to avoid having to synchronize with
+            // this CPU during memory protection updates.
+            minircu::global().quiesce();
+
             T::run_vp(self, dev, &mut stop).await?;
             self.kernel_returns += 1;
         }
@@ -1124,49 +1130,6 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             devices,
         )
         .await
-    }
-
-    fn deliver_synic_messages(&mut self, vtl: GuestVtl, sints: u16) {
-        let proxied_sints = self
-            .backing
-            .hv(vtl)
-            .as_ref()
-            .map_or(!0, |hv| hv.synic.proxied_sints());
-        let pending_sints =
-            self.inner.message_queues[vtl].post_pending_messages(sints, |sint, message| {
-                if proxied_sints & (1 << sint) != 0 {
-                    if let Some(synic) = self.backing.untrusted_synic_mut().as_mut() {
-                        synic.post_message(
-                            sint,
-                            message,
-                            &mut self
-                                .partition
-                                .synic_interrupt(self.inner.vp_info.base.vp_index, vtl),
-                        )
-                    } else {
-                        self.partition.hcl.post_message_direct(
-                            self.inner.vp_info.base.vp_index.index(),
-                            sint,
-                            message,
-                        )
-                    }
-                } else {
-                    self.backing
-                        .hv_mut(vtl)
-                        .as_mut()
-                        .unwrap()
-                        .synic
-                        .post_message(
-                            sint,
-                            message,
-                            &mut self
-                                .partition
-                                .synic_interrupt(self.inner.vp_info.base.vp_index, vtl),
-                        )
-                }
-            });
-
-        self.request_sint_notifications(vtl, pending_sints);
     }
 
     #[cfg(guest_arch = "x86_64")]
