@@ -328,12 +328,13 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         let mut backoff = Backoff::new(&self.driver);
         loop {
             let csts = worker.registers.bar0.csts();
-            if u32::from(csts) == !0 {
-                anyhow::bail!("device is gone, csts: {:x}", u32::from(csts));
+            let csts_val: u32 = csts.into();
+            if csts_val == !0 {
+                anyhow::bail!("device is gone, csts: {:x}", csts_val);
             }
             if csts.cfs() {
                 worker.registers.bar0.reset(&self.driver).await;
-                anyhow::bail!("device had fatal error");
+                anyhow::bail!("device had fatal error, csts: {:x}", csts_val);
             }
             if csts.rdy() {
                 break;
