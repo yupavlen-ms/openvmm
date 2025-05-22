@@ -226,7 +226,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 ))
                 .await
             {
-                anyhow::bail!("device is gone");
+                anyhow::bail!("device is gone, csts: {:x}", u32::from(bar0.csts()));
             }
         }
 
@@ -329,7 +329,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
         loop {
             let csts = worker.registers.bar0.csts();
             if u32::from(csts) == !0 {
-                anyhow::bail!("device is gone");
+                anyhow::bail!("device is gone, csts: {:x}", u32::from(csts));
             }
             if csts.cfs() {
                 worker.registers.bar0.reset(&self.driver).await;
@@ -565,7 +565,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
 
         // It is expected the device to be alive when restoring.
         if !bar0.csts().rdy() {
-            anyhow::bail!("device is gone");
+            anyhow::bail!("device is gone, csts: {:x}", u32::from(bar0.csts()));
         }
 
         let registers = Arc::new(DeviceRegisters::new(bar0));
