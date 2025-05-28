@@ -1163,7 +1163,9 @@ impl<T: CpuIo> EmulatorSupport for UhEmulationState<'_, '_, T, HypervisorBackedX
         }
     }
 
-    fn initial_gva_translation(&self) -> Option<virt_support_x86emu::emulate::InitialTranslation> {
+    fn initial_gva_translation(
+        &mut self,
+    ) -> Option<virt_support_x86emu::emulate::InitialTranslation> {
         if (self.vp.runner.exit_message().header.typ != HvMessageType::HvMessageTypeGpaIntercept)
             && (self.vp.runner.exit_message().header.typ != HvMessageType::HvMessageTypeUnmappedGpa)
             && (self.vp.runner.exit_message().header.typ
@@ -1188,13 +1190,20 @@ impl<T: CpuIo> EmulatorSupport for UhEmulationState<'_, '_, T, HypervisorBackedX
         )
         .expect("unexpected intercept access type");
 
-        tracing::trace!(?message.guest_virtual_address, ?message.guest_physical_address, ?translate_mode, "initial translation");
-
-        Some(virt_support_x86emu::emulate::InitialTranslation {
+        let translation = virt_support_x86emu::emulate::InitialTranslation {
             gva: message.guest_virtual_address,
             gpa: message.guest_physical_address,
             translate_mode,
-        })
+        };
+
+        tracing::trace!(?translation, "initial translation");
+
+        // If we have a valid translation, the hypervisor must have set the TLB lock
+        // so the translation remains valid for the duration of this exit.
+        // Update our local cache appropriately.
+        self.vp.mark_tlb_locked(Vtl::Vtl2, self.vtl);
+
+        Some(translation)
     }
 
     fn interruption_pending(&self) -> bool {
@@ -1225,6 +1234,7 @@ impl<T: CpuIo> EmulatorSupport for UhEmulationState<'_, '_, T, HypervisorBackedX
             )
         {
             // Should always be called after translate gva with the tlb lock flag
+            // or with an initial translation.
             debug_assert!(self.vp.is_tlb_locked(Vtl::Vtl2, self.vtl));
 
             let mbec_user_execute = self
@@ -1285,7 +1295,6 @@ impl<T: CpuIo> EmulatorSupport for UhEmulationState<'_, '_, T, HypervisorBackedX
         // remains usable until the VP is resumed back to direct execution.
         control_flags.set_set_page_table_bits(true);
         control_flags.set_tlb_flush_inhibit(true);
-        self.vp.set_tlb_lock(Vtl::Vtl2, target_vtl);
 
         // In case we're not running ring 0, check privileges against VP state
         // as of when the original intercept came in - since the emulator
@@ -1307,10 +1316,13 @@ impl<T: CpuIo> EmulatorSupport for UhEmulationState<'_, '_, T, HypervisorBackedX
             Ok(ioctl::TranslateResult {
                 gpa_page,
                 overlay_page,
-            }) => Ok(Ok(EmuTranslateResult {
-                gpa: (gpa_page << hvdef::HV_PAGE_SHIFT) + (gva & (HV_PAGE_SIZE - 1)),
-                overlay_page: Some(overlay_page),
-            })),
+            }) => {
+                self.vp.mark_tlb_locked(Vtl::Vtl2, GuestVtl::Vtl0);
+                Ok(Ok(EmuTranslateResult {
+                    gpa: (gpa_page << hvdef::HV_PAGE_SHIFT) + (gva & (HV_PAGE_SIZE - 1)),
+                    overlay_page: Some(overlay_page),
+                }))
+            }
             Err(ioctl::x64::TranslateErrorX64 { code, event_info }) => Ok(Err(EmuTranslateError {
                 code: hypercall::TranslateGvaResultCode(code),
                 event_info: Some(event_info),
