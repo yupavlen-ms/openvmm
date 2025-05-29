@@ -18,7 +18,9 @@ cfg_if::cfg_if! {
         use crate::VtlCrash;
         use bitvec::prelude::BitArray;
         use bitvec::prelude::Lsb0;
+        use cvm_tracing::CVM_CONFIDENTIAL;
         use hv1_emulator::synic::ProcessorSynic;
+        use hvdef::HvRegisterCrInterceptControl;
         use hvdef::HvX64RegisterName;
         use virt::vp::MpState;
         use virt::x86::MsrError;
@@ -26,7 +28,6 @@ cfg_if::cfg_if! {
         use virt_support_x86emu::translate::TranslationRegisters;
         use virt::vp::AccessVpState;
         use zerocopy::IntoBytes;
-        use hvdef::HvRegisterCrInterceptControl;
     } else if #[cfg(guest_arch = "aarch64")] {
         use hv1_hypercall::Arm64RegisterState;
         use hvdef::HvArm64RegisterName;
@@ -97,8 +98,6 @@ pub struct UhProcessor<'a, T: Backing> {
     kernel_returns: u64,
     #[inspect(hex, iter_by_index)]
     crash_reg: [u64; hvdef::HV_X64_GUEST_CRASH_PARAMETER_MSRS],
-    #[inspect(hex, with = "|&x| u64::from(x)")]
-    crash_control: hvdef::GuestCrashCtl,
     vmtime: VmTimeAccess,
     #[inspect(skip)]
     timer: PollImpl<dyn PollTimer>,
@@ -928,9 +927,6 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             idle_control,
             kernel_returns: 0,
             crash_reg: [0; hvdef::HV_X64_GUEST_CRASH_PARAMETER_MSRS],
-            crash_control: hvdef::GuestCrashCtl::new()
-                .with_crash_notify(true)
-                .with_crash_message(true),
             _not_send: PhantomData,
             backing,
             shared: backing_shared,
@@ -1042,14 +1038,32 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
     fn write_crash_msr(&mut self, msr: u32, value: u64, vtl: GuestVtl) -> Result<(), MsrError> {
         match msr {
             hvdef::HV_X64_MSR_GUEST_CRASH_CTL => {
-                self.crash_control = hvdef::GuestCrashCtl::from(value);
                 let crash = VtlCrash {
                     vp_index: self.vp_index(),
                     last_vtl: vtl,
-                    control: self.crash_control,
+                    control: hvdef::GuestCrashCtl::from(value),
                     parameters: self.crash_reg,
                 };
-                tracelimit::info_ratelimited!(?crash, "Guest has reported system crash");
+                tracelimit::warn_ratelimited!(?crash, "Guest has reported system crash");
+
+                if crash.control.crash_message() {
+                    let message_gpa = crash.parameters[3];
+                    let message_size = crash.parameters[4];
+                    let mut message = vec![0; message_size as usize];
+                    match self.partition.gm[vtl].read_at(message_gpa, &mut message) {
+                        Ok(()) => {
+                            let message = String::from_utf8_lossy(&message).into_owned();
+                            tracelimit::warn_ratelimited!(
+                                CVM_CONFIDENTIAL,
+                                message,
+                                "Guest has reported a system crash message"
+                            );
+                        }
+                        Err(e) => {
+                            tracelimit::warn_ratelimited!(?e, "Failed to read crash message");
+                        }
+                    }
+                }
 
                 self.partition.crash_notification_send.send(crash);
             }
@@ -1068,7 +1082,12 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
     #[cfg(guest_arch = "x86_64")]
     fn read_crash_msr(&self, msr: u32, _vtl: GuestVtl) -> Result<u64, MsrError> {
         let v = match msr {
-            hvdef::HV_X64_MSR_GUEST_CRASH_CTL => self.crash_control.into(),
+            // Reads of CRASH_CTL report our supported capabilities, not the
+            // current value.
+            hvdef::HV_X64_MSR_GUEST_CRASH_CTL => hvdef::GuestCrashCtl::new()
+                .with_crash_notify(true)
+                .with_crash_message(true)
+                .into(),
             hvdef::HV_X64_MSR_GUEST_CRASH_P0 => self.crash_reg[0],
             hvdef::HV_X64_MSR_GUEST_CRASH_P1 => self.crash_reg[1],
             hvdef::HV_X64_MSR_GUEST_CRASH_P2 => self.crash_reg[2],
