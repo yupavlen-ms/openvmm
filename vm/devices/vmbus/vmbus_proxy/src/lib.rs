@@ -33,6 +33,7 @@ use windows::Win32::Foundation::NTSTATUS;
 use windows::Win32::Storage::FileSystem::FILE_ALL_ACCESS;
 use windows::Win32::Storage::FileSystem::SYNCHRONIZE;
 use windows::Win32::System::IO::DeviceIoControl;
+use windows::core::GUID;
 use zerocopy::IntoBytes;
 
 mod proxyioctl;
@@ -204,7 +205,7 @@ impl VmbusProxy {
         match output.Type {
             proxyioctl::VmbusProxyActionTypeOffer => unsafe {
                 Ok(ProxyAction::Offer {
-                    id: output.ChannelId,
+                    id: output.ProxyId,
                     offer: output.u.Offer.Offer,
                     incoming_event: OwnedHandle::from_raw_handle(
                         output.u.Offer.DeviceIncomingRingEvent as usize as RawHandle,
@@ -222,9 +223,9 @@ impl VmbusProxy {
                     },
                 })
             },
-            proxyioctl::VmbusProxyActionTypeRevoke => Ok(ProxyAction::Revoke {
-                id: output.ChannelId,
-            }),
+            proxyioctl::VmbusProxyActionTypeRevoke => {
+                Ok(ProxyAction::Revoke { id: output.ProxyId })
+            }
             proxyioctl::VmbusProxyActionTypeInterruptPolicy => Ok(ProxyAction::InterruptPolicy {}),
             proxyioctl::VmbusProxyActionTypeTlConnectResult => unsafe {
                 Ok(ProxyAction::TlConnectResult {
@@ -251,7 +252,8 @@ impl VmbusProxy {
             self.ioctl(
                 proxyioctl::IOCTL_VMBUS_PROXY_OPEN_CHANNEL,
                 StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_OPEN_CHANNEL_INPUT {
-                    ChannelId: id,
+                    ProxyId: id,
+                    Padding: 0,
                     OpenParameters: *params,
                     VmmSignalEvent: handle,
                 }),
@@ -262,12 +264,68 @@ impl VmbusProxy {
         };
         NTSTATUS(output.Status).ok()
     }
+    pub async fn set_interrupt(&self, id: u64, event: &Event) -> Result<()> {
+        unsafe {
+            let handle = event.as_handle().as_raw_handle() as usize as u64;
+            self.ioctl(
+                proxyioctl::IOCTL_VMBUS_PROXY_RESTORE_SET_INTERRUPT,
+                StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_SET_INTERRUPT_INPUT {
+                    ProxyId: id,
+                    VmmSignalEvent: handle,
+                }),
+                (),
+            )
+            .await?
+        };
+        Ok(())
+    }
+
+    pub async fn restore(
+        &self,
+        interface_type: GUID,
+        interface_instance: GUID,
+        subchannel_index: u16,
+        target_vtl: u8,
+        open_params: VMBUS_SERVER_OPEN_CHANNEL_OUTPUT_PARAMETERS,
+        open: bool,
+    ) -> Result<u64> {
+        Ok(unsafe {
+            self.ioctl(
+                proxyioctl::IOCTL_VMBUS_PROXY_RESTORE_CHANNEL,
+                StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_RESTORE_CHANNEL_INPUT {
+                    InterfaceType: interface_type,
+                    InterfaceInstance: interface_instance,
+                    SubchannelIndex: subchannel_index,
+                    TargetVtl: target_vtl,
+                    Padding: 0,
+                    OpenParameters: open_params,
+                    Open: open.into(),
+                    Padding2: [0; 3],
+                }),
+                StaticIoctlBuffer(zeroed::<proxyioctl::VMBUS_PROXY_RESTORE_CHANNEL_OUTPUT>()),
+            )
+            .await?
+            .0
+            .ProxyId
+        })
+    }
+
+    pub async fn revoke_unclaimed_channels(&self) -> Result<()> {
+        unsafe {
+            self.ioctl(
+                proxyioctl::IOCTL_VMBUS_PROXY_REVOKE_UNCLAIMED_CHANNELS,
+                (),
+                (),
+            )
+            .await
+        }
+    }
 
     pub async fn close(&self, id: u64) -> Result<()> {
         unsafe {
             self.ioctl(
                 proxyioctl::IOCTL_VMBUS_PROXY_CLOSE_CHANNEL,
-                StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_CLOSE_CHANNEL_INPUT { ChannelId: id }),
+                StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_CLOSE_CHANNEL_INPUT { ProxyId: id }),
                 (),
             )
             .await
@@ -278,7 +336,7 @@ impl VmbusProxy {
         unsafe {
             self.ioctl(
                 proxyioctl::IOCTL_VMBUS_PROXY_RELEASE_CHANNEL,
-                StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_RELEASE_CHANNEL_INPUT { ChannelId: id }),
+                StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_RELEASE_CHANNEL_INPUT { ProxyId: id }),
                 (),
             )
             .await
@@ -294,7 +352,7 @@ impl VmbusProxy {
     ) -> Result<()> {
         let mut buf = Vec::new();
         let header = proxyioctl::VMBUS_PROXY_CREATE_GPADL_INPUT {
-            ChannelId: id,
+            ProxyId: id,
             GpadlId: gpadl_id,
             RangeCount: range_count,
             RangeBufferOffset: size_of::<proxyioctl::VMBUS_PROXY_CREATE_GPADL_INPUT>() as u32,
@@ -313,8 +371,9 @@ impl VmbusProxy {
             self.ioctl(
                 proxyioctl::IOCTL_VMBUS_PROXY_DELETE_GPADL,
                 StaticIoctlBuffer(proxyioctl::VMBUS_PROXY_DELETE_GPADL_INPUT {
-                    ChannelId: id,
+                    ProxyId: id,
                     GpadlId: gpadl_id,
+                    Padding: 0,
                 }),
                 (),
             )
@@ -333,6 +392,7 @@ impl VmbusProxy {
                     Flags: proxyioctl::VMBUS_PROXY_TL_CONNECT_REQUEST_FLAGS::new()
                         .with_hosted_silo_unaware(request.hosted_silo_unaware),
                     Vtl: vtl,
+                    Padding: [0; 3],
                 }),
                 (),
             )
@@ -343,7 +403,7 @@ impl VmbusProxy {
     pub fn run_channel(&self, id: u64) -> Result<()> {
         unsafe {
             // This is a synchronous operation, so don't use the async IO infrastructure.
-            let input = proxyioctl::VMBUS_PROXY_RUN_CHANNEL_INPUT { ChannelId: id };
+            let input = proxyioctl::VMBUS_PROXY_RUN_CHANNEL_INPUT { ProxyId: id };
             let mut bytes = 0;
             DeviceIoControl(
                 HANDLE(self.file.get().as_raw_handle()),
