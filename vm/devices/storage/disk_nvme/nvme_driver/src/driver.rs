@@ -496,7 +496,7 @@ impl<T: DeviceBacking> NvmeDriver<T> {
                 _admin_responses = admin.shutdown().await;
             }
             if let Err(e) = worker.registers.bar0.reset(&driver).await {
-                tracing::info!("device reset failed, csts: {:#x}", e);
+                tracing::info!(csts = e, "device reset failed");
             }
         }
     }
