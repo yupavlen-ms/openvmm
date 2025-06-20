@@ -26,6 +26,7 @@
   - [Building OpenHCL](./dev_guide/getting_started/build_openhcl.md)
     - [Building a Custom Kernel](./dev_guide/getting_started/build_ohcl_kernel.md)
   - [Suggested Dev Environment](./dev_guide/getting_started/suggested_dev_env.md)
+  - [Cross Compiling for Windows](./dev_guide/getting_started/cross_compile.md)
 - [Testing](./dev_guide/tests.md)
   - [Unit Tests](./dev_guide/tests/unit.md)
   - [VMM Tests](./dev_guide/tests/vmm.md)
