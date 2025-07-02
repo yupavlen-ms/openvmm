@@ -4,6 +4,7 @@
 //! Integration tests that run on more than one architecture.
 
 use anyhow::Context;
+use futures::StreamExt;
 use get_resources::ged::FirmwareEvent;
 use hyperv_ic_resources::kvp::KvpRpc;
 use jiff::SignedDuration;
@@ -147,6 +148,37 @@ async fn boot_reset_expected(config: PetriVmConfigOpenVmm) -> anyhow::Result<()>
     agent.power_off().await?;
     assert_eq!(vm.wait_for_teardown().await?, HaltReason::PowerOff);
     Ok(())
+}
+
+/// Test EFI diagnostics with no boot devices on OpenVMM.
+/// TODO:
+///   - kmsg support in Hyper-V
+///   - openhcl_uefi_aarch64 support
+///   - uefi_x64 + uefi_aarch64 trace searching support
+#[openvmm_test(openhcl_uefi_x64(none))]
+async fn efi_diagnostics_no_boot(config: PetriVmConfigOpenVmm) -> anyhow::Result<()> {
+    let mut vm = config.with_uefi_frontpage(true).run_without_agent().await?;
+
+    // Boot the VM first
+    vm.wait_for_successful_boot_event().await?;
+
+    // Expected no-boot message.
+    const NO_BOOT_MSG: &str = "[Bds] Unable to boot!";
+
+    // Get kmsg stream
+    let mut kmsg = vm.kmsg().await?;
+
+    // Search for the message
+    while let Some(data) = kmsg.next().await {
+        let data = data.context("reading kmsg")?;
+        let msg = kmsg::KmsgParsedEntry::new(&data)?;
+        let raw = msg.message.as_raw();
+        if raw.contains(NO_BOOT_MSG) {
+            return Ok(());
+        }
+    }
+
+    anyhow::bail!("Did not find expected message in kmsg");
 }
 
 /// Test the KVP IC.
@@ -332,6 +364,20 @@ async fn reboot(config: PetriVmConfigOpenVmm) -> Result<(), anyhow::Error> {
 )]
 async fn boot_no_agent(config: Box<dyn PetriVmConfig>) -> anyhow::Result<()> {
     let mut vm = config.run_without_agent().await?;
+    vm.wait_for_successful_boot_event().await?;
+    vm.send_enlightened_shutdown(ShutdownKind::Shutdown).await?;
+    assert_eq!(vm.wait_for_teardown().await?, HaltReason::PowerOff);
+    Ok(())
+}
+
+// Test for vmbus relay
+// TODO: VBS isolation was failing and other targets too
+#[vmm_test(
+    hyperv_openhcl_uefi_x64[tdx](vhd(windows_datacenter_core_2025_x64))
+)]
+#[cfg_attr(not(windows), expect(dead_code))]
+async fn vmbus_relay(config: Box<dyn PetriVmConfig>) -> anyhow::Result<()> {
+    let mut vm = config.with_vmbus_redirect(true).run_without_agent().await?;
     vm.wait_for_successful_boot_event().await?;
     vm.send_enlightened_shutdown(ShutdownKind::Shutdown).await?;
     assert_eq!(vm.wait_for_teardown().await?, HaltReason::PowerOff);

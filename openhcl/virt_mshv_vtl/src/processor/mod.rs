@@ -43,7 +43,6 @@ use crate::GuestVtl;
 use crate::WakeReason;
 use cvm_tracing::CVM_ALLOWED;
 use cvm_tracing::CVM_CONFIDENTIAL;
-use guestmem::GuestMemory;
 use hcl::ioctl::Hcl;
 use hcl::ioctl::ProcessorRunner;
 use hv1_emulator::message_queues::MessageQueues;
@@ -273,7 +272,6 @@ impl<T: BackingPrivate> Backing for T {}
 #[cfg_attr(not(guest_arch = "x86_64"), expect(dead_code))]
 pub(crate) struct BackingSharedParams<'a> {
     pub cvm_state: Option<crate::UhCvmPartitionState>,
-    pub guest_memory: VtlArray<GuestMemory, 2>,
     #[cfg(guest_arch = "x86_64")]
     pub cpuid: &'a virt::CpuidLeafSet,
     pub hcl: &'a Hcl,
@@ -302,7 +300,7 @@ enum InterceptMessageType {
 
 /// Per-arch state required to generate an intercept message.
 #[cfg_attr(guest_arch = "aarch64", expect(dead_code))]
-struct InterceptMessageState {
+pub(crate) struct InterceptMessageState {
     instruction_length_and_cr8: u8,
     cpl: u8,
     efer_lma: bool,
@@ -419,7 +417,7 @@ impl InterceptMessageType {
 
 /// Trait for processor backings that have hardware isolation support.
 #[cfg(guest_arch = "x86_64")]
-trait HardwareIsolatedBacking: Backing {
+pub(crate) trait HardwareIsolatedBacking: Backing {
     /// Gets CVM specific VP state.
     fn cvm_state(&self) -> &crate::UhCvmVpState;
     /// Gets CVM specific VP state.
@@ -428,8 +426,14 @@ trait HardwareIsolatedBacking: Backing {
     fn cvm_partition_state(shared: &Self::Shared) -> &crate::UhCvmPartitionState;
     /// Gets a struct that can be used to interact with TLB flushing and
     /// locking.
+    ///
+    /// If a `vp_index` is provided, it will be used to cause the specified VP
+    /// to wait for all TLB locks to be released before returning to a lower VTL.
+    //
+    // FUTURE: This probably shouldn't be optional, but right now MNF doesn't know
+    // what VP it's set from and probably doesn't need it?
     fn tlb_flush_lock_access<'a>(
-        vp_index: VpIndex,
+        vp_index: Option<VpIndex>,
         partition: &'a UhPartitionInner,
         shared: &'a Self::Shared,
     ) -> impl TlbFlushLockAccess + 'a;
@@ -1125,6 +1129,18 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             virt_support_x86emu::emulate::EmulatorSupport<Error = UhRunVpError>,
     {
         let guest_memory = &self.partition.gm[vtl];
+        let (kx_guest_memory, ux_guest_memory) = match vtl {
+            GuestVtl::Vtl0 => (
+                &self.partition.vtl0_kernel_exec_gm,
+                &self.partition.vtl0_user_exec_gm,
+            ),
+            GuestVtl::Vtl1 => (guest_memory, guest_memory),
+        };
+        let emu_mem = virt_support_x86emu::emulate::EmulatorMemoryAccess {
+            gm: guest_memory,
+            kx_gm: kx_guest_memory,
+            ux_gm: ux_guest_memory,
+        };
         let mut emulation_state = UhEmulationState {
             vp: &mut *self,
             interruption_pending,
@@ -1132,7 +1148,8 @@ impl<'a, T: Backing> UhProcessor<'a, T> {
             vtl,
             cache,
         };
-        virt_support_x86emu::emulate::emulate(&mut emulation_state, guest_memory, devices).await
+
+        virt_support_x86emu::emulate::emulate(&mut emulation_state, &emu_mem, devices).await
     }
 
     /// Emulates an instruction due to a memory access exit.

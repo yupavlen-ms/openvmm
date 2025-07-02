@@ -33,6 +33,7 @@ members = [
   "vm/devices/storage/disk_nvme/nvme_driver/fuzz",
   "vm/devices/storage/ide/fuzz",
   "vm/devices/storage/scsi_buffers/fuzz",
+  "vm/devices/storage/storage_tests",
   "vm/devices/storage/storvsp/fuzz",
   "vm/vmcore/guestmem/fuzz",
   "vm/x86/x86emu/fuzz",
@@ -133,6 +134,7 @@ pal_async = { path = "support/pal/pal_async" }
 pal_async_test = { path = "support/pal/pal_async_test" }
 pal_event = { path = "support/pal/pal_event" }
 pal_uring = { path = "support/pal/pal_uring" }
+powershell_builder = { path = "support/powershell_builder" }
 safeatomic = { path = "support/safeatomic" }
 serde_helpers = { path = "support/serde_helpers" }
 sev_guest_device = { path = "support/sev_guest_device" }
@@ -149,7 +151,6 @@ ucs2 = { path = "support/ucs2" }
 uevent = { path = "support/uevent" }
 unix_socket = { path = "support/unix_socket" }
 vmsocket = { path = "support/vmsocket" }
-win_import_lib = { path = "support/win_import_lib" }
 
 azure_profiler_proto = { path = "openhcl/azure_profiler_proto" }
 bootloader_fdt_parser = { path = "openhcl/bootloader_fdt_parser" }
@@ -280,6 +281,7 @@ scsi_core = { path = "vm/devices/storage/scsi_core" }
 scsi_defs = { path = "vm/devices/storage/scsi_defs" }
 scsidisk = { path = "vm/devices/storage/scsidisk" }
 scsidisk_resources = { path = "vm/devices/storage/scsidisk_resources" }
+storvsc_driver = { path = "vm/devices/storage/storvsc_driver" }
 storvsp = { path = "vm/devices/storage/storvsp" }
 storvsp_protocol = { path = "vm/devices/storage/storvsp_protocol" }
 storvsp_resources = { path = "vm/devices/storage/storvsp_resources" }
@@ -556,9 +558,10 @@ lto = 'fat'
 [profile.dev]
 panic = 'abort'
 
-[profile.xtask]
+# Used for dev tooling that benefits from some CPU optimizations, but that still
+# wants debug checks
+[profile.light]
 inherits = 'dev'
-# xtask is CPU bound in places, so enable light optimizations
 opt-level = 1
 
 [profile.flowey-ci]
@@ -688,3 +691,5 @@ box_default = "allow"
 # doesn't provide value. If a developer gets their type wrong they'll notice and fix it.
 # Sometimes you do want a list of a single range.
 single_range_in_vec_init = "allow"
+# This lint is purely style, and we are ok with inlined and uninlined format args.
+uninlined_format_args = "allow"

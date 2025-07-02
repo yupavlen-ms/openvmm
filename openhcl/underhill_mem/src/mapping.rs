@@ -10,6 +10,7 @@ use crate::registrar::MemoryRegistrar;
 use guestmem::GuestMemoryAccess;
 use guestmem::GuestMemoryBackingError;
 use guestmem::PAGE_SIZE;
+use hcl::GuestVtl;
 use hcl::ioctl::Mshv;
 use hcl::ioctl::MshvVtlLow;
 use hvdef::HvMapGpaFlags;
@@ -20,6 +21,7 @@ use sparse_mmap::SparseMapping;
 use std::ptr::NonNull;
 use std::sync::Arc;
 use thiserror::Error;
+use virt_mshv_vtl::ProtectIsolatedMemory;
 use vm_topology::memory::MemoryLayout;
 
 pub struct GuestPartitionMemoryView<'a> {
@@ -35,10 +37,11 @@ impl<'a> GuestPartitionMemoryView<'a> {
     /// page.
     pub fn new(
         memory_layout: &'a MemoryLayout,
+        memory_type: GuestValidMemoryType,
         valid_bitmap_state: bool,
     ) -> Result<Self, MappingError> {
         let valid_memory =
-            GuestValidMemory::new(memory_layout, valid_bitmap_state).map(Arc::new)?;
+            GuestValidMemory::new(memory_layout, memory_type, valid_bitmap_state).map(Arc::new)?;
         Ok(Self {
             memory_layout,
             valid_memory,
@@ -63,16 +66,243 @@ impl<'a> GuestPartitionMemoryView<'a> {
     }
 }
 
+#[derive(Debug, Inspect)]
+pub enum GuestMemoryViewReadType {
+    Read,
+    KernelExecute,
+    UserExecute,
+}
+
+#[derive(Inspect)]
+pub struct GuestMemoryView {
+    #[inspect(skip)]
+    protector: Option<Arc<dyn ProtectIsolatedMemory>>,
+    pub memory_mapping: Arc<GuestMemoryMapping>,
+    pub view_type: GuestMemoryViewReadType,
+    vtl: GuestVtl,
+}
+
+impl GuestMemoryView {
+    pub fn new(
+        protector: Option<Arc<dyn ProtectIsolatedMemory>>,
+        memory_mapping: Arc<GuestMemoryMapping>,
+        view_type: GuestMemoryViewReadType,
+        vtl: GuestVtl,
+    ) -> Self {
+        Self {
+            protector,
+            memory_mapping,
+            view_type,
+            vtl,
+        }
+    }
+}
+
+#[derive(Error, Debug)]
+#[error("the specified page is not mapped")]
+struct NotMapped;
+
+#[derive(Error, Debug)]
+enum BitmapFailure {
+    #[error("the specified page was accessed using the wrong visibility mapping")]
+    IncorrectHostVisibilityAccess,
+    #[error("the specified page access violates VTL 1 protections")]
+    Vtl1ProtectionsViolation,
+}
+
+/// SAFETY: Implementing the `GuestMemoryAccess` contract, including the
+/// size and lifetime of the mappings and bitmaps.
+unsafe impl GuestMemoryAccess for GuestMemoryView {
+    fn mapping(&self) -> Option<NonNull<u8>> {
+        NonNull::new(self.memory_mapping.mapping.as_ptr().cast())
+    }
+
+    fn max_address(&self) -> u64 {
+        self.memory_mapping.mapping.len() as u64
+    }
+
+    fn expose_va(&self, address: u64, len: u64) -> Result<(), GuestMemoryBackingError> {
+        if let Some(registrar) = &self.memory_mapping.registrar {
+            registrar
+                .register(address, len)
+                .map_err(|start| GuestMemoryBackingError::other(start, RegistrationError))
+        } else {
+            // TODO: fail this call once we have a way to avoid calling this for
+            // user-mode-only accesses to locked memory (e.g., for vmbus ring
+            // buffers). We can't fail this for now because TDX cannot register
+            // encrypted memory.
+            Ok(())
+        }
+    }
+
+    fn base_iova(&self) -> Option<u64> {
+        // When the alias map is configured for this mapping, VTL2-mapped
+        // devices need to do DMA with the alias map bit set to avoid DMAing
+        // into VTL1 memory.
+        self.memory_mapping.iova_offset
+    }
+
+    fn access_bitmap(&self) -> Option<guestmem::BitmapInfo> {
+        // When the permissions bitmaps are available, they take precedence and
+        // therefore should be no more permissive than the access bitmap.
+        //
+        // TODO GUEST VSM: consider being able to dynamically update these
+        // bitmaps. There are two scenarios where this would be useful:
+        // 1. To reduce memory consumption in cases where the bitmaps aren't
+        //    needed, i.e. the guest chooses not to enable guest vsm and VTL 1
+        //    gets revoked.
+        // 2. Because the related guest memory objects are initialized before
+        // VTL 1 is, the code as it currently stands will always enforce vtl 1
+        // protections even if VTL 1 hasn't explicitly enabled it. e.g. if VTL 1
+        // never enables vtl protections via the vsm partition config, but it
+        // still makes hypercalls to modify the vtl protection mask (this is a
+        // valid scenario to help set up default protections), these protections
+        // will still be enforced. In practice, a well-designed VTL 1 probably
+        // would enable vtl protections before allowing VTL 0 to run again, but
+        // technically the implementation here is not to spec.
+        if let Some(bitmaps) = self.memory_mapping.permission_bitmaps.as_ref() {
+            match self.view_type {
+                GuestMemoryViewReadType::Read => Some(guestmem::BitmapInfo {
+                    read_bitmap: NonNull::new(bitmaps.read_bitmap.as_ptr().cast()).unwrap(),
+                    write_bitmap: NonNull::new(bitmaps.write_bitmap.as_ptr().cast()).unwrap(),
+                    bit_offset: 0,
+                }),
+                GuestMemoryViewReadType::KernelExecute => Some(guestmem::BitmapInfo {
+                    read_bitmap: NonNull::new(bitmaps.kernel_execute_bitmap.as_ptr().cast())
+                        .unwrap(),
+                    write_bitmap: NonNull::new(bitmaps.write_bitmap.as_ptr().cast()).unwrap(),
+                    bit_offset: 0,
+                }),
+                GuestMemoryViewReadType::UserExecute => Some(guestmem::BitmapInfo {
+                    read_bitmap: NonNull::new(bitmaps.user_execute_bitmap.as_ptr().cast()).unwrap(),
+                    write_bitmap: NonNull::new(bitmaps.write_bitmap.as_ptr().cast()).unwrap(),
+                    bit_offset: 0,
+                }),
+            }
+        } else {
+            self.memory_mapping
+                .valid_memory
+                .as_ref()
+                .map(|bitmap| bitmap.access_bitmap())
+        }
+    }
+
+    fn page_fault(
+        &self,
+        address: u64,
+        len: usize,
+        write: bool,
+        bitmap_failure: bool,
+    ) -> guestmem::PageFaultAction {
+        let gpn = address / PAGE_SIZE as u64;
+        if !bitmap_failure {
+            guestmem::PageFaultAction::Fail(guestmem::PageFaultError::other(NotMapped {}))
+        } else {
+            let valid_memory = self
+                .memory_mapping
+                .valid_memory
+                .as_ref()
+                .expect("all backings with bitmaps should have a GuestValidMemory");
+            if !valid_memory.check_valid(gpn) {
+                match valid_memory.memory_type() {
+                    GuestValidMemoryType::Shared => {
+                        tracing::warn!(
+                            ?address,
+                            ?len,
+                            ?write,
+                            "tried to access private page using shared mapping"
+                        );
+                        guestmem::PageFaultAction::Fail(guestmem::PageFaultError::new(
+                            guestmem::GuestMemoryErrorKind::NotShared,
+                            BitmapFailure::IncorrectHostVisibilityAccess,
+                        ))
+                    }
+                    GuestValidMemoryType::Encrypted => {
+                        tracing::warn!(
+                            ?address,
+                            ?len,
+                            ?write,
+                            "tried to access shared page using private mapping"
+                        );
+                        guestmem::PageFaultAction::Fail(guestmem::PageFaultError::new(
+                            guestmem::GuestMemoryErrorKind::NotPrivate,
+                            BitmapFailure::IncorrectHostVisibilityAccess,
+                        ))
+                    }
+                }
+            } else {
+                // Currently, only VTL 1 permissions are tracked, so any
+                // invalid accesses here violate VTL 1 protections.
+                if let Some(permission_bitmaps) = &self.memory_mapping.permission_bitmaps {
+                    let check_bitmap = if write {
+                        &permission_bitmaps.write_bitmap
+                    } else {
+                        match self.view_type {
+                            GuestMemoryViewReadType::Read => &permission_bitmaps.read_bitmap,
+                            GuestMemoryViewReadType::KernelExecute => {
+                                &permission_bitmaps.kernel_execute_bitmap
+                            }
+                            GuestMemoryViewReadType::UserExecute => {
+                                &permission_bitmaps.user_execute_bitmap
+                            }
+                        }
+                    };
+
+                    if !check_bitmap.page_state(gpn) {
+                        tracing::warn!(?address, ?len, ?write, ?self.view_type, "VTL 1 permissions violation");
+
+                        return guestmem::PageFaultAction::Fail(guestmem::PageFaultError::new(
+                            guestmem::GuestMemoryErrorKind::VtlProtected,
+                            BitmapFailure::Vtl1ProtectionsViolation,
+                        ));
+                    }
+                }
+
+                // Possible race condition where the bitmaps are in transition
+                // and while the original check failed, the bitmaps now show
+                // valid access to the page. Retry in that situation.
+                guestmem::PageFaultAction::Retry
+            }
+        }
+    }
+
+    fn lock_gpns(&self, gpns: &[u64]) -> Result<bool, GuestMemoryBackingError> {
+        if let Some(protector) = self.protector.as_ref() {
+            protector.lock_gpns(self.vtl, gpns)?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn unlock_gpns(&self, gpns: &[u64]) {
+        if let Some(protector) = self.protector.as_ref() {
+            protector.unlock_gpns(self.vtl, gpns)
+        }
+    }
+}
+
+#[derive(Debug, Copy, Clone)]
+pub enum GuestValidMemoryType {
+    Shared,
+    Encrypted,
+}
+
 /// Partition-wide (cross-vtl) tracking of valid memory that can be used in
 /// individual GuestMemoryMappings.
 #[derive(Debug)]
 pub struct GuestValidMemory {
     valid_bitmap: GuestMemoryBitmap,
     valid_bitmap_lock: Mutex<()>,
+    memory_type: GuestValidMemoryType,
 }
 
 impl GuestValidMemory {
-    fn new(memory_layout: &MemoryLayout, valid_bitmap_state: bool) -> Result<Self, MappingError> {
+    fn new(
+        memory_layout: &MemoryLayout,
+        memory_type: GuestValidMemoryType,
+        valid_bitmap_state: bool,
+    ) -> Result<Self, MappingError> {
         let valid_bitmap = {
             let mut bitmap = {
                 // Calculate the total size of the address space by looking at the ending region.
@@ -98,6 +328,7 @@ impl GuestValidMemory {
         Ok(GuestValidMemory {
             valid_bitmap,
             valid_bitmap_lock: Default::default(),
+            memory_type,
         })
     }
 
@@ -110,6 +341,11 @@ impl GuestValidMemory {
     /// Check if the given page is valid.
     pub(crate) fn check_valid(&self, gpn: u64) -> bool {
         self.valid_bitmap.page_state(gpn)
+    }
+
+    /// Returns the type of memory tracked by the bitmap
+    pub(crate) fn memory_type(&self) -> GuestValidMemoryType {
+        self.memory_type
     }
 
     fn access_bitmap(&self) -> guestmem::BitmapInfo {
@@ -130,7 +366,6 @@ pub struct GuestMemoryMapping {
     iova_offset: Option<u64>,
     #[inspect(with = "Option::is_some")]
     valid_memory: Option<Arc<GuestValidMemory>>,
-    // TODO GUEST VSM: synchronize bitmap access
     #[inspect(with = "Option::is_some")]
     permission_bitmaps: Option<PermissionBitmaps>,
     registrar: Option<MemoryRegistrar<MshvVtlWithPolicy>>,
@@ -266,8 +501,6 @@ pub struct GuestMemoryMappingBuilder {
 }
 
 impl GuestMemoryMappingBuilder {
-    /// FUTURE: use bitmaps to track VTL permissions as well, to support guest
-    /// VSM for hardware-isolated VMs.
     fn use_partition_valid_memory(
         &mut self,
         valid_memory: Option<Arc<GuestValidMemory>>,
@@ -480,7 +713,6 @@ impl GuestMemoryMapping {
     /// Panics if the range is outside of guest RAM.
     pub fn update_permission_bitmaps(&self, range: MemoryRange, flags: HvMapGpaFlags) {
         if let Some(bitmaps) = self.permission_bitmaps.as_ref() {
-            // TODO GUEST VSM: synchronize with reading the bitmaps
             let _lock = bitmaps.permission_update_lock.lock();
             bitmaps.read_bitmap.update(range, flags.readable());
             bitmaps.write_bitmap.update(range, flags.writable());
@@ -514,69 +746,5 @@ impl GuestMemoryMapping {
     ) -> Result<(), sparse_mmap::SparseMappingError> {
         self.mapping
             .fill_at(range.start() as usize, 0, range.len() as usize)
-    }
-}
-
-/// SAFETY: Implementing the `GuestMemoryAccess` contract, including the
-/// size and lifetime of the mappings and bitmaps.
-unsafe impl GuestMemoryAccess for GuestMemoryMapping {
-    fn mapping(&self) -> Option<NonNull<u8>> {
-        NonNull::new(self.mapping.as_ptr().cast())
-    }
-
-    fn max_address(&self) -> u64 {
-        self.mapping.len() as u64
-    }
-
-    fn expose_va(&self, address: u64, len: u64) -> Result<(), GuestMemoryBackingError> {
-        if let Some(registrar) = &self.registrar {
-            registrar
-                .register(address, len)
-                .map_err(|start| GuestMemoryBackingError::other(start, RegistrationError))
-        } else {
-            // TODO: fail this call once we have a way to avoid calling this for
-            // user-mode-only accesses to locked memory (e.g., for vmbus ring
-            // buffers). We can't fail this for now because TDX cannot register
-            // encrypted memory.
-            Ok(())
-        }
-    }
-
-    fn base_iova(&self) -> Option<u64> {
-        // When the alias map is configured for this mapping, VTL2-mapped
-        // devices need to do DMA with the alias map bit set to avoid DMAing
-        // into VTL1 memory.
-        self.iova_offset
-    }
-
-    fn access_bitmap(&self) -> Option<guestmem::BitmapInfo> {
-        // When the permissions bitmaps are available, they take precedence and
-        // therefore should be no more permissive than the access bitmap.
-        //
-        // TODO GUEST VSM: consider being able to dynamically update these
-        // bitmaps. There are two scenarios where this would be useful:
-        // 1. To reduce memory consumption in cases where the bitmaps aren't
-        //    needed, i.e. the guest chooses not to enable guest vsm and VTL 1
-        //    gets revoked.
-        // 2. Because the related guest memory objects are initialized before
-        // VTL 1 is, the code as it currently stands will always enforce vtl 1
-        // protections even if VTL 1 hasn't explicitly enabled it. e.g. if VTL 1
-        // never enables vtl protections via the vsm partition config, but it
-        // still makes hypercalls to modify the vtl protection mask (this is a
-        // valid scenario to help set up default protections), these protections
-        // will still be enforced. In practice, a well-designed VTL 1 probably
-        // would enable vtl protections before allowing VTL 0 to run again, but
-        // technically the implementation here is not to spec.
-        if let Some(bitmaps) = self.permission_bitmaps.as_ref() {
-            Some(guestmem::BitmapInfo {
-                read_bitmap: NonNull::new(bitmaps.read_bitmap.as_ptr().cast()).unwrap(),
-                write_bitmap: NonNull::new(bitmaps.write_bitmap.as_ptr().cast()).unwrap(),
-                bit_offset: 0,
-            })
-        } else {
-            self.valid_memory
-                .as_ref()
-                .map(|bitmap| bitmap.access_bitmap())
-        }
     }
 }

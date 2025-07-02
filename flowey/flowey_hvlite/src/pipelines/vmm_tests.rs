@@ -3,9 +3,9 @@
 
 use flowey::node::prelude::ReadVar;
 use flowey::pipeline::prelude::*;
-use flowey_lib_hvlite::_jobs::local_build_and_run_nextest_vmm_tests::BuildSelections;
 use flowey_lib_hvlite::_jobs::local_build_and_run_nextest_vmm_tests::VmmTestSelectionFlags;
 use flowey_lib_hvlite::_jobs::local_build_and_run_nextest_vmm_tests::VmmTestSelections;
+use flowey_lib_hvlite::install_vmm_tests_deps::VmmTestsDepSelections;
 use flowey_lib_hvlite::run_cargo_build::common::CommonTriple;
 use std::path::PathBuf;
 use vmm_test_images::KnownTestArtifacts;
@@ -31,13 +31,13 @@ pub struct VmmTestsCli {
 
     /// Directory for the output artifacts
     #[clap(long)]
-    dir: Option<PathBuf>,
+    dir: PathBuf,
 
     /// Custom test filter
     #[clap(long, conflicts_with("flags"))]
     filter: Option<String>,
     /// Custom list of artifacts to download
-    #[clap(long, conflicts_with("flags"))]
+    #[clap(long, conflicts_with("flags"), requires("filter"))]
     artifacts: Vec<KnownTestArtifacts>,
     /// Flags used to generate the VMM test filter
     ///
@@ -98,21 +98,27 @@ impl IntoPipeline for VmmTestsCli {
 
         let mut pipeline = Pipeline::new();
 
-        let host_target = match (
-            FlowArch::host(backend_hint),
-            FlowPlatform::host(backend_hint),
-        ) {
-            (FlowArch::Aarch64, FlowPlatform::Windows) => VmmTestTargetCli::WindowsAarch64,
-            (FlowArch::X86_64, FlowPlatform::Windows) => VmmTestTargetCli::WindowsX64,
-            (FlowArch::X86_64, FlowPlatform::Linux(_)) => VmmTestTargetCli::LinuxX64,
-            _ => anyhow::bail!("unsupported host"),
+        let target = if let Some(t) = target {
+            t
+        } else {
+            match (
+                FlowArch::host(backend_hint),
+                FlowPlatform::host(backend_hint),
+            ) {
+                (FlowArch::Aarch64, FlowPlatform::Windows) => VmmTestTargetCli::WindowsAarch64,
+                (FlowArch::X86_64, FlowPlatform::Windows) => VmmTestTargetCli::WindowsX64,
+                (FlowArch::X86_64, FlowPlatform::Linux(_)) => VmmTestTargetCli::LinuxX64,
+                _ => anyhow::bail!("unsupported host"),
+            }
         };
 
-        let target = match target.unwrap_or(host_target) {
+        let target = match target {
             VmmTestTargetCli::WindowsAarch64 => CommonTriple::AARCH64_WINDOWS_MSVC,
             VmmTestTargetCli::WindowsX64 => CommonTriple::X86_64_WINDOWS_MSVC,
             VmmTestTargetCli::LinuxX64 => CommonTriple::X86_64_LINUX_GNU,
         };
+        let target_os = target.as_triple().operating_system;
+        let target_architecture = target.as_triple().architecture;
 
         pipeline
             .new_job(
@@ -146,10 +152,34 @@ impl IntoPipeline for VmmTestsCli {
                         VmmTestSelections::Custom {
                             filter,
                             artifacts,
-                            build: BuildSelections::default(),
+                            // TODO: add a way to manually specify these
+                            // For now, just build and install everything.
+                            build: Default::default(),
+                            deps: match target_os {
+                                target_lexicon::OperatingSystem::Windows => {
+                                    VmmTestsDepSelections::Windows {
+                                        hyperv: true,
+                                        whp: true,
+                                        // No hardware isolation support on Aarch64, so don't default to needing it when the
+                                        // user specifies a custom filter.
+                                        hardware_isolation: match target_architecture {
+                                            target_lexicon::Architecture::Aarch64(_) => false,
+                                            target_lexicon::Architecture::X86_64 => true,
+                                            _ => panic!(
+                                                "Unhandled architecture: {:?}",
+                                                target_architecture
+                                            ),
+                                        },
+                                    }
+                                }
+                                target_lexicon::OperatingSystem::Linux => {
+                                    VmmTestsDepSelections::Linux
+                                }
+                                _ => unreachable!(),
+                            },
                         }
                     } else {
-                        VmmTestSelections::Flags(flags.unwrap())
+                        VmmTestSelections::Flags(flags.unwrap_or_default())
                     },
                     unstable_whp,
                     release,

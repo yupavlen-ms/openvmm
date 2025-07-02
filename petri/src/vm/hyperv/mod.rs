@@ -38,7 +38,6 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
-use thiserror::Error;
 use vm::HyperVVM;
 use vmm_core_defs::HaltReason;
 
@@ -61,6 +60,7 @@ pub struct PetriVmConfigHyperV {
     openhcl_igvm: Option<ResolvedArtifact>,
     openhcl_command_line: String,
     disable_frontpage: bool,
+    vmbus_redirect: bool,
 
     driver: DefaultDriver,
     agent_image: AgentImage,
@@ -135,6 +135,10 @@ impl PetriVmConfig for PetriVmConfigHyperV {
 
     fn with_uefi_frontpage(self: Box<Self>, enable: bool) -> Box<dyn PetriVmConfig> {
         Box::new(Self::with_uefi_frontpage(*self, enable))
+    }
+
+    fn with_vmbus_redirect(self: Box<Self>, enable: bool) -> Box<dyn PetriVmConfig> {
+        Box::new(Self::with_vmbus_redirect(*self, enable))
     }
 
     fn os_flavor(&self) -> OsFlavor {
@@ -300,6 +304,7 @@ impl PetriVmConfigHyperV {
             temp_dir,
             log_source: params.logger.clone(),
             disable_frontpage: true,
+            vmbus_redirect: false,
             openhcl_command_line: String::new(),
         })
     }
@@ -480,6 +485,9 @@ impl PetriVmConfigHyperV {
                 Some(0),
                 Some(controller_number),
             )?;
+
+            // Enable/Disable VMBusRedirect if requested in config
+            vm.set_vmbus_redirect(self.vmbus_redirect)?;
         }
 
         let mut log_tasks = Vec::new();
@@ -602,6 +610,12 @@ impl PetriVmConfigHyperV {
     /// Set whether to disable the UEFI frontpage.
     pub fn with_uefi_frontpage(mut self, enable: bool) -> Self {
         self.disable_frontpage = !enable;
+        self
+    }
+
+    /// Enables VMBus relay for the VM
+    pub fn with_vmbus_redirect(mut self, enable: bool) -> Self {
+        self.vmbus_redirect = enable;
         self
     }
 }
@@ -741,20 +755,6 @@ impl PetriVmHyperV {
 
         Ok(())
     }
-}
-
-/// Error running command
-#[derive(Error, Debug)]
-pub enum CommandError {
-    /// failed to launch command
-    #[error("failed to launch command")]
-    Launch(#[from] std::io::Error),
-    /// command exited with non-zero status
-    #[error("command exited with non-zero status ({0}): {1}")]
-    Command(std::process::ExitStatus, String),
-    /// command output is not utf-8
-    #[error("command output is not utf-8")]
-    Utf8(#[from] std::string::FromUtf8Error),
 }
 
 fn acl_read_for_vm(path: &Path, id: Option<guid::Guid>) -> anyhow::Result<()> {

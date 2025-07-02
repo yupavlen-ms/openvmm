@@ -25,6 +25,7 @@ use crate::UhProcessor;
 use crate::WakeReason;
 use cvm_tracing::CVM_ALLOWED;
 use cvm_tracing::CVM_CONFIDENTIAL;
+use guestmem::GuestMemory;
 use hcl::ioctl::ProcessorRunner;
 use hcl::ioctl::tdx::Tdx;
 use hcl::ioctl::tdx::TdxPrivateRegs;
@@ -500,7 +501,7 @@ impl HardwareIsolatedBacking for TdxBacked {
     }
 
     fn tlb_flush_lock_access<'a>(
-        vp_index: VpIndex,
+        vp_index: Option<VpIndex>,
         partition: &'a UhPartitionInner,
         shared: &'a Self::Shared,
     ) -> impl TlbFlushLockAccess + 'a {
@@ -759,12 +760,7 @@ impl TdxBackedShared {
         // performance would be poor for cases where the L1 implements
         // high-performance devices.
         let untrusted_synic = (partition_params.handle_synic && !partition_params.hide_isolation)
-            .then(|| {
-                GlobalSynic::new(
-                    params.guest_memory[GuestVtl::Vtl0].clone(),
-                    partition_params.topology.vp_count(),
-                )
-            });
+            .then(|| GlobalSynic::new(partition_params.topology.vp_count()));
 
         // TODO TDX: Consider just using MSR kernel module instead of explicit ioctl.
         let cr4_fixed1 = params.hcl.read_vmx_cr4_fixed1();
@@ -801,6 +797,28 @@ impl TdxBacked {
     /// for each CPU.
     pub fn shared_pages_required_per_cpu() -> u64 {
         UhDirectOverlay::Count as u64
+    }
+}
+
+// The memory used to back the untrusted synic is not guest-visible, but rather
+// is allocated from our shared pool. Therefore it does not need to go through
+// the normal memory protections path.
+struct UntrustedSynicVtlProts<'a>(&'a GuestMemory);
+
+impl hv1_emulator::VtlProtectAccess for UntrustedSynicVtlProts<'_> {
+    fn check_modify_and_lock_overlay_page(
+        &mut self,
+        gpn: u64,
+        _check_perms: hvdef::HvMapGpaFlags,
+        _new_perms: Option<hvdef::HvMapGpaFlags>,
+    ) -> Result<guestmem::LockedPages, HvError> {
+        self.0
+            .lock_gpns(false, &[gpn])
+            .map_err(|_| HvError::OperationFailed)
+    }
+
+    fn unlock_overlay_page(&mut self, _gpn: u64) -> Result<(), HvError> {
+        Ok(())
     }
 }
 
@@ -1022,11 +1040,13 @@ impl BackingPrivate for TdxBacked {
         ];
 
         let reg_count = if let Some(synic) = &mut this.backing.untrusted_synic {
+            let prot_access = &mut UntrustedSynicVtlProts(&this.partition.gm[GuestVtl::Vtl0]);
+
             synic
-                .set_simp(reg(pfns[UhDirectOverlay::Sipp as usize]))
+                .set_simp(reg(pfns[UhDirectOverlay::Sipp as usize]), prot_access)
                 .unwrap();
             synic
-                .set_siefp(reg(pfns[UhDirectOverlay::Sifp as usize]))
+                .set_siefp(reg(pfns[UhDirectOverlay::Sifp as usize]), prot_access)
                 .unwrap();
             // Set the SIEFP in the hypervisor so that the hypervisor can
             // directly signal synic events. Don't set the SIMP, since the
@@ -2653,7 +2673,11 @@ impl UhProcessor<'_, TdxBacked> {
                     .untrusted_synic
                     .as_mut()
                     .unwrap()
-                    .write_nontimer_msr(msr, value)?;
+                    .write_nontimer_msr(
+                        msr,
+                        value,
+                        &mut UntrustedSynicVtlProts(&self.partition.gm[GuestVtl::Vtl0]),
+                    )?;
                 // Propagate sint MSR writes to the hypervisor as well
                 // so that the hypervisor can directly inject events.
                 if matches!(msr, hvdef::HV_X64_MSR_SINT0..=hvdef::HV_X64_MSR_SINT15) {
@@ -3002,8 +3026,7 @@ impl<T: CpuIo> X86EmulatorSupport for UhEmulationState<'_, '_, T, TdxBacked> {
         _gpa: u64,
         _mode: TranslateMode,
     ) -> Result<(), virt_support_x86emu::emulate::EmuCheckVtlAccessError<Self::Error>> {
-        // Lock Vtl TLB
-        // TODO TDX GUEST VSM: VTL1 not yet supported
+        // Nothing to do here, the guest memory object will handle the check.
         Ok(())
     }
 
@@ -4341,7 +4364,7 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressListEx
 
         // Send flush IPIs to the specified VPs.
         TdxTlbLockFlushAccess {
-            vp_index: self.vp.vp_index(),
+            vp_index: Some(self.vp.vp_index()),
             partition: self.vp.partition,
             shared: self.vp.shared,
         }
@@ -4396,7 +4419,7 @@ impl<T: CpuIo> hv1_hypercall::FlushVirtualAddressSpaceEx
 
         // Send flush IPIs to the specified VPs.
         TdxTlbLockFlushAccess {
-            vp_index: self.vp.vp_index(),
+            vp_index: Some(self.vp.vp_index()),
             partition: self.vp.partition,
             shared: self.vp.shared,
         }
@@ -4471,9 +4494,7 @@ impl TdxTlbLockFlushAccess<'_> {
         std::sync::atomic::fence(Ordering::SeqCst);
         self.partition.hcl.kick_cpus(
             processors.into_iter().filter(|&vp| {
-                vp != self.vp_index.index()
-                    && self.shared.active_vtl[vp as usize].load(Ordering::Relaxed)
-                        == target_vtl as u8
+                self.shared.active_vtl[vp as usize].load(Ordering::Relaxed) == target_vtl as u8
             }),
             true,
             true,
@@ -4482,7 +4503,7 @@ impl TdxTlbLockFlushAccess<'_> {
 }
 
 struct TdxTlbLockFlushAccess<'a> {
-    vp_index: VpIndex,
+    vp_index: Option<VpIndex>,
     partition: &'a UhPartitionInner,
     shared: &'a TdxBackedShared,
 }
@@ -4510,11 +4531,13 @@ impl TlbFlushLockAccess for TdxTlbLockFlushAccess<'_> {
     }
 
     fn set_wait_for_tlb_locks(&mut self, vtl: GuestVtl) {
-        hardware_cvm::tlb_lock::TlbLockAccess {
-            vp_index: self.vp_index,
-            cvm_partition: &self.shared.cvm,
+        if let Some(vp_index) = self.vp_index {
+            hardware_cvm::tlb_lock::TlbLockAccess {
+                vp_index,
+                cvm_partition: &self.shared.cvm,
+            }
+            .set_wait_for_tlb_locks(vtl);
         }
-        .set_wait_for_tlb_locks(vtl);
     }
 }
 

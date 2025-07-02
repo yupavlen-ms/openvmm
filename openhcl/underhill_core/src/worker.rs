@@ -127,6 +127,7 @@ use tracing::Instrument;
 use tracing::instrument;
 use uevent::UeventListener;
 use underhill_attestation::AttestationType;
+use underhill_confidentiality::confidential_debug_enabled;
 use underhill_threadpool::AffinitizedThreadpool;
 use underhill_threadpool::ThreadpoolBuilder;
 use virt::Partition;
@@ -1523,6 +1524,7 @@ async fn new_underhill_vm(
             .vtom_offset_bit
             .map(|bit| 1 << bit)
             .unwrap_or(0),
+        isolation,
     )
     .context("failed to create global dma manager")?;
 
@@ -1588,6 +1590,10 @@ async fn new_underhill_vm(
         );
     }
 
+    if confidential_debug_enabled() {
+        tracing::warn!(CVM_ALLOWED, "confidential debug enabled");
+    }
+
     // Create the `AttestationVmConfig` from `dps`, which will be used in
     // - stateful mode (the attestation is not suppressed)
     // - stateless mode (isolated VM with attestation suppressed)
@@ -1602,6 +1608,9 @@ async fn new_underhill_vm(
         secure_boot: dps.general.secure_boot_enabled,
         tpm_enabled: dps.general.tpm_enabled,
         tpm_persisted: !dps.general.suppress_attestation.unwrap_or(false),
+        filtered_vpci_devices_allowed: with_vmbus_relay
+            && dps.general.vpci_boot_enabled
+            && isolation.is_isolated(),
         vm_unique_id: dps.general.bios_guid.to_string(),
     };
 
@@ -1764,6 +1773,8 @@ async fn new_underhill_vm(
             gm.vtl1().cloned().unwrap_or(GuestMemory::empty()),
         ]
         .into(),
+        vtl0_kernel_exec_gm: gm.vtl0_kernel_execute().clone(),
+        vtl0_user_exec_gm: gm.vtl0_user_execute().clone(),
         #[cfg(guest_arch = "x86_64")]
         cpuid,
         crash_notification_send,
@@ -1994,14 +2005,25 @@ async fn new_underhill_vm(
             use vmm_core::emuplat::hcl_compat_uefi_nvram_storage::VmgsStorageBackendAdapter;
 
             // map the GET's template enum onto the hardcoded secureboot template type
-            // TODO: will need to update this code for underhill on ARM
             let base_vars = match dps.general.secure_boot_template {
                 SecureBootTemplateType::None => CustomVars::default(),
                 SecureBootTemplateType::MicrosoftWindows => {
-                    hyperv_secure_boot_templates::x64::microsoft_windows()
+                    if cfg!(guest_arch = "x86_64") {
+                        hyperv_secure_boot_templates::x64::microsoft_windows()
+                    } else if cfg!(guest_arch = "aarch64") {
+                        hyperv_secure_boot_templates::aarch64::microsoft_windows()
+                    } else {
+                        anyhow::bail!("no secure boot template for current guest_arch")
+                    }
                 }
                 SecureBootTemplateType::MicrosoftUefiCertificateAuthority => {
-                    hyperv_secure_boot_templates::x64::microsoft_uefi_ca()
+                    if cfg!(guest_arch = "x86_64") {
+                        hyperv_secure_boot_templates::x64::microsoft_uefi_ca()
+                    } else if cfg!(guest_arch = "aarch64") {
+                        hyperv_secure_boot_templates::aarch64::microsoft_uefi_ca()
+                    } else {
+                        anyhow::bail!("no secure boot template for current guest_arch")
+                    }
                 }
             };
 
@@ -2053,16 +2075,20 @@ async fn new_underhill_vm(
                 logger: Box::new(UnderhillLogger {
                     get: get_client.clone(),
                 }),
-                nvram_storage: Box::new(HclCompatNvram::new(
-                    VmgsStorageBackendAdapter(
-                        vmgs_client
-                            .as_non_volatile_store(vmgs::FileId::BIOS_NVRAM, true)
-                            .context("failed to instantiate UEFI NVRAM store")?,
-                    ),
-                    Some(HclCompatNvramQuirks {
-                        skip_corrupt_vars_with_missing_null_term: true,
-                    }),
-                )),
+                nvram_storage: Box::new(
+                    HclCompatNvram::new(
+                        VmgsStorageBackendAdapter(
+                            vmgs_client
+                                .as_non_volatile_store(vmgs::FileId::BIOS_NVRAM, true)
+                                .context("failed to instantiate UEFI NVRAM store")?,
+                        ),
+                        Some(HclCompatNvramQuirks {
+                            skip_corrupt_vars_with_missing_null_term: true,
+                        }),
+                        is_restoring,
+                    )
+                    .await?,
+                ),
                 generation_id_recv: get_client
                     .take_generation_id_recv()
                     .await
@@ -3057,6 +3083,7 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
         com2_vmbus_redirector: _,
         suppress_attestation: _,
         bios_guid: _,
+        vpci_boot_enabled: _,
 
         // Validated below
         battery_enabled,
@@ -3091,7 +3118,6 @@ fn validate_isolated_configuration(dps: &DevicePlatformSettings) -> Result<(), a
         generation_id: _,
         pause_after_boot_failure: _,
         disable_frontpage: _,
-        vpci_boot_enabled: _,
         num_lock_enabled: _,
         pcat_boot_device_order: _,
         vpci_instance_filter: _,
@@ -3176,19 +3202,6 @@ async fn halt_task(
     get_client: GuestEmulationTransportClient,
     halt_on_guest_halt: bool,
 ) {
-    let prepare_for_shutdown = async || {
-        // Flush logs. Wait up to 5 seconds.
-        let ctx = CancelContext::new().with_timeout(Duration::from_secs(5));
-        let call = control_send
-            .lock()
-            .as_ref()
-            .map(|send| send.call(ControlRequest::FlushLogs, ctx));
-
-        if let Some(call) = call {
-            call.await.ok();
-        }
-    };
-
     #[derive(Debug)]
     enum HaltRequest {
         PowerOff,
@@ -3196,7 +3209,6 @@ async fn halt_task(
         Hibernate,
         TripleFault { vp: u32, regs: Vec<RegisterState> },
         Panic { string: String },
-        None,
     }
 
     while let Ok(reason) = halt_notify_recv.recv().await {
@@ -3226,35 +3238,36 @@ async fn halt_task(
                     string: format!("vp error on vp {}", vp),
                 }
             }
+            // Debug halts require no further processing, loop back around.
             HaltReason::DebugBreak { vp } => {
                 tracing::info!(CVM_ALLOWED, vp, "debug break");
-                HaltRequest::None
+                continue;
             }
             HaltReason::SingleStep { vp } => {
                 tracing::info!(CVM_ALLOWED, vp, "single step");
-                HaltRequest::None
+                continue;
             }
             HaltReason::HwBreakpoint { vp, .. } => {
                 tracing::info!(CVM_ALLOWED, vp, "hardware breakpoint");
-                HaltRequest::None
+                continue;
             }
         };
 
         if halt_on_guest_halt {
-            match halt_request {
-                // Ignore debug halts, as they're not true halts requested by the guest.
-                HaltRequest::None => {}
-                // For guest requested halts, log the error and do not forward to the host.
-                _ => {
-                    tracing::info!(CVM_ALLOWED, ?halt_request, "guest halted");
-                }
-            }
+            // For guest requested halts, log the error and do not forward to the host.
+            tracing::info!(CVM_ALLOWED, ?halt_request, "guest halted");
         } else {
-            // All real halts require flushing logs to the host.
-            if !matches!(halt_request, HaltRequest::None) {
-                prepare_for_shutdown().await;
+            // All real halts require flushing logs to the host. Wait up to 5 seconds.
+            let ctx = CancelContext::new().with_timeout(Duration::from_secs(5));
+            let call = control_send
+                .lock()
+                .as_ref()
+                .map(|send| send.call(ControlRequest::FlushLogs, ctx));
+            if let Some(call) = call {
+                call.await.ok();
             }
 
+            // Now we can notify the host about the halt.
             match halt_request {
                 HaltRequest::PowerOff => get_client.send_power_off(),
                 HaltRequest::Reset => get_client.send_reset(),
@@ -3263,7 +3276,6 @@ async fn halt_task(
                     get_client.triple_fault(vp, TripleFaultType::UNRECOVERABLE_EXCEPTION, regs)
                 }
                 HaltRequest::Panic { string } => panic!("{}", string),
-                HaltRequest::None => {}
             }
         }
     }
