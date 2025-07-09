@@ -193,9 +193,6 @@ impl QueuePair {
         registers: Arc<DeviceRegisters<impl DeviceBacking>>,
         bounce_buffer: bool,
     ) -> anyhow::Result<Self> {
-        assert!(sq_entries <= Self::MAX_SQ_ENTRIES);
-        assert!(cq_entries <= Self::MAX_CQ_ENTRIES);
-
         let total_size = QueuePair::SQ_SIZE
             + QueuePair::CQ_SIZE
             + if bounce_buffer {
@@ -203,8 +200,6 @@ impl QueuePair {
             } else {
                 QueuePair::PER_QUEUE_PAGES_NO_BOUNCE_BUFFER * PAGE_SIZE
             };
-
-        let mut fallback_alloc = 0u64;
         let dma_client = device.dma_client();
         let mem = dma_client
             .allocate_dma_buffer(total_size)
@@ -217,10 +212,9 @@ impl QueuePair {
             cq_entries,
             interrupt,
             registers,
-            mem?,
+            mem,
             None,
             bounce_buffer,
-            fallback_alloc,
         )
     }
 
@@ -235,7 +229,6 @@ impl QueuePair {
         mem: MemoryBlock,
         saved_state: Option<&QueueHandlerSavedState>,
         bounce_buffer: bool,
-        fallback_alloc: u64,
     ) -> anyhow::Result<Self> {
         // MemoryBlock is either allocated or restored prior calling here.
         let sq_mem_block = mem.subblock(0, QueuePair::SQ_SIZE);
@@ -370,7 +363,6 @@ impl QueuePair {
             mem,
             Some(handler_data),
             bounce_buffer,
-            0u64,
         )
     }
 }

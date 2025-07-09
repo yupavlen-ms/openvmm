@@ -465,9 +465,7 @@ impl PartitionInfo {
         // from the final command line, or the host provided device tree value.
         let vtl2_gpa_pool_size = {
             let dt_page_count = parsed.device_dma_page_count;
-            let cmdline_page_count =
-                crate::cmdline::parse_boot_command_line(storage.cmdline.as_str())
-                    .enable_vtl2_gpa_pool;
+            let cmdline_page_count = options.enable_vtl2_gpa_pool;
 
             let hostval = max(dt_page_count.unwrap_or(0), cmdline_page_count.unwrap_or(0));
             if hostval == 0

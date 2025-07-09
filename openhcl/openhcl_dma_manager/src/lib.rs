@@ -312,7 +312,7 @@ impl DmaManagerInner {
                         // `LockedMemorySpawner` uses private VTL2 ram, so
                         // lowering VTL permissions is required.
                         DmaClientBacking::LockedMemoryLowerVtl(LowerVtlMemorySpawner::new(
-                            LockedMemorySpawner,
+                            LockedMemorySpawner::new(),
                             self.lower_vtl
                                 .as_ref()
                                 .ok_or(anyhow::anyhow!(
