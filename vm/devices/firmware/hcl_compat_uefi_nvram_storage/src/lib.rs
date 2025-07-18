@@ -121,11 +121,8 @@ pub struct HclCompatNvramQuirks {
 
 impl<S: StorageBackend> HclCompatNvram<S> {
     /// Create a new [`HclCompatNvram`]
-    pub async fn new(
-        storage: S,
-        quirks: Option<HclCompatNvramQuirks>,
-    ) -> Result<Self, NvramStorageError> {
-        let nvram = Self {
+    pub fn new(storage: S, quirks: Option<HclCompatNvramQuirks>) -> Self {
+        Self {
             quirks: quirks.unwrap_or(HclCompatNvramQuirks {
                 skip_corrupt_vars_with_missing_null_term: false,
             }),
@@ -137,8 +134,7 @@ impl<S: StorageBackend> HclCompatNvram<S> {
             nvram_buf: Vec::new(),
 
             loaded: false,
-        };
-        Ok(nvram)
+        }
     }
 
     async fn lazy_load_from_storage(&mut self) -> Result<(), NvramStorageError> {
@@ -418,6 +414,7 @@ impl<S: StorageBackend> NvramStorage for HclCompatNvram<S> {
 
         Ok(())
     }
+
     async fn append_variable(
         &mut self,
         name: &Ucs2LeSlice,
@@ -539,28 +536,28 @@ mod test {
     #[async_test]
     async fn test_single_variable() {
         let mut storage = EphemeralStorageBackend::default();
-        let mut nvram = HclCompatNvram::new(&mut storage, None).await.unwrap();
+        let mut nvram = HclCompatNvram::new(&mut storage, None);
         impl_agnostic_tests::test_single_variable(&mut nvram).await;
     }
 
     #[async_test]
     async fn test_multiple_variable() {
         let mut storage = EphemeralStorageBackend::default();
-        let mut nvram = HclCompatNvram::new(&mut storage, None).await.unwrap();
+        let mut nvram = HclCompatNvram::new(&mut storage, None);
         impl_agnostic_tests::test_multiple_variable(&mut nvram).await;
     }
 
     #[async_test]
     async fn test_next() {
         let mut storage = EphemeralStorageBackend::default();
-        let mut nvram = HclCompatNvram::new(&mut storage, None).await.unwrap();
+        let mut nvram = HclCompatNvram::new(&mut storage, None);
         impl_agnostic_tests::test_next(&mut nvram).await;
     }
 
     #[async_test]
     async fn boundary_conditions() {
         let mut storage = EphemeralStorageBackend::default();
-        let mut nvram = HclCompatNvram::new(&mut storage, None).await.unwrap();
+        let mut nvram = HclCompatNvram::new(&mut storage, None);
 
         let vendor = Guid::new_random();
         let attr = 0x1234;
@@ -648,7 +645,7 @@ mod test {
         let data = vec![0x1, 0x2, 0x3, 0x4, 0x5];
         let timestamp = EFI_TIME::default();
 
-        let mut nvram = HclCompatNvram::new(&mut storage, None).await.unwrap();
+        let mut nvram = HclCompatNvram::new(&mut storage, None);
         nvram
             .set_variable(name1, vendor1, attr, data.clone(), timestamp)
             .await
@@ -665,7 +662,7 @@ mod test {
         drop(nvram);
 
         // reload
-        let mut nvram = HclCompatNvram::new(&mut storage, None).await.unwrap();
+        let mut nvram = HclCompatNvram::new(&mut storage, None);
 
         let (result_attr, result_data, result_timestamp) =
             nvram.get_variable(name1, vendor1).await.unwrap().unwrap();
