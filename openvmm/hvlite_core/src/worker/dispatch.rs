@@ -144,6 +144,9 @@ use vmotherboard::options::BaseChipsetDevices;
 use vmotherboard::options::BaseChipsetFoundation;
 use vmotherboard::options::BaseChipsetManifest;
 use vpci::bus::VpciBus;
+use watchdog_core::platform::BaseWatchdogPlatform;
+use watchdog_core::platform::WatchdogCallback;
+use watchdog_core::platform::WatchdogPlatform;
 
 const PM_BASE: u16 = 0x400;
 const SYSTEM_IRQ_ACPI: u32 = 9;
@@ -241,6 +244,7 @@ async fn open_simple_disk(
     resolver: &ResourceResolver,
     disk_type: Resource<DiskHandleKind>,
     read_only: bool,
+    driver_source: &VmTaskDriverSource,
 ) -> anyhow::Result<Disk> {
     // tracing::info!("-YSP: resolver 2");
     let disk = resolver
@@ -248,7 +252,7 @@ async fn open_simple_disk(
             disk_type,
             ResolveDiskParameters {
                 read_only,
-                _async_trait_workaround: &(),
+                driver_source,
             },
         )
         .await?;
@@ -969,7 +973,7 @@ impl InitializedVm {
         let vmgs = match cfg.vmgs {
             Some(VmgsResource::Disk(disk)) => Some(
                 vmgs::Vmgs::try_open(
-                    open_simple_disk(&resolver, disk, false).await?,
+                    open_simple_disk(&resolver, disk, false, &driver_source).await?,
                     None,
                     true,
                     false,
@@ -979,7 +983,7 @@ impl InitializedVm {
             ),
             Some(VmgsResource::ReprovisionOnFailure(disk)) => Some(
                 vmgs::Vmgs::try_open(
-                    open_simple_disk(&resolver, disk, false).await?,
+                    open_simple_disk(&resolver, disk, false, &driver_source).await?,
                     None,
                     true,
                     true,
@@ -988,9 +992,12 @@ impl InitializedVm {
                 .context("failed to open vmgs file")?,
             ),
             Some(VmgsResource::Reprovision(disk)) => Some(
-                vmgs::Vmgs::format_new(open_simple_disk(&resolver, disk, false).await?, None)
-                    .await
-                    .context("failed to format vmgs file")?,
+                vmgs::Vmgs::format_new(
+                    open_simple_disk(&resolver, disk, false, &driver_source).await?,
+                    None,
+                )
+                .await
+                .context("failed to format vmgs file")?,
             ),
             Some(VmgsResource::Ephemeral) => None,
             // TODO: make sure we don't need a VMGS
@@ -1045,6 +1052,7 @@ impl InitializedVm {
         let mut deps_hyperv_firmware_uefi = None;
         match &cfg.load_mode {
             LoadMode::Uefi { .. } => {
+                let (watchdog_send, watchdog_recv) = mesh::channel();
                 deps_hyperv_firmware_uefi = Some(dev::HyperVFirmwareUefi {
                     config: firmware_uefi::UefiConfig {
                         custom_uefi_vars: cfg.custom_uefi_vars,
@@ -1068,54 +1076,46 @@ impl InitializedVm {
                         use vmm_core::emuplat::hcl_compat_uefi_nvram_storage::VmgsStorageBackendAdapter;
 
                         match vmgs_client {
-                            Some(vmgs) => Box::new(
-                                HclCompatNvram::new(
-                                    VmgsStorageBackendAdapter(
-                                        vmgs.as_non_volatile_store(vmgs::FileId::BIOS_NVRAM, true)
-                                            .context("failed to instantiate UEFI NVRAM store")?,
-                                    ),
-                                    None,
-                                    false,
-                                )
-                                .await?,
-                            ),
+                            Some(vmgs) => Box::new(HclCompatNvram::new(
+                                VmgsStorageBackendAdapter(
+                                    vmgs.as_non_volatile_store(vmgs::FileId::BIOS_NVRAM, true)
+                                        .context("failed to instantiate UEFI NVRAM store")?,
+                                ),
+                                None,
+                            )),
                             None => Box::new(InMemoryNvram::new()),
                         }
                     },
                     generation_id_recv,
                     watchdog_platform: {
-                        use emuplat::watchdog::HvLiteWatchdogPlatform;
                         use vmcore::non_volatile_store::EphemeralNonVolatileStore;
 
                         // UEFI watchdog doesn't persist to VMGS at this time
                         let store = EphemeralNonVolatileStore::new_boxed();
 
-                        // Request an NMI on watchdog timeout.
+                        // Create the base watchdog platform
+                        let mut base_watchdog_platform = BaseWatchdogPlatform::new(store).await?;
+
+                        // Inject NMI on watchdog timeout
                         #[cfg(guest_arch = "x86_64")]
-                        let on_timeout = {
-                            let partition = partition.clone();
-                            Box::new(move || {
-                                // Unlike Hyper-V, we only send the NMI to the BSP.
-                                partition.request_msi(
-                                    Vtl::Vtl0,
-                                    virt::irqcon::MsiRequest::new_x86(
-                                        virt::irqcon::DeliveryMode::NMI,
-                                        0,
-                                        false,
-                                        0,
-                                        false,
-                                    ),
-                                );
-                            })
-                        };
-                        #[cfg(guest_arch = "aarch64")]
-                        let on_timeout = {
-                            let halt = halt_vps.clone();
-                            Box::new(move || halt.halt(HaltReason::Reset))
+                        let watchdog_callback = WatchdogTimeoutNmi {
+                            partition: partition.clone(),
+                            watchdog_send: Some(watchdog_send),
                         };
 
-                        Box::new(HvLiteWatchdogPlatform::new(store, on_timeout).await?)
+                        // ARM64 does not have NMI support yet, so halt instead
+                        #[cfg(guest_arch = "aarch64")]
+                        let watchdog_callback = WatchdogTimeoutReset {
+                            halt_vps: halt_vps.clone(),
+                            watchdog_send: Some(watchdog_send),
+                        };
+
+                        // Add callbacks
+                        base_watchdog_platform.add_callback(Box::new(watchdog_callback));
+
+                        Box::new(base_watchdog_platform)
                     },
+                    watchdog_recv,
                     vsm_config: None,
                     // TODO: persist SystemTimeClock time across reboots.
                     time_source: Box::new(local_clock::SystemTimeClock::new(
@@ -1285,9 +1285,10 @@ impl InitializedVm {
                         read_only,
                         disk_parameters,
                     } => {
-                        let disk = open_simple_disk(&resolver, disk_type, read_only)
-                            .await
-                            .context("failed to open IDE disk")?;
+                        let disk =
+                            open_simple_disk(&resolver, disk_type, read_only, &driver_source)
+                                .await
+                                .context("failed to open IDE disk")?;
 
                         // Only disks get accelerator channels. DVDs dont.
                         let scsi_disk = ScsiControllerDisk::new(Arc::new(SimpleScsiDisk::new(
@@ -1320,7 +1321,6 @@ impl InitializedVm {
             Some(dev::HyperVGuestWatchdogDeps {
                 port_base: WDAT_PORT,
                 watchdog_platform: {
-                    use emuplat::watchdog::HvLiteWatchdogPlatform;
                     use vmcore::non_volatile_store::EphemeralNonVolatileStore;
 
                     let store = match vmgs_client {
@@ -1330,13 +1330,20 @@ impl InitializedVm {
                         None => EphemeralNonVolatileStore::new_boxed(),
                     };
 
-                    // TODO: use a `PowerRequestHandleKind` resource.
-                    let trigger_reset = {
-                        let halt = halt_vps.clone();
-                        Box::new(move || halt.halt(HaltReason::Reset))
+                    // Create the base watchdog platform
+                    let mut base_watchdog_platform = BaseWatchdogPlatform::new(store).await?;
+
+                    // Create callback to reset on watchdog timeout
+                    let watchdog_callback = WatchdogTimeoutReset {
+                        halt_vps: halt_vps.clone(),
+                        watchdog_send: None, // This is not the UEFI watchdog, so no need to send
+                                             // watchdog notifications
                     };
 
-                    Box::new(HvLiteWatchdogPlatform::new(store, trigger_reset).await?)
+                    // Add callbacks
+                    base_watchdog_platform.add_callback(Box::new(watchdog_callback));
+
+                    Box::new(base_watchdog_platform)
                 },
             })
         } else {
@@ -1393,7 +1400,7 @@ impl InitializedVm {
                     read_only,
                 } = disk_cfg;
 
-                let disk = open_simple_disk(&resolver, disk_type, read_only)
+                let disk = open_simple_disk(&resolver, disk_type, read_only, &driver_source)
                     .await
                     .context("failed to open floppy disk")?;
                 tracing::trace!("floppy opened based on config into DriveRibbon");
@@ -1962,8 +1969,11 @@ impl InitializedVm {
                     let device = chipset_builder
                         .arc_mutex_device(device_name)
                         .with_external_pci()
-                        .try_add(|_services| {
-                            virt_whp::device::AssignedPciDevice::new(hv_device.clone())
+                        .try_add(|services| {
+                            virt_whp::device::AssignedPciDevice::new(
+                                &mut services.register_mmio(),
+                                hv_device.clone(),
+                            )
                         })
                         .context("failed to assign device")?;
 
@@ -2987,4 +2997,42 @@ fn add_devices_to_dsdt(
 
     dsdt.add_vmbus(cfg.with_generic_pci_bus || cfg.with_i440bx_host_pci_bridge);
     dsdt.add_rtc();
+}
+
+#[cfg(guest_arch = "x86_64")]
+struct WatchdogTimeoutNmi {
+    partition: Arc<dyn HvlitePartition>,
+    watchdog_send: Option<mesh::Sender<()>>,
+}
+
+#[cfg(guest_arch = "x86_64")]
+#[async_trait::async_trait]
+impl WatchdogCallback for WatchdogTimeoutNmi {
+    async fn on_timeout(&mut self) {
+        // Unlike Hyper-V, we only send the NMI to the BSP.
+        self.partition.request_msi(
+            Vtl::Vtl0,
+            virt::irqcon::MsiRequest::new_x86(virt::irqcon::DeliveryMode::NMI, 0, false, 0, false),
+        );
+
+        if let Some(watchdog_send) = &self.watchdog_send {
+            watchdog_send.send(());
+        }
+    }
+}
+
+struct WatchdogTimeoutReset {
+    halt_vps: Arc<Halt>,
+    watchdog_send: Option<mesh::Sender<()>>,
+}
+
+#[async_trait::async_trait]
+impl WatchdogCallback for WatchdogTimeoutReset {
+    async fn on_timeout(&mut self) {
+        self.halt_vps.halt(HaltReason::Reset);
+
+        if let Some(watchdog_send) = &self.watchdog_send {
+            watchdog_send.send(());
+        }
+    }
 }

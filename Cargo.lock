@@ -1144,6 +1144,7 @@ dependencies = [
  "stackfuture",
  "thiserror 2.0.12",
  "vm_resource",
+ "vmcore",
 ]
 
 [[package]]
@@ -1240,6 +1241,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "disk_delay"
+version = "0.0.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "disk_backend",
+ "disk_backend_resources",
+ "inspect",
+ "mesh",
+ "pal_async",
+ "scsi_buffers",
+ "vm_resource",
+ "vmcore",
+]
+
+[[package]]
 name = "disk_file"
 version = "0.0.0"
 dependencies = [
@@ -1286,6 +1303,7 @@ dependencies = [
  "thiserror 2.0.12",
  "tracelimit",
  "vm_resource",
+ "vmcore",
 ]
 
 [[package]]
@@ -3044,7 +3062,6 @@ dependencies = [
  "vmswitch",
  "vpci",
  "watchdog_core",
- "watchdog_vmgs_format",
  "zerocopy 0.8.24",
 ]
 
@@ -4479,6 +4496,7 @@ dependencies = [
  "event-listener",
  "futures",
  "futures-concurrency",
+ "getrandom 0.3.2",
  "guestmem",
  "guid",
  "hvdef",
@@ -4800,8 +4818,7 @@ dependencies = [
  "open_enum",
  "serde",
  "serde_json",
- "sev_guest_device",
- "tdx_guest_device",
+ "x86defs",
  "zerocopy 0.8.24",
 ]
 
@@ -4825,7 +4842,6 @@ dependencies = [
  "sha2",
  "sidecar_defs",
  "tdcall",
- "tdx_guest_device",
  "underhill_confidentiality",
  "x86defs",
  "zerocopy 0.8.24",
@@ -5060,6 +5076,7 @@ dependencies = [
  "debug_worker",
  "disk_blob",
  "disk_crypt",
+ "disk_delay",
  "disk_file",
  "disk_layered",
  "disk_prwrap",
@@ -6385,10 +6402,10 @@ dependencies = [
 name = "sev_guest_device"
 version = "0.0.0"
 dependencies = [
- "bitfield-struct 0.10.1",
  "nix 0.27.1",
  "static_assertions",
  "thiserror 2.0.12",
+ "x86defs",
  "zerocopy 0.8.24",
 ]
 
@@ -6793,7 +6810,6 @@ version = "0.0.0"
 dependencies = [
  "hvdef",
  "memory_range",
- "tdx_guest_device",
  "thiserror 2.0.12",
  "tracing",
  "x86defs",
@@ -6803,10 +6819,9 @@ dependencies = [
 name = "tdx_guest_device"
 version = "0.0.0"
 dependencies = [
- "bitfield-struct 0.10.1",
  "nix 0.27.1",
- "static_assertions",
  "thiserror 2.0.12",
+ "x86defs",
  "zerocopy 0.8.24",
 ]
 
@@ -6818,6 +6833,7 @@ dependencies = [
  "static_assertions",
  "tdx_guest_device",
  "thiserror 2.0.12",
+ "x86defs",
  "zerocopy 0.8.24",
 ]
 
@@ -9221,12 +9237,14 @@ version = "0.0.0"
 dependencies = [
  "async-trait",
  "bitfield-struct 0.10.1",
+ "cvm_tracing",
  "inspect",
  "mesh",
  "pal_async",
  "thiserror 2.0.12",
  "tracing",
  "vmcore",
+ "watchdog_vmgs_format",
 ]
 
 [[package]]
@@ -9286,6 +9304,7 @@ name = "whp"
 version = "0.0.0"
 dependencies = [
  "criterion",
+ "pal",
  "winapi",
 ]
 
@@ -9768,6 +9787,7 @@ dependencies = [
  "arbitrary",
  "bitfield-struct 0.10.1",
  "open_enum",
+ "static_assertions",
  "zerocopy 0.8.24",
 ]
 

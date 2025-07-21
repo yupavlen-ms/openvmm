@@ -75,7 +75,7 @@ impl AsyncResolveResource<PciDeviceHandleKind, NvmeControllerHandle> for NvmeCon
                     disk,
                     ResolveDiskParameters {
                         read_only,
-                        _async_trait_workaround: &(),
+                        driver_source: input.driver_source,
                     },
                 )
                 .await

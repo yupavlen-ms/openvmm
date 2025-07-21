@@ -85,10 +85,12 @@ macro_rules! define_vmm_test_selection_flags {
 
 define_vmm_test_selection_flags! {
     tdx: false,
+    snp: false,
     hyperv_vbs: false,
     windows: true,
     ubuntu: true,
     freebsd: true,
+    linux: true,
     openhcl: true,
     openvmm: true,
     hyperv: true,
@@ -211,10 +213,12 @@ impl SimpleFlowNode for Node {
             } => (filter, artifacts, build, deps),
             VmmTestSelections::Flags(VmmTestSelectionFlags {
                 tdx,
+                snp,
                 hyperv_vbs,
                 windows,
                 mut ubuntu,
                 freebsd,
+                linux,
                 mut openhcl,
                 openvmm,
                 hyperv,
@@ -245,12 +249,14 @@ impl SimpleFlowNode for Node {
                 if !tdx {
                     filter.push_str(" & !test(tdx)");
                 }
+                if !snp {
+                    filter.push_str(" & !test(snp)");
+                }
                 if !hyperv_vbs {
                     filter.push_str(" & !(test(vbs) & test(hyperv))");
                 }
                 if !ubuntu {
                     filter.push_str(" & !test(ubuntu)");
-                    build.pipette_linux = false;
                 }
                 if !windows {
                     filter.push_str(" & !test(windows)");
@@ -258,6 +264,12 @@ impl SimpleFlowNode for Node {
                 }
                 if !freebsd {
                     filter.push_str(" & !test(freebsd)");
+                }
+                if !linux {
+                    filter.push_str(" & !test(linux)");
+                }
+                if !linux && !ubuntu {
+                    build.pipette_linux = false;
                 }
                 if !openhcl {
                     filter.push_str(" & !test(openhcl)");
@@ -291,19 +303,19 @@ impl SimpleFlowNode for Node {
                     CommonArch::X86_64 => {
                         let mut artifacts = Vec::new();
 
-                        if windows && (tdx || hyperv_vbs) {
+                        if windows && (tdx || snp || hyperv_vbs) {
                             artifacts.push(KnownTestArtifacts::Gen2WindowsDataCenterCore2025X64Vhd);
                         }
                         if ubuntu {
                             artifacts.push(KnownTestArtifacts::Ubuntu2204ServerX64Vhd);
                         }
-                        if windows {
-                            artifacts.extend_from_slice(&[
-                                KnownTestArtifacts::Gen1WindowsDataCenterCore2022X64Vhd,
-                                KnownTestArtifacts::Gen2WindowsDataCenterCore2022X64Vhd,
-                            ]);
+                        if windows && uefi {
+                            artifacts.push(KnownTestArtifacts::Gen2WindowsDataCenterCore2022X64Vhd);
                         }
-                        if freebsd {
+                        if windows && pcat {
+                            artifacts.push(KnownTestArtifacts::Gen1WindowsDataCenterCore2022X64Vhd);
+                        }
+                        if freebsd && pcat {
                             artifacts.extend_from_slice(&[
                                 KnownTestArtifacts::FreeBsd13_2X64Vhd,
                                 KnownTestArtifacts::FreeBsd13_2X64Iso,
@@ -336,7 +348,7 @@ impl SimpleFlowNode for Node {
                     target_lexicon::OperatingSystem::Windows => VmmTestsDepSelections::Windows {
                         hyperv,
                         whp: openvmm,
-                        hardware_isolation: tdx,
+                        hardware_isolation: tdx || snp,
                     },
                     target_lexicon::OperatingSystem::Linux => VmmTestsDepSelections::Linux,
                     _ => unreachable!(),

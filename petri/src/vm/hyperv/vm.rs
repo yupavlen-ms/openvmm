@@ -6,6 +6,7 @@
 use super::hvc;
 use super::hvc::VmState;
 use super::powershell;
+use crate::OpenHclServicingFlags;
 use crate::PetriLogFile;
 use anyhow::Context;
 use get_resources::ged::FirmwareEvent;
@@ -126,6 +127,7 @@ impl HyperVVM {
         if generation == powershell::HyperVGeneration::Two {
             powershell::run_set_vm_firmware(powershell::HyperVSetVMFirmwareArgs {
                 vmid: &vmid,
+                secure_boot_enabled: Some(false),
                 secure_boot_template: None,
             })?;
         }
@@ -227,14 +229,16 @@ impl HyperVVM {
         )
     }
 
-    /// Set the secure boot template
-    pub fn set_secure_boot_template(
+    /// Configure secure boot
+    pub fn set_secure_boot(
         &mut self,
-        secure_boot_template: powershell::HyperVSecureBootTemplate,
+        secure_boot_enabled: bool,
+        secure_boot_template: Option<powershell::HyperVSecureBootTemplate>,
     ) -> anyhow::Result<()> {
         powershell::run_set_vm_firmware(powershell::HyperVSetVMFirmwareArgs {
             vmid: &self.vmid,
-            secure_boot_template: Some(secure_boot_template),
+            secure_boot_enabled: Some(secure_boot_enabled),
+            secure_boot_template,
         })
     }
 
@@ -425,6 +429,11 @@ impl HyperVVM {
     /// Enable VMBusRelay
     pub fn set_vmbus_redirect(&self, enable: bool) -> anyhow::Result<()> {
         powershell::set_vmbus_redirect(&self.vmid, &self.ps_mod, enable)
+    }
+
+    /// Perform an OpenHCL servicing operation.
+    pub async fn restart_openhcl(&self, flags: OpenHclServicingFlags) -> anyhow::Result<()> {
+        powershell::run_restart_openhcl(&self.vmid, &self.ps_mod, flags)
     }
 }
 

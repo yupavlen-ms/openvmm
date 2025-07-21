@@ -88,7 +88,7 @@ impl AsyncResolveResource<VmbusDeviceHandleKind, GuestEmulationDeviceHandle>
                         disk,
                         ResolveDiskParameters {
                             read_only: false,
-                            _async_trait_workaround: &(),
+                            driver_source: input.driver_source,
                         },
                     )
                     .await
@@ -150,7 +150,7 @@ impl AsyncResolveResource<VmbusDeviceHandleKind, GuestEmulationDeviceHandle>
                     GuestSecureBootTemplateType::MicrosoftWindows => {
                         SecureBootTemplateType::MICROSOFT_WINDOWS
                     }
-                    GuestSecureBootTemplateType::MicrosoftUefiCertificateAuthoritiy => {
+                    GuestSecureBootTemplateType::MicrosoftUefiCertificateAuthority => {
                         SecureBootTemplateType::MICROSOFT_UEFI_CERTIFICATE_AUTHORITY
                     }
                 },

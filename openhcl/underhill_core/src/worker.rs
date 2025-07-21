@@ -37,8 +37,7 @@ use crate::emuplat::non_volatile_store::VmgsBrokerNonVolatileStore;
 use crate::emuplat::tpm::resources::GetTpmLoggerHandle;
 use crate::emuplat::tpm::resources::GetTpmRequestAkCertHelperHandle;
 use crate::emuplat::vga_proxy::UhRegisterHostIoFastPath;
-use crate::emuplat::watchdog::UnderhillWatchdog;
-use crate::emuplat::watchdog::WatchdogTimeout;
+use crate::emuplat::watchdog::UnderhillWatchdogPlatform;
 use crate::loader::LoadKind;
 use crate::loader::vtl0_config::MeasuredVtl0Info;
 use crate::loader::vtl2_config::RuntimeParameters;
@@ -177,6 +176,8 @@ use vmotherboard::BaseChipsetBuilderOutput;
 use vmotherboard::ChipsetDeviceHandle;
 use vmotherboard::options::BaseChipsetDevices;
 use vmotherboard::options::BaseChipsetFoundation;
+use watchdog_core::platform::WatchdogCallback;
+use watchdog_core::platform::WatchdogPlatform;
 use zerocopy::FromZeros;
 
 pub(crate) const PM_BASE: u16 = 0x400;
@@ -2081,26 +2082,23 @@ async fn new_underhill_vm(
                 },
             };
 
+            let (watchdog_send, watchdog_recv) = mesh::channel();
             deps_hyperv_firmware_uefi = Some(dev::HyperVFirmwareUefi {
                 config,
                 logger: Box::new(UnderhillLogger {
                     get: get_client.clone(),
                 }),
                 nvram_storage: if let Some(vmgs_client) = vmgs_client.as_ref() {
-                    Box::new(
-                        HclCompatNvram::new(
-                            VmgsStorageBackendAdapter(
-                                vmgs_client
-                                    .as_non_volatile_store(vmgs::FileId::BIOS_NVRAM, true)
-                                    .context("failed to instantiate UEFI NVRAM store")?,
-                            ),
-                            Some(HclCompatNvramQuirks {
-                                skip_corrupt_vars_with_missing_null_term: true,
-                            }),
-                            is_restoring,
-                        )
-                        .await?,
-                    )
+                    Box::new(HclCompatNvram::new(
+                        VmgsStorageBackendAdapter(
+                            vmgs_client
+                                .as_non_volatile_store(vmgs::FileId::BIOS_NVRAM, true)
+                                .context("failed to instantiate UEFI NVRAM store")?,
+                        ),
+                        Some(HclCompatNvramQuirks {
+                            skip_corrupt_vars_with_missing_null_term: true,
+                        }),
+                    ))
                 } else {
                     Box::new(uefi_nvram_storage::in_memory::InMemoryNvram::new())
                 },
@@ -2112,20 +2110,30 @@ async fn new_underhill_vm(
                     // UEFI watchdog doesn't persist to VMGS at this time
                     let store = EphemeralNonVolatileStore::new_boxed();
 
+                    // Create base watchdog platform
+                    let mut underhill_watchdog_platform =
+                        UnderhillWatchdogPlatform::new(store, get_client.clone()).await?;
+
+                    // Inject NMI on watchdog timeout
                     #[cfg(guest_arch = "x86_64")]
-                    let watchdog_reset = WatchdogTimeoutNmi {
+                    let watchdog_callback = WatchdogTimeoutNmi {
                         partition: partition.clone(),
-                    };
-                    #[cfg(guest_arch = "aarch64")]
-                    let watchdog_reset = WatchdogTimeoutHalt {
-                        halt_vps: halt_vps.clone(),
+                        watchdog_send: Some(watchdog_send),
                     };
 
-                    Box::new(
-                        UnderhillWatchdog::new(store, get_client.clone(), Box::new(watchdog_reset))
-                            .await?,
-                    )
+                    // ARM64 does not have NMI support yet, so halt instead
+                    #[cfg(guest_arch = "aarch64")]
+                    let watchdog_callback = WatchdogTimeoutReset {
+                        halt_vps: halt_vps.clone(),
+                        watchdog_send: Some(watchdog_send),
+                    };
+
+                    // Add the callback
+                    underhill_watchdog_platform.add_callback(Box::new(watchdog_callback));
+
+                    Box::new(underhill_watchdog_platform)
                 },
+                watchdog_recv,
                 vsm_config: Some(Box::new(UnderhillVsmConfig {
                     partition: Arc::downgrade(&partition),
                 })),
@@ -2215,7 +2223,9 @@ async fn new_underhill_vm(
                         read_only,
                         disk_parameters,
                     } => {
-                        let disk = disk_from_disk_type(disk_type, read_only, &resolver).await?;
+                        let disk =
+                            disk_from_disk_type(disk_type, read_only, &resolver, &driver_source)
+                                .await?;
                         let scsi_disk = Arc::new(scsidisk::SimpleScsiDisk::new(
                             disk.clone(),
                             disk_parameters.unwrap_or_default(),
@@ -2447,14 +2457,18 @@ async fn new_underhill_vm(
                 } else {
                     EphemeralNonVolatileStore::new_boxed()
                 };
-                let trigger_reset = WatchdogTimeoutHalt {
+
+                let watchdog_callback = WatchdogTimeoutReset {
                     halt_vps: halt_vps.clone(),
+                    watchdog_send: None, // This is not the UEFI watchdog, so no need to send
+                                         // watchdog notifications.
                 };
 
-                Box::new(
-                    UnderhillWatchdog::new(store, get_client.clone(), Box::new(trigger_reset))
-                        .await?,
-                )
+                let mut underhill_watchdog_platform =
+                    UnderhillWatchdogPlatform::new(store, get_client.clone()).await?;
+                underhill_watchdog_platform.add_callback(Box::new(watchdog_callback));
+
+                Box::new(underhill_watchdog_platform)
             },
         })
     } else {
@@ -3449,12 +3463,13 @@ impl ChipsetDevice for FallbackMmioDevice {
 #[cfg(guest_arch = "x86_64")]
 struct WatchdogTimeoutNmi {
     partition: Arc<UhPartition>,
+    watchdog_send: Option<mesh::Sender<()>>,
 }
 
 #[cfg(guest_arch = "x86_64")]
 #[async_trait::async_trait]
-impl WatchdogTimeout for WatchdogTimeoutNmi {
-    async fn on_timeout(&self) {
+impl WatchdogCallback for WatchdogTimeoutNmi {
+    async fn on_timeout(&mut self) {
         crate::livedump::livedump().await;
 
         // Unlike Hyper-V, we only send the NMI to the BSP.
@@ -3462,18 +3477,27 @@ impl WatchdogTimeout for WatchdogTimeoutNmi {
             Vtl::Vtl0,
             MsiRequest::new_x86(virt::irqcon::DeliveryMode::NMI, 0, false, 0, false),
         );
+
+        if let Some(watchdog_send) = &self.watchdog_send {
+            watchdog_send.send(());
+        }
     }
 }
 
-struct WatchdogTimeoutHalt {
+struct WatchdogTimeoutReset {
     halt_vps: Arc<Halt>,
+    watchdog_send: Option<mesh::Sender<()>>,
 }
 
 #[async_trait::async_trait]
-impl WatchdogTimeout for WatchdogTimeoutHalt {
-    async fn on_timeout(&self) {
+impl WatchdogCallback for WatchdogTimeoutReset {
+    async fn on_timeout(&mut self) {
         crate::livedump::livedump().await;
 
-        self.halt_vps.halt(HaltReason::Reset)
+        self.halt_vps.halt(HaltReason::Reset);
+
+        if let Some(watchdog_send) = &self.watchdog_send {
+            watchdog_send.send(());
+        }
     }
 }
