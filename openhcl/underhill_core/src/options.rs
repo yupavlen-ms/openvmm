@@ -237,12 +237,8 @@ impl Options {
         let no_sidecar_hotplug = parse_legacy_env_bool("OPENHCL_NO_SIDECAR_HOTPLUG");
         let gdbstub = parse_legacy_env_bool("OPENHCL_GDBSTUB");
         let gdbstub_port = parse_legacy_env_number("OPENHCL_GDBSTUB_PORT")?.map(|x| x as u32);
-<<<<<<< HEAD
         let nvme_keepalive = parse_env_bool("OPENHCL_NVME_KEEP_ALIVE");
-=======
-        let nvme_keep_alive = parse_env_bool("OPENHCL_NVME_KEEP_ALIVE");
         let nvme_always_flr = parse_env_bool("OPENHCL_NVME_ALWAYS_FLR");
->>>>>>> main
         let test_configuration = parse_env_string("OPENHCL_TEST_CONFIG").and_then(|x| {
             x.to_string_lossy()
                 .parse::<TestScenarioConfig>()
